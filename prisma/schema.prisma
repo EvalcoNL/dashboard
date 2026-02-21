@@ -1,0 +1,154 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id               String          @id @default(cuid())
+  name             String
+  email            String          @unique
+  passwordHash     String          @map("password_hash")
+  role             String          @default("STRATEGIST")
+  twoFactorEnabled Boolean         @default(false) @map("two_factor_enabled")
+  twoFactorSecret  String?         @map("two_factor_secret")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  advisorActions   AdvisorReport[] @relation("reviewedBy")
+
+  @@map("users")
+}
+
+model Client {
+  id                   String                 @id @default(cuid())
+  name                 String
+  industryType         String                 @map("industry_type")
+  targetType           String                 @map("target_type")
+  targetValue          Float                  @map("target_value")
+  tolerancePct         Int                    @default(15) @map("tolerance_pct")
+  evaluationWindowDays Int                    @default(7) @map("evaluation_window_days")
+  profitMarginPct      Float?                 @map("profit_margin_pct")
+  currency             String                 @default("EUR")
+  createdAt            DateTime               @default(now()) @map("created_at")
+  analystReports       AnalystReport[]
+  campaignMetrics      CampaignMetric[]
+  dataSources          DataSource[]
+  merchantCenterHealth MerchantCenterHealth[]
+
+  @@map("clients")
+}
+
+model DataSource {
+  id           String           @id @default(cuid())
+  clientId     String           @map("client_id")
+  type         String
+  name         String?
+  externalId   String           @map("external_id")
+  config       Json?
+  token        String           @map("token")
+  active       Boolean          @default(true)
+  linkedAt     DateTime         @default(now()) @map("linked_at")
+  lastSyncedAt DateTime?        @map("last_synced_at")
+  metrics      CampaignMetric[]
+  client       Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("data_sources")
+}
+
+model CampaignMetric {
+  id              String      @id @default(cuid())
+  clientId        String      @map("client_id")
+  campaignId      String      @map("campaign_id")
+  campaignName    String      @map("campaign_name")
+  campaignType    String      @map("campaign_type")
+  date            DateTime
+  spend           Float
+  conversions     Float
+  conversionValue Float       @map("conversion_value")
+  clicks          Int
+  impressions     Int
+  status          String
+  servingStatus   String      @map("serving_status")
+  dataSourceId    String?     @map("data_source_id")
+  dataSource      DataSource? @relation(fields: [dataSourceId], references: [id])
+  client          Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, date])
+  @@index([clientId, date])
+  @@index([campaignId, date])
+  @@map("campaign_metrics")
+}
+
+model MerchantCenterHealth {
+  id               String   @id @default(cuid())
+  clientId         String   @map("client_id")
+  date             DateTime
+  totalItems       Int      @map("total_items")
+  disapprovedItems Int      @map("disapproved_items")
+  disapprovedPct   Float    @map("disapproved_pct")
+  topReasons       Json     @map("top_reasons")
+  accountIssues    Json     @map("account_issues")
+  client           Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, date])
+  @@map("merchant_center_health")
+}
+
+model AnalystReport {
+  id                   String         @id @default(cuid())
+  clientId             String         @map("client_id")
+  periodStart          DateTime       @map("period_start")
+  periodEnd            DateTime       @map("period_end")
+  healthScore          Int            @map("health_score")
+  healthScoreBreakdown Json           @map("health_score_breakdown")
+  deviationPct         Float          @map("deviation_pct")
+  trendDirection       String         @map("trend_direction")
+  reportJson           Json           @map("report_json")
+  inputJson            Json           @map("input_json")
+  createdAt            DateTime       @default(now()) @map("created_at")
+  advisorReport        AdvisorReport?
+  client               Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, createdAt])
+  @@map("analyst_reports")
+}
+
+model AdvisorReport {
+  id              String        @id @default(cuid())
+  analystReportId String        @unique @map("analyst_report_id")
+  adviceJson      Json          @map("advice_json")
+  status          String        @default("DRAFT")
+  reviewedById    String?       @map("reviewed_by_id")
+  reviewedAt      DateTime?     @map("reviewed_at")
+  executedAt      DateTime?     @map("executed_at")
+  notes           String?
+  createdAt       DateTime      @default(now()) @map("created_at")
+  reviewedBy      User?         @relation("reviewedBy", fields: [reviewedById], references: [id])
+  analystReport   AnalystReport @relation(fields: [analystReportId], references: [id], onDelete: Cascade)
+
+  @@map("advisor_reports")
+}
+
+model PromptLog {
+  id         String   @id @default(cuid())
+  type       String
+  clientId   String   @map("client_id")
+  inputJson  Json     @map("input_json")
+  outputJson Json     @map("output_json")
+  model      String
+  tokenCount Int?     @map("token_count")
+  latencyMs  Int?     @map("latency_ms")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([clientId, createdAt])
+  @@map("prompt_logs")
+}
+
+model GlobalSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("global_settings")
+}
