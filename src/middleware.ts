@@ -1,28 +1,30 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getToken } from "next-auth/jwt";
+import { auth } from "@/lib/auth";
 
 export async function middleware(req: NextRequest) {
     const { pathname } = req.nextUrl;
 
-    // Public routes
+    // Public routes (don't require auth)
     const publicRoutes = ["/login", "/api/auth"];
     const isPublic = publicRoutes.some((route) => pathname.startsWith(route));
 
     if (isPublic) return NextResponse.next();
 
-    // Check JWT token (works in Edge runtime)
-    const token = await getToken({
-        req,
-        secret: process.env.AUTH_SECRET,
-    });
+    // Use Auth.js v5 auth() helper - it handles session/cookie detection automatically
+    const session = await auth();
 
-    if (!token) {
-        console.log(`[Middleware] No token found for ${pathname}. Redirecting to login.`);
-        // Also log if the cookie exists but token is null
-        const sessionCookie = req.cookies.get("next-auth.session-token") || req.cookies.get("__Secure-next-auth.session-token");
-        if (sessionCookie) {
-            console.log(`[Middleware] Session cookie exists but token could not be decoded. Check AUTH_SECRET.`);
+    if (!session) {
+        console.log(`[Middleware] No session found for ${pathname}. Redirecting to login.`);
+
+        // Debug: check for the presence of session cookies (Auth.js v5 prefix is authjs)
+        const hasSessionCookie = req.cookies.has("authjs.session-token") ||
+            req.cookies.has("__Secure-authjs.session-token") ||
+            req.cookies.has("next-auth.session-token") ||
+            req.cookies.has("__Secure-next-auth.session-token");
+
+        if (hasSessionCookie) {
+            console.log(`[Middleware] Session cookie exists but auth() returned null. Possible AUTH_SECRET mismatch or environmental issue.`);
         }
 
         const loginUrl = new URL("/login", req.url);
@@ -30,7 +32,7 @@ export async function middleware(req: NextRequest) {
         return NextResponse.redirect(loginUrl);
     }
 
-    console.log(`[Middleware] Token found for ${pathname}. User: ${token.email}`);
+    console.log(`[Middleware] Session active for ${pathname}. User: ${session.user?.email}`);
     return NextResponse.next();
 }
 
