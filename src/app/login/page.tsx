@@ -21,12 +21,15 @@ export default function LoginPage() {
         setLoading(true);
 
         try {
+            console.log("Attempting sign in for:", email);
             const result = await signIn("credentials", {
                 email,
                 password,
                 twoFactorToken: show2FA ? twoFactorToken : undefined,
                 redirect: false,
             });
+
+            console.log("SignIn result:", result ? { error: result.error, ok: result.ok, url: result.url } : "null");
 
             if (result?.error) {
                 if (result.error.includes("TWO_FACTOR_REQUIRED")) {
@@ -37,12 +40,17 @@ export default function LoginPage() {
                 } else {
                     setError("Ongeldige inloggegevens. Probeer het opnieuw.");
                 }
-            } else {
+            } else if (result?.ok) {
+                console.log("Login successful, redirecting to /dashboard");
                 router.push("/dashboard");
                 router.refresh();
+            } else {
+                console.error("Unexpected signIn result:", result);
+                setError("Er is een onbekende fout opgetreden bij het inloggen.");
             }
-        } catch {
-            setError("Er is een fout opgetreden. Probeer het later opnieuw.");
+        } catch (err) {
+            console.error("SignIn catch error:", err);
+            setError("Er is een systeemfout opgetreden. Probeer het later opnieuw.");
         } finally {
             setLoading(false);
         }

@@ -20,41 +20,56 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             async authorize(credentials) {
                 if (!credentials?.email || !credentials?.password) return null;
 
-                const user = await prisma.user.findUnique({
-                    where: { email: credentials.email as string },
-                });
-
-                if (!user) return null;
-
-                const isValid = await compare(
-                    credentials.password as string,
-                    user.passwordHash
-                );
-
-                if (!isValid) return null;
-
-                if (user.twoFactorEnabled) {
-                    const token = credentials.twoFactorToken as string;
-                    if (!token) {
-                        throw new Error("TWO_FACTOR_REQUIRED");
-                    }
-
-                    const result = await verify({
-                        token,
-                        secret: user.twoFactorSecret as string,
+                console.log("[Auth] Authorizing user:", credentials.email);
+                try {
+                    const user = await prisma.user.findUnique({
+                        where: { email: credentials.email as string },
                     });
 
-                    if (!result.valid) {
-                        throw new Error("INVALID_2FA_TOKEN");
+                    if (!user) {
+                        console.log("[Auth] User not found:", credentials.email);
+                        return null;
                     }
-                }
 
-                return {
-                    id: user.id,
-                    email: user.email,
-                    name: user.name,
-                    role: user.role,
-                };
+                    const isValid = await compare(
+                        credentials.password as string,
+                        user.passwordHash
+                    );
+
+                    if (!isValid) {
+                        console.log("[Auth] Invalid password for user:", credentials.email);
+                        return null;
+                    }
+
+                    if (user.twoFactorEnabled) {
+                        const token = credentials.twoFactorToken as string;
+                        if (!token) {
+                            console.log("[Auth] 2FA required for user:", credentials.email);
+                            throw new Error("TWO_FACTOR_REQUIRED");
+                        }
+
+                        const result = await verify({
+                            token,
+                            secret: user.twoFactorSecret as string,
+                        });
+
+                        if (!result.valid) {
+                            console.log("[Auth] Invalid 2FA token for user:", credentials.email);
+                            throw new Error("INVALID_2FA_TOKEN");
+                        }
+                    }
+
+                    console.log("[Auth] Authorization successful for:", credentials.email);
+                    return {
+                        id: user.id,
+                        email: user.email,
+                        name: user.name,
+                        role: user.role,
+                    };
+                } catch (error) {
+                    console.error("[Auth] Authorize error:", error);
+                    throw error;
+                }
             },
         }),
     ],
@@ -63,6 +78,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             if (user) {
                 token.role = (user as { role: string }).role;
                 token.id = user.id;
+                console.log("[Auth] JWT callback - user logged in, token updated for:", user.email);
             }
             return token;
         },
@@ -74,4 +90,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             return session;
         },
     },
+    debug: process.env.NODE_ENV === "development",
+    trustHost: true,
 });
