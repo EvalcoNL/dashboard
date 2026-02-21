@@ -3,12 +3,10 @@ import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { verify } from "otplib";
+import { authConfig } from "@/auth.config";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
-    session: { strategy: "jwt" },
-    pages: {
-        signIn: "/login",
-    },
+    ...authConfig,
     providers: [
         Credentials({
             name: "credentials",
@@ -73,23 +71,5 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             },
         }),
     ],
-    callbacks: {
-        async jwt({ token, user }) {
-            if (user) {
-                token.role = (user as { role: string }).role;
-                token.id = user.id;
-                console.log("[Auth] JWT callback - user logged in, token updated for:", user.email);
-            }
-            return token;
-        },
-        async session({ session, token }) {
-            if (session.user) {
-                session.user.role = token.role as string;
-                session.user.id = token.id as string;
-            }
-            return session;
-        },
-    },
     debug: process.env.NODE_ENV === "development",
-    trustHost: true,
 });
