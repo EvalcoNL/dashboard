@@ -7,6 +7,7 @@ import { hash } from "bcryptjs";
 function createPrismaClient() {
     const adapter = new PrismaLibSql({
         url: process.env.DATABASE_URL!,
+        authToken: process.env.DATABASE_AUTH_TOKEN,
     });
     return new PrismaClient({ adapter });
 }
