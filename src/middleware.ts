@@ -12,14 +12,25 @@ export async function middleware(req: NextRequest) {
     if (isPublic) return NextResponse.next();
 
     // Check JWT token (works in Edge runtime)
-    const token = await getToken({ req, secret: process.env.AUTH_SECRET });
+    const token = await getToken({
+        req,
+        secret: process.env.AUTH_SECRET,
+    });
 
     if (!token) {
+        console.log(`[Middleware] No token found for ${pathname}. Redirecting to login.`);
+        // Also log if the cookie exists but token is null
+        const sessionCookie = req.cookies.get("next-auth.session-token") || req.cookies.get("__Secure-next-auth.session-token");
+        if (sessionCookie) {
+            console.log(`[Middleware] Session cookie exists but token could not be decoded. Check AUTH_SECRET.`);
+        }
+
         const loginUrl = new URL("/login", req.url);
         loginUrl.searchParams.set("callbackUrl", pathname);
         return NextResponse.redirect(loginUrl);
     }
 
+    console.log(`[Middleware] Token found for ${pathname}. User: ${token.email}`);
     return NextResponse.next();
 }
 
