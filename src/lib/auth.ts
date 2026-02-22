@@ -1,9 +1,17 @@
-import NextAuth from "next-auth";
+import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { verify } from "otplib";
 import { authConfig } from "@/auth.config";
+
+class TwoFactorRequiredError extends CredentialsSignin {
+    code = "TWO_FACTOR_REQUIRED";
+}
+
+class InvalidTwoFactorError extends CredentialsSignin {
+    code = "INVALID_2FA_TOKEN";
+}
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
     ...authConfig,
@@ -43,7 +51,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                         const token = credentials.twoFactorToken as string;
                         if (!token) {
                             console.log("[Auth] 2FA required for user:", credentials.email);
-                            throw new Error("TWO_FACTOR_REQUIRED");
+                            throw new TwoFactorRequiredError();
                         }
 
                         const result = await verify({
@@ -53,7 +61,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
                         if (!result.valid) {
                             console.log("[Auth] Invalid 2FA token for user:", credentials.email);
-                            throw new Error("INVALID_2FA_TOKEN");
+                            throw new InvalidTwoFactorError();
                         }
                     }
 
