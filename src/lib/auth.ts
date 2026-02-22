@@ -24,7 +24,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 twoFactorToken: { label: "2FA Token", type: "text" },
             },
             async authorize(credentials) {
-                if (!credentials?.email || !credentials?.password) return null;
+                if (!credentials?.email || !credentials?.password) {
+                    console.log("[Auth] Missing email or password");
+                    return null;
+                }
 
                 console.log("[Auth] Authorizing user:", credentials.email);
                 try {
@@ -79,5 +82,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             },
         }),
     ],
-    debug: process.env.NODE_ENV === "development",
+    secret: process.env.AUTH_SECRET,
+    debug: process.env.NODE_ENV === "development" || process.env.DEBUG === "true",
 });

@@ -23,4 +23,5 @@ export const authConfig = {
     },
     providers: [], // Empty array, to be populated in lib/auth.ts
     trustHost: true,
+    secret: process.env.AUTH_SECRET,
 } satisfies NextAuthConfig;
