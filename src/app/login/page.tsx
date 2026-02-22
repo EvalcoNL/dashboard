@@ -233,10 +233,11 @@ export default function LoginPage() {
                     position: relative;
                     z-index: 10;
                     width: 100%;
-                    maxWidth: 420px;
+                    max-width: 420px;
                     display: flex;
                     flex-direction: column;
                     gap: 32px;
+                    margin: 0 auto;
                 }
 
                 .header {
