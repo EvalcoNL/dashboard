@@ -37,13 +37,18 @@ export default function LoginPage() {
             console.log("SignIn result:", result);
 
             if (result?.error) {
-                // In Auth.js v5, custom codes are often prefixed or mapped.
-                // We check for our custom error codes from auth.ts
-                if (result.error.includes("TWO_FACTOR_REQUIRED") || result.error.includes("two_factor_required")) {
+                // Auth.js v5 returns the custom CredentialsSignin code in result.code,
+                // while result.error is always "CredentialsSignin" for credential errors.
+                const code = result.code?.toUpperCase() || "";
+                console.log("SignIn error code:", code, "error:", result.error);
+
+                if (code.includes("TWO_FACTOR_REQUIRED")) {
                     setShow2FA(true);
                     setError("");
-                } else if (result.error.includes("INVALID_2FA_TOKEN") || result.error.includes("invalid_2fa_token")) {
+                } else if (code.includes("INVALID_2FA_TOKEN")) {
                     setError("Ongeldige verificatiecode. Probeer het opnieuw.");
+                } else if (result.error === "Configuration") {
+                    setError("Serverconfiguratie fout. Neem contact op met de beheerder.");
                 } else {
                     setError("Ongeldig e-mailadres of wachtwoord.");
                 }
