@@ -13,6 +13,8 @@ class InvalidTwoFactorError extends CredentialsSignin {
     code = "INVALID_2FA_TOKEN";
 }
 
+console.log("[Auth] Initializing NextAuth. AUTH_SECRET exists:", !!process.env.AUTH_SECRET);
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
     ...authConfig,
     providers: [
