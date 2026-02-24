@@ -5,14 +5,19 @@ import { sendIncidentAlertEmail, sendSlackAlert } from "@/lib/services/email-ser
 
 export const dynamic = "force-dynamic";
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
         const session = await auth();
         if (!session?.user) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const clientId = params.id;
+        const resolvedParams = await params;
+        const clientId = resolvedParams.id;
+
+        if (!clientId) {
+            return NextResponse.json({ error: "Missing client ID" }, { status: 400 });
+        }
 
         // Fetch the client with notification users
         const client = await prisma.client.findUnique({
