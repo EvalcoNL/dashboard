@@ -129,12 +129,14 @@ export default function IncidentsClient({
             const data = await res.json();
 
             if (res.ok) {
-                alert(`Testbericht succesvol verstuurd!\n\nEmail: ${data.channels.email ? '✅' : '❌'}\nSlack: ${data.channels.slack ? '✅' : '❌'}`);
+                alert(`Testbericht succesvol verstuurd!\n\nEmail: ${data.channels?.email ? '✅' : '❌'}\nSlack: ${data.channels?.slack ? '✅' : '❌'}`);
             } else {
-                throw new Error(data.error || "Failed to trigger test");
+                let errorMsg = data.error || "Failed to trigger test";
+                if (data.details) errorMsg += `\nDetails: ${data.details}`;
+                throw new Error(errorMsg);
             }
         } catch (error: any) {
-            console.error(error);
+            console.error("Test notification error:", error);
             alert(`Fout bij het versturen van testbericht: ${error.message}`);
         } finally {
             setTestingNotifs(false);

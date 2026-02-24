@@ -15,11 +15,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         const clientId = params.id;
 
         // Fetch the client with notification users
-        const client = await (prisma as any).client.findUnique({
+        const client = await prisma.client.findUnique({
             where: { id: clientId },
-            select: {
-                name: true,
-                slackWebhookUrl: true,
+            include: {
                 notificationUsers: { select: { email: true } }
             }
         });
@@ -53,7 +51,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         }
 
         // Send Slack (Fire & forget typically, but we await here for the test)
-        if (hasSlack) {
+        if (hasSlack && client.slackWebhookUrl) {
             try {
                 await sendSlackAlert(client.slackWebhookUrl, payload);
                 results.slack = true;
@@ -70,6 +68,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     } catch (error: any) {
         console.error("[Test Notification] Error:", error);
-        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+        return NextResponse.json({
+            error: "Internal Server Error",
+            details: error?.message || String(error),
+            stack: error?.stack
+        }, { status: 500 });
     }
 }
