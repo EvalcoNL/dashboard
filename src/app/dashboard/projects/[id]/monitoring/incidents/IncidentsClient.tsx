@@ -113,6 +113,34 @@ export default function IncidentsClient({
         }
     };
 
+    const [testingNotifs, setTestingNotifs] = useState(false);
+
+    const handleTestNotifications = async () => {
+        if (!emailEnabled && !slackEnabled) {
+            alert("Er zijn geen e-mail of Slack notificaties ingesteld om te testen. Vink een kanaal aan en sla de instellingen eerst op.");
+            return;
+        }
+
+        setTestingNotifs(true);
+        try {
+            const res = await fetch(`/api/projects/${clientId}/notifications/test`, {
+                method: "POST",
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                alert(`Testbericht succesvol verstuurd!\n\nEmail: ${data.channels.email ? '✅' : '❌'}\nSlack: ${data.channels.slack ? '✅' : '❌'}`);
+            } else {
+                throw new Error(data.error || "Failed to trigger test");
+            }
+        } catch (error: any) {
+            console.error(error);
+            alert(`Fout bij het versturen van testbericht: ${error.message}`);
+        } finally {
+            setTestingNotifs(false);
+        }
+    };
+
     const filtered = incidents.filter(inc =>
         inc.title.toLowerCase().includes(search.toLowerCase()) ||
         inc.cause.toLowerCase().includes(search.toLowerCase())
@@ -432,7 +460,23 @@ export default function IncidentsClient({
                         </div>
 
                         {/* Save Actions */}
-                        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px" }}>
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "12px" }}>
+                            <button
+                                onClick={handleTestNotifications}
+                                disabled={testingNotifs}
+                                className="glass-card"
+                                style={{
+                                    display: "inline-flex", alignItems: "center", gap: "8px",
+                                    padding: "8px 16px", fontSize: "0.85rem", fontWeight: 600,
+                                    background: "transparent", color: "var(--color-text-primary)",
+                                    border: "1px solid var(--color-border)", borderRadius: "6px",
+                                    cursor: testingNotifs ? "not-allowed" : "pointer",
+                                    opacity: testingNotifs ? 0.7 : 1
+                                }}
+                            >
+                                <Bell size={16} />
+                                {testingNotifs ? "Testen..." : "Test Notificaties"}
+                            </button>
                             <button
                                 onClick={handleSaveSettings}
                                 disabled={saving}
