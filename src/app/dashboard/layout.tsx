@@ -1,9 +1,9 @@
 "use client";
 
 import { SessionProvider } from "next-auth/react";
-import Sidebar from "@/components/Sidebar";
-import Topbar from "@/components/Topbar";
-import { ThemeProvider } from "@/components/ThemeProvider";
+import Sidebar from "@/components/layout/Sidebar";
+import Topbar from "@/components/layout/Topbar";
+import { ThemeProvider } from "@/components/layout/ThemeProvider";
 import { LanguageProvider } from "@/lib/i18n/LanguageContext";
 
 export default function DashboardLayout({

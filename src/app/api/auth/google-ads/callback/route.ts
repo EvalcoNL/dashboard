@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
-import { googleAdsService } from "@/lib/google-ads";
+import { googleAdsService } from "@/lib/integrations/google-ads";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 
@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
             data: {
                 clientId: clientId,
                 type: "GOOGLE_ADS",
+                category: "APP",
                 externalId: "PENDING",
                 token: refreshToken,
                 active: false,
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest) {
         });
 
         // Redirect to selection UI
-        return NextResponse.redirect(`${process.env.NEXTAUTH_URL}/dashboard/clients/${clientId}/link?sourceId=${pendingSource.id}`);
+        return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/link?sourceId=${pendingSource.id}`);
     } catch (error: any) {
         console.error("OAuth Callback Error:", error);
         return NextResponse.json({ error: error.message || "Failed to link Google Ads" }, { status: 500 });

@@ -32,7 +32,7 @@ export async function POST(req: Request) {
             message: "Profile updated successfully",
             user: { name: updatedUser.name }
         });
-    } catch (error) {
+    } catch (error: any) {
         console.error("Profile update error:", error);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }

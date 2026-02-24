@@ -19,7 +19,7 @@ export async function POST() {
         });
 
         return NextResponse.json({ message: "Two-factor authentication disabled successfully" });
-    } catch (error) {
+    } catch (error: any) {
         console.error("2FA disable error:", error);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }

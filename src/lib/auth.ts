@@ -13,7 +13,8 @@ class InvalidTwoFactorError extends CredentialsSignin {
     code = "INVALID_2FA_TOKEN";
 }
 
-console.log("[Auth] Initializing NextAuth. AUTH_SECRET exists:", !!process.env.AUTH_SECRET);
+const isDebug = process.env.NODE_ENV === "development" || process.env.DEBUG === "true";
+const authLog = (...args: unknown[]) => isDebug && console.log("[Auth]", ...args);
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
     ...authConfig,
@@ -27,63 +28,50 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             },
             async authorize(credentials) {
                 if (!credentials?.email || !credentials?.password) {
-                    console.log("[Auth] Missing email or password");
                     return null;
                 }
 
-                console.log("[Auth] Authorizing user:", credentials.email);
                 try {
                     const user = await prisma.user.findUnique({
                         where: { email: credentials.email as string },
                     });
 
-                    if (!user) {
-                        console.log("[Auth] User not found:", credentials.email);
-                        return null;
-                    }
+                    if (!user) return null;
 
                     const isValid = await compare(
                         credentials.password as string,
                         user.passwordHash
                     );
 
-                    if (!isValid) {
-                        console.log("[Auth] Invalid password for user:", credentials.email);
-                        return null;
-                    }
+                    if (!isValid) return null;
 
                     if (user.twoFactorEnabled) {
                         const token = credentials.twoFactorToken as string;
-                        if (!token) {
-                            console.log("[Auth] 2FA required for user:", credentials.email);
-                            throw new TwoFactorRequiredError();
-                        }
+                        if (!token) throw new TwoFactorRequiredError();
 
                         const result = await verify({
                             token,
                             secret: user.twoFactorSecret as string,
                         });
 
-                        if (!result.valid) {
-                            console.log("[Auth] Invalid 2FA token for user:", credentials.email);
-                            throw new InvalidTwoFactorError();
-                        }
+                        if (!result.valid) throw new InvalidTwoFactorError();
                     }
 
-                    console.log("[Auth] Authorization successful for:", credentials.email);
+                    authLog("Authorized:", credentials.email);
                     return {
                         id: user.id,
                         email: user.email,
                         name: user.name,
                         role: user.role,
                     };
-                } catch (error) {
-                    console.error("[Auth] Authorize error:", error);
+                } catch (error: any) {
+                    if (error instanceof CredentialsSignin) throw error;
+                    console.error("[Auth] Authorize error:", error.message);
                     throw error;
                 }
             },
         }),
     ],
     secret: process.env.AUTH_SECRET,
-    debug: process.env.NODE_ENV === "development" || process.env.DEBUG === "true",
+    debug: isDebug,
 });

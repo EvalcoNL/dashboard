@@ -36,7 +36,7 @@ export async function PATCH(
         });
 
         return NextResponse.json(report);
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error updating advisor report:", error);
         return NextResponse.json({ error: "Fout bij bijwerken" }, { status: 500 });
     }

@@ -29,7 +29,7 @@ export async function POST() {
         const qrCodeUrl = await qrcode.toDataURL(otpauth);
 
         return NextResponse.json({ secret, qrCodeUrl });
-    } catch (error) {
+    } catch (error: any) {
         console.error("2FA setup error:", error);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }

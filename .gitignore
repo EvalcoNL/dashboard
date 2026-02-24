@@ -47,3 +47,13 @@ next-env.d.ts
 *.db-journal
 *.db-shm
 *.db-wal
+
+# dev artifacts
+.local_run.log
+.eslint_errors.log
+response.html
+dummy_data.md
+.next 2/
+
+# SQLite dev database
+dev.db

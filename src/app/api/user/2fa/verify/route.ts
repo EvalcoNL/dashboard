@@ -33,7 +33,7 @@ export async function POST(req: Request) {
         });
 
         return NextResponse.json({ message: "Two-factor authentication enabled successfully" });
-    } catch (error) {
+    } catch (error: any) {
         console.error("2FA verification error:", error);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }

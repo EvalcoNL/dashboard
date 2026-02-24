@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { aiService } from "@/lib/ai-service";
+import { aiService } from "@/lib/services/ai-service";
 
 export async function POST(
     req: NextRequest,

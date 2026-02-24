@@ -260,6 +260,65 @@ async function main() {
     });
 
     console.log("✅ Demo reports created");
+
+    // Create default user roles
+    const defaultRoles = [
+        {
+            id: "beheerder",
+            name: "Beheerder",
+            description: "Volledige toegang tot alle platforms",
+            isDefault: true,
+            sortOrder: 0,
+            roleMapping: {
+                GOOGLE_ADS: "ADMIN", GOOGLE_ANALYTICS: "ADMINISTRATOR", GOOGLE_MERCHANT: "ADMIN",
+                GOOGLE_TAG_MANAGER: "ADMIN", GOOGLE_BUSINESS: "OWNER", YOUTUBE: "OWNER",
+                META: "ADMIN", INSTAGRAM: "ADMIN", LINKEDIN: "ADMIN", PINTEREST: "ADMIN",
+                MICROSOFT_ADS: "SUPER_ADMIN", SHOPIFY: "STAFF", WORDPRESS: "ADMINISTRATOR",
+                KLAVIYO: "ADMIN", CHANNABLE: "FULL_ACCESS", MAGENTO: "ADMIN",
+                LIGHTSPEED: "FULL_ACCESS", MICROSOFT_CLARITY: "ADMIN", COOKIEBOT: "FULL_ACCESS", STAPE: "FULL_ACCESS",
+            },
+        },
+        {
+            id: "standaard",
+            name: "Standaard",
+            description: "Kan data beheren en aanpassen",
+            isDefault: true,
+            sortOrder: 1,
+            roleMapping: {
+                GOOGLE_ADS: "STANDARD", GOOGLE_ANALYTICS: "EDITOR", GOOGLE_MERCHANT: "STANDARD",
+                GOOGLE_TAG_MANAGER: "EDIT", GOOGLE_BUSINESS: "MANAGER", YOUTUBE: "EDITOR",
+                META: "ADVERTISER", INSTAGRAM: "CONTENT_CREATOR", LINKEDIN: "CONTENT_CREATOR", PINTEREST: "COLLABORATOR",
+                MICROSOFT_ADS: "STANDARD", SHOPIFY: "COLLABORATOR", WORDPRESS: "EDITOR",
+                KLAVIYO: "MANAGER", CHANNABLE: "FULL_ACCESS", MAGENTO: "MANAGER",
+                LIGHTSPEED: "FULL_ACCESS", MICROSOFT_CLARITY: "MEMBER", COOKIEBOT: "FULL_ACCESS", STAPE: "FULL_ACCESS",
+            },
+        },
+        {
+            id: "alleen-lezen",
+            name: "Alleen lezen",
+            description: "Kan alleen data en rapporten bekijken",
+            isDefault: true,
+            sortOrder: 2,
+            roleMapping: {
+                GOOGLE_ADS: "READ_ONLY", GOOGLE_ANALYTICS: "VIEWER", GOOGLE_MERCHANT: "EMAIL_CONTACTS",
+                GOOGLE_TAG_MANAGER: "READ", GOOGLE_BUSINESS: "SITE_MANAGER", YOUTUBE: "VIEWER",
+                META: "ANALYST", INSTAGRAM: "VIEWER", LINKEDIN: "ANALYST", PINTEREST: "COLLABORATOR",
+                MICROSOFT_ADS: "VIEWER", SHOPIFY: "COLLABORATOR", WORDPRESS: "SUBSCRIBER",
+                KLAVIYO: "READ_ONLY", CHANNABLE: "FULL_ACCESS", MAGENTO: "API_ACCESS",
+                LIGHTSPEED: "FULL_ACCESS", MICROSOFT_CLARITY: "MEMBER", COOKIEBOT: "FULL_ACCESS", STAPE: "FULL_ACCESS",
+            },
+        },
+    ];
+
+    for (const r of defaultRoles) {
+        await prisma.userRole.upsert({
+            where: { id: r.id },
+            update: { roleMapping: r.roleMapping },
+            create: r,
+        });
+    }
+
+    console.log("✅ Default user roles created");
     console.log("\n🎉 Seeding complete (SQLite)!");
 }
 

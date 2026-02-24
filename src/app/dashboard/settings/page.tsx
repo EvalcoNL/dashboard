@@ -2,8 +2,8 @@ export const dynamic = "force-dynamic";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import ProfileSettings from "@/components/ProfileSettings";
-import SecuritySettings from "@/components/SecuritySettings";
+import ProfileSettings from "@/components/settings/ProfileSettings";
+import SecuritySettings from "@/components/settings/SecuritySettings";
 import { Shield, Database } from "lucide-react";
 
 export default async function SettingsPage() {

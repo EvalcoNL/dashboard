@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
-import { googleAdsService } from "@/lib/google-ads";
+import { googleAdsService } from "@/lib/integrations/google-ads";
 import { auth } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {

@@ -13,17 +13,16 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
     const [language, setLanguageState] = useState<Language>("nl");
-    const [isMounted, setIsMounted] = useState(false);
 
+    // Hydrate from localStorage on mount (client-only)
     useEffect(() => {
-        setIsMounted(true);
         const storedLang = localStorage.getItem("app-language") as Language;
         if (storedLang && (storedLang === "nl" || storedLang === "en")) {
             setLanguageState(storedLang);
         } else {
-            // Default check browser lang if needed, or stick to nl
             const browserLang = navigator.language.startsWith("en") ? "en" : "nl";
             setLanguageState(browserLang);
+            localStorage.setItem("app-language", browserLang);
         }
     }, []);
 
@@ -37,13 +36,8 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
         if (dict && typeof dict[key] === "string") {
             return dict[key];
         }
-        // Fallback to key if not found
         return key;
     };
-
-    // Render the provider unconditionally so that useLanguage doesn't throw on initial render.
-    // If strict consistency is needed to prevent hydration mismatch flashes, 
-    // it's better to handle it at the component level or by rendering the provider but keeping content hidden.
 
     return (
         <LanguageContext.Provider value={{ language, setLanguage, t }}>
