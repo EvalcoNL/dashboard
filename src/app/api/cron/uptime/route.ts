@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
         // Fetch all active DOMAIN data sources
         const domains = await prisma.dataSource.findMany({
             where: {
-                type: "DOMAIN",
+                type: { in: ["DOMAIN", "WEBSITE"] },
                 active: true,
             }
         });
