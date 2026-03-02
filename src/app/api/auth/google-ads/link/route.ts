@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Dynamically determine the redirect URI based on the current origin
-    const origin = new URL(req.url).origin;
+    const origin = process.env.NEXTAUTH_URL || new URL(req.url).origin;
     const redirectUri = `${origin}/api/auth/google-ads/callback`;
 
     console.log(`[OAuth] Initiating link with redirect_uri: ${redirectUri}`);

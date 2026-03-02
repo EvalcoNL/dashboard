@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
     const code = searchParams.get("code");
     const clientId = searchParams.get("state"); // clientId passed in state
     const error = searchParams.get("error");
-    const origin = new URL(req.url).origin;
+    const origin = process.env.NEXTAUTH_URL || new URL(req.url).origin;
 
     if (error || !code || !clientId) {
         const redirectPath = clientId
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-        const origin = new URL(req.url).origin;
+        const origin = process.env.NEXTAUTH_URL || new URL(req.url).origin;
         const redirectUri = `${origin}/api/auth/google-analytics/callback`;
 
         // Exchange code for tokens

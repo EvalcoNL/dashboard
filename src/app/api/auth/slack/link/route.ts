@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: "Slack OAuth credentials are not configured in .env" }, { status: 500 });
     }
 
-    const origin = new URL(req.url).origin;
+    const origin = process.env.NEXTAUTH_URL || new URL(req.url).origin;
     const redirectUri = `${origin}/api/auth/slack/callback`;
 
     // We only need the incoming-webhook scope for incident notifications

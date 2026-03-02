@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
     const clientId = searchParams.get("clientId");
     if (!clientId) return NextResponse.json({ error: "Missing clientId" }, { status: 400 });
 
-    const origin = new URL(req.url).origin;
+    const origin = process.env.NEXTAUTH_URL || new URL(req.url).origin;
     const redirectUri = `${origin}/api/auth/google-tagmanager/callback`;
 
     const scopes = [

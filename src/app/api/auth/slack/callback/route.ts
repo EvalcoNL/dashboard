@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.redirect(new URL(`/dashboard/projects/${clientId}/monitoring/incidents?error=slack_config_missing`, req.url));
     }
 
-    const origin = new URL(req.url).origin;
+    const origin = process.env.NEXTAUTH_URL || new URL(req.url).origin;
     const redirectUri = `${origin}/api/auth/slack/callback`;
 
     try {

@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: "Microsoft Ads credentials not configured" }, { status: 500 });
     }
 
-    const origin = new URL(req.url).origin;
+    const origin = process.env.NEXTAUTH_URL || new URL(req.url).origin;
     const redirectUri = `${origin}/api/auth/microsoft-ads/callback`;
 
     const scopes = ["https://ads.microsoft.com/msads.manage", "offline_access"].join(" ");

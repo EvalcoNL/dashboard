@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     const clientId = searchParams.get("state");
     const error = searchParams.get("error");
 
-    const origin = new URL(req.url).origin;
+    const origin = process.env.NEXTAUTH_URL || new URL(req.url).origin;
 
     if (error || !code || !clientId) {
         const redirectPath = clientId

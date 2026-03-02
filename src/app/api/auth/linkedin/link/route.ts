@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: "LinkedIn credentials not configured" }, { status: 500 });
     }
 
-    const origin = new URL(req.url).origin;
+    const origin = process.env.NEXTAUTH_URL || new URL(req.url).origin;
     const redirectUri = `${origin}/api/auth/linkedin/callback`;
 
     const scopes = ["r_liteprofile", "r_organization_social", "rw_organization_admin", "r_ads_reporting"].join(" ");
