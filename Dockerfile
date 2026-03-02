@@ -51,10 +51,15 @@ COPY --from=builder /app/.next/static ./.next/static
 # Copy Prisma client (needed at runtime)
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/node_modules/@libsql ./node_modules/@libsql
+COPY --from=builder /app/node_modules/libsql ./node_modules/libsql
 COPY --from=builder /app/prisma ./prisma
 
 # Copy ClickHouse init scripts (for reference)
 COPY --from=builder /app/scripts ./scripts
+
+# Create writable data directory for SQLite (before switching to non-root user)
+RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
 
 USER nextjs
 
