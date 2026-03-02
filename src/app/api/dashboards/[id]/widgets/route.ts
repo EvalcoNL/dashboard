@@ -75,13 +75,13 @@ export async function PATCH(
 
         // Update each widget in a transaction
         await prisma.$transaction(
-            widgets.map((w: { id: string; title?: string; position?: unknown; config?: unknown; sortOrder?: number; type?: string }) =>
+            widgets.map((w: { id: string; title?: string; position?: Record<string, unknown>; config?: Record<string, unknown>; sortOrder?: number; type?: string }) =>
                 prisma.dashboardWidget.update({
                     where: { id: w.id },
                     data: {
                         ...(w.title !== undefined && { title: w.title }),
-                        ...(w.position !== undefined && { position: w.position }),
-                        ...(w.config !== undefined && { config: w.config }),
+                        ...(w.position !== undefined && { position: w.position as object }),
+                        ...(w.config !== undefined && { config: w.config as object }),
                         ...(w.sortOrder !== undefined && { sortOrder: w.sortOrder }),
                         ...(w.type !== undefined && { type: w.type }),
                     },
