@@ -33,7 +33,7 @@ export default async function MonitorPage({
         },
     });
 
-    if (!domain || domain.clientId !== clientId || domain.type !== "DOMAIN") {
+    if (!domain || domain.clientId !== clientId || !["DOMAIN", "WEBSITE"].includes(domain.type)) {
         notFound();
     }
 
