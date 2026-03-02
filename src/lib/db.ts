@@ -3,15 +3,19 @@ import { PrismaLibSql } from "@prisma/adapter-libsql";
 import path from "path";
 
 const prismaClientSingleton = () => {
-    let dbUrl = process.env.DATABASE_URL || "file:./dev.db";
-    // Resolve relative file: URLs to absolute paths for libsql
+    const dbUrl = process.env.DATABASE_URL || "file:./data/evalco.db";
+    const authToken = process.env.DATABASE_AUTH_TOKEN;
+
+    // Use libsql adapter for both local file and Turso cloud
+    let resolvedUrl = dbUrl;
     if (dbUrl.startsWith("file:") && !dbUrl.startsWith("file:/")) {
         const relativePath = dbUrl.replace("file:", "");
-        dbUrl = "file:" + path.resolve(relativePath);
+        resolvedUrl = "file:" + path.resolve(relativePath);
     }
+
     const adapter = new PrismaLibSql({
-        url: dbUrl,
-        authToken: process.env.DATABASE_AUTH_TOKEN
+        url: resolvedUrl,
+        ...(authToken ? { authToken } : {}),
     });
     return new PrismaClient({ adapter });
 };
