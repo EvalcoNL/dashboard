@@ -6,6 +6,7 @@ import {
     Globe, Plus, RotateCcw, MoreVertical,
     Clock, Trash2, X, Settings, Pause, Play
 } from "lucide-react";
+import { useNotification } from "@/components/NotificationProvider";
 
 interface WebMonitoringClientProps {
     clientId: string;
@@ -17,6 +18,7 @@ interface WebMonitoringClientProps {
 
 export default function WebMonitoringClient({ clientId, clientName, domains, incidents, summary }: WebMonitoringClientProps) {
     const router = useRouter();
+    const { showToast, confirm } = useNotification();
     const [showAddForm, setShowAddForm] = useState(false);
     const [newUrl, setNewUrl] = useState("");
     const [newName, setNewName] = useState("");
@@ -58,8 +60,22 @@ export default function WebMonitoringClient({ clientId, clientName, domains, inc
     };
 
     const handleDeleteMonitor = async (domainId: string) => {
-        if (!confirm("Weet je zeker dat je deze monitor wilt verwijderen?")) return;
-        try { await fetch(`/api/data-sources/${domainId}`, { method: "DELETE" }); router.refresh(); } catch (e) { console.error(e); }
+        const domain = domains.find(d => d.id === domainId);
+        const confirmed = await confirm({
+            title: "Monitor verwijderen",
+            message: `Weet je zeker dat je de monitor voor "${domain?.name || "deze website"}" wilt verwijderen?`,
+            confirmLabel: "Ja, verwijderen",
+            type: "danger"
+        });
+        if (!confirmed) return;
+        try {
+            await fetch(`/api/data-sources/${domainId}`, { method: "DELETE" });
+            showToast("success", "Monitor verwijderd");
+            router.refresh();
+        } catch (e) {
+            console.error(e);
+            showToast("error", "Fout bij verwijderen");
+        }
     };
 
     const handlePauseMonitor = async (domainId: string, currentlyActive: boolean) => {

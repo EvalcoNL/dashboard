@@ -12,6 +12,11 @@ export const metadata: Metadata = {
   description: "AI-powered Google Ads performance analysis and optimization platform",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{

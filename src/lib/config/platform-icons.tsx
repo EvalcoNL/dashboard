@@ -60,6 +60,7 @@ export const PLATFORMS: PlatformMeta[] = [
     { key: "KLAVIYO", name: "Klaviyo", color: "#000000", abbr: "KL", category: "analytics", authType: "api_key", description: "E-mail marketing automation, flows en campagne statistieken" },
     { key: "COOKIEBOT", name: "Cookiebot", color: "#1769FF", abbr: "CB", category: "analytics", authType: "api_key", description: "Cookie consent management en GDPR/AVG compliance" },
     { key: "STAPE", name: "Stape", color: "#6C47FF", abbr: "ST", category: "analytics", authType: "api_key", description: "Server-side tagging en tracking proxy" },
+    { key: "SLACK", name: "Slack", color: "#4A154B", abbr: "SL", category: "social", authType: "oauth_third", description: "Koppel Slack voor incident notificaties en reporting alerts" },
 ];
 
 export function getPlatformMeta(type: string): PlatformMeta | undefined {
@@ -242,6 +243,16 @@ const PLATFORM_ICONS: Record<string, (size: number) => React.ReactNode> = {
             <path d="M6 24h36" />
             <path d="M24 6c-6 8-6 28 0 36" />
             <path d="M24 6c6 8 6 28 0 36" />
+        </svg>
+    ),
+    SLACK: (s) => (
+        <svg viewBox="0 0 128 128" width={s} height={s}>
+            <g>
+                <path d="M29.2 78c0 7.7-6.2 13.9-13.9 13.9-7.7 0-13.9-6.2-13.9-13.9s6.2-13.9 13.9-13.9h13.9V78zm7 0c0-7.7 6.2-13.9 13.9-13.9 7.7 0 13.9 6.2 13.9 13.9v34.8c0 7.7-6.2 13.9-13.9 13.9-7.7 0-13.9-6.2-13.9-13.9V78z" fill="#36C5F0" />
+                <path d="M50 29.2c-7.7 0-13.9-6.2-13.9-13.9s6.2-13.9 13.9-13.9 13.9 6.2 13.9 13.9V29.2H50zm0 7c7.7 0 13.9 6.2 13.9 13.9 0 7.7-6.2 13.9-13.9 13.9H15.2C7.5 50.1 1.3 43.9 1.3 36.2s6.2-13.9 13.9-13.9H50z" fill="#2EB67D" />
+                <path d="M98.8 50c0-7.7 6.2-13.9 13.9-13.9 7.7 0 13.9 6.2 13.9 13.9 0 7.7-6.2 13.9-13.9 13.9h-13.9V50zm-7 0c0 7.7-6.2 13.9-13.9 13.9-7.7 0-13.9-6.2-13.9-13.9V15.2c0-7.7 6.2-13.9 13.9-13.9 7.7 0 13.9 6.2 13.9 13.9V50z" fill="#ECB22E" />
+                <path d="M78 98.8c7.7 0 13.9 6.2 13.9 13.9 0 7.7-6.2 13.9-13.9 13.9-7.7 0-13.9-6.2-13.9-13.9V98.8H78zm0-7c-7.7 0-13.9-6.2-13.9-13.9 0-7.7 6.2-13.9 13.9-13.9h34.8c7.7 0 13.9 6.2 13.9 13.9s-6.2 13.9-13.9 13.9H78z" fill="#E01E5A" />
+            </g>
         </svg>
     ),
 };

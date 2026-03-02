@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { syncScheduler } from "@/lib/data-integration/sync-scheduler";
 
 export async function GET(req: NextRequest) {
     const session = await auth();
@@ -10,9 +11,16 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const code = searchParams.get("code");
     const clientId = searchParams.get("state");
-    if (!code || !clientId) return NextResponse.json({ error: "Missing code or state" }, { status: 400 });
+    const error = searchParams.get("error");
 
     const origin = new URL(req.url).origin;
+
+    if (error || !code || !clientId) {
+        const redirectPath = clientId
+            ? `/dashboard/projects/${clientId}/data/sources?error=${error === "access_denied" ? "Koppeling geannuleerd" : "MSAdsLinkFailed"}`
+            : "/dashboard";
+        return NextResponse.redirect(`${origin}${redirectPath}`);
+    }
 
     try {
         const redirectUri = `${origin}/api/auth/microsoft-ads/callback`;
@@ -32,7 +40,7 @@ export async function GET(req: NextRequest) {
 
         const refreshToken = tokenData.refresh_token || tokenData.access_token;
 
-        await prisma.dataSource.create({
+        const newSource = await prisma.dataSource.create({
             data: {
                 clientId, type: "MICROSOFT_ADS", category: "APP",
                 externalId: "microsoft-ads",
@@ -40,6 +48,11 @@ export async function GET(req: NextRequest) {
                 token: refreshToken, active: true,
             },
         });
+
+        // Auto-trigger first sync in background
+        syncScheduler.scheduleNow(newSource.id).catch(err =>
+            console.error(`[AutoSync] Failed to schedule sync for Microsoft Ads source ${newSource.id}:`, err)
+        );
 
         return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/data/sources`);
     } catch (error: any) {

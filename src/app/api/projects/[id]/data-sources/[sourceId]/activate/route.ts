@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { syncScheduler } from "@/lib/data-integration/sync-scheduler";
 
 export async function POST(
     req: NextRequest,
@@ -41,6 +42,11 @@ export async function POST(
                 linkedAt: new Date()
             }
         });
+
+        // Auto-trigger first sync in background
+        syncScheduler.scheduleNow(source.id).catch(err =>
+            console.error(`[AutoSync] Failed to schedule sync for activated source ${source.id}:`, err)
+        );
 
         return NextResponse.json({ success: true });
     } catch (error: any) {

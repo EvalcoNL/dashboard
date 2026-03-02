@@ -13,7 +13,10 @@ import {
     Sun,
     Activity,
     Globe,
+    Menu,
+    X,
 } from "lucide-react";
+import { useMobileSidebar } from "./MobileSidebarContext";
 import { useTheme } from "./ThemeProvider";
 import { useLanguage } from "@/lib/i18n/LanguageContext";
 import NotificationDropdown from "./topbar/NotificationDropdown";
@@ -24,6 +27,7 @@ export default function Topbar() {
     const { theme, toggleTheme } = useTheme();
     const { language, setLanguage, t } = useLanguage();
     const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+    const { isOpen: sidebarOpen, toggle: toggleSidebar } = useMobileSidebar();
     const router = useRouter();
     const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -47,12 +51,13 @@ export default function Topbar() {
 
     return (
         <header
+            className="topbar"
             style={{
                 position: "fixed",
                 top: 0,
                 left: 0,
                 right: 0,
-                height: "60px",
+                height: "56px",
                 background: "var(--color-surface-elevated)",
                 borderBottom: "1px solid var(--color-border)",
                 display: "flex",
@@ -64,7 +69,24 @@ export default function Topbar() {
             }}
         >
             {/* Left section: Logo and Client Selector */}
-            <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                {/* Hamburger — mobile only */}
+                <button
+                    onClick={toggleSidebar}
+                    className="mobile-only"
+                    style={{
+                        background: "none",
+                        border: "none",
+                        color: "var(--color-text-primary)",
+                        cursor: "pointer",
+                        padding: "8px",
+                        borderRadius: "8px",
+                        alignItems: "center",
+                        justifyContent: "center",
+                    }}
+                >
+                    {sidebarOpen ? <X size={22} /> : <Menu size={22} />}
+                </button>
                 <Link
                     href="/dashboard"
                     style={{
@@ -104,49 +126,52 @@ export default function Topbar() {
 
             {/* Right section: Theme, Notifications, Language, User */}
             <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-                <button
-                    onClick={() => setLanguage(language === "nl" ? "en" : "nl")}
-                    style={{
-                        background: "none",
-                        border: "none",
-                        color: "var(--color-text-secondary)",
-                        cursor: "pointer",
-                        padding: "4px 8px",
-                        borderRadius: "8px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: "6px",
-                        transition: "background 0.2s"
-                    }}
-                    className="hover-bg"
-                >
-                    <Globe size={18} />
-                    <span style={{ fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase" }}>
-                        {language}
-                    </span>
-                </button>
+                {/* Desktop-only action buttons */}
+                <div className="desktop-only" style={{ alignItems: "center", gap: "16px" }}>
+                    <button
+                        onClick={() => setLanguage(language === "nl" ? "en" : "nl")}
+                        style={{
+                            background: "none",
+                            border: "none",
+                            color: "var(--color-text-secondary)",
+                            cursor: "pointer",
+                            padding: "4px 8px",
+                            borderRadius: "8px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: "6px",
+                            transition: "background 0.2s"
+                        }}
+                        className="hover-bg"
+                    >
+                        <Globe size={18} />
+                        <span style={{ fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase" }}>
+                            {language}
+                        </span>
+                    </button>
 
-                <button
-                    onClick={toggleTheme}
-                    style={{
-                        background: "none",
-                        border: "none",
-                        color: "var(--color-text-secondary)",
-                        cursor: "pointer",
-                        padding: "8px",
-                        borderRadius: "8px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        transition: "background 0.2s"
-                    }}
-                    className="hover-bg"
-                >
-                    {theme === "light" ? <Moon size={20} /> : <Sun size={20} />}
-                </button>
+                    <button
+                        onClick={toggleTheme}
+                        style={{
+                            background: "none",
+                            border: "none",
+                            color: "var(--color-text-secondary)",
+                            cursor: "pointer",
+                            padding: "8px",
+                            borderRadius: "8px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            transition: "background 0.2s"
+                        }}
+                        className="hover-bg"
+                    >
+                        {theme === "light" ? <Moon size={20} /> : <Sun size={20} />}
+                    </button>
 
-                <NotificationDropdown />
+                    <NotificationDropdown />
+                </div>
 
                 {/* User Account Dropdown */}
                 <div ref={userMenuRef} style={{ position: "relative" }}>

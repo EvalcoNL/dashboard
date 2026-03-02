@@ -1,6 +1,13 @@
 import { prisma } from "@/lib/db";
 import * as tls from "tls";
-import { sendIncidentAlertEmail, sendSlackAlert } from "@/lib/services/email-service";
+import {
+    sendIncidentAlertEmail,
+    sendIncidentResolvedEmail,
+    sendSlackAlert,
+    sendSlackResolvedAlert
+} from "@/lib/services/email-service";
+import { formatDistanceStrict } from "date-fns";
+import { nl } from "date-fns/locale";
 
 /**
  * Perform an uptime check for a single domain data source.
@@ -27,10 +34,39 @@ export async function performUptimeCheck(domainId: string) {
 
     if (config.uptime) {
         const targetUrl = domain.externalId.startsWith('http') ? domain.externalId : `https://${domain.externalId}`;
-        const result = await checkUrl(targetUrl);
+        const result = await checkUrl(targetUrl, config);
         status = result.status;
         statusCode = result.statusCode;
         responseTime = result.responseTime;
+
+        // Pixel Monitoring
+        if (result.html && config.pixelMonitoring) {
+            const scripts = detectTrackingScripts(result.html);
+            config.lastPixelAudit = {
+                timestamp: now.toISOString(),
+                ...scripts
+            };
+
+            const pCfg = config.pixelConfig || { gtm: true, ga4: true, meta: false };
+            const missingSelected = [];
+
+            if (pCfg.gtm && !scripts.gtm) missingSelected.push("GTM");
+            if (pCfg.ga4 && !scripts.ga4) missingSelected.push("GA4");
+            if (pCfg.meta && !scripts.meta) missingSelected.push("Meta");
+
+            if (missingSelected.length > 0) {
+                await (prisma as any).notification.create({
+                    data: {
+                        clientId: domain.clientId,
+                        type: "PIXEL_MISSING",
+                        title: `Tracking scripts ontbreken`,
+                        message: `De volgende geselecteerde scripts zijn niet gevonden op ${domain.externalId}: ${missingSelected.join(", ")}.`,
+                        severity: "warning",
+                        url: targetUrl,
+                    }
+                });
+            }
+        }
 
         // Save Uptime Check
         await (prisma as any).uptimeCheck.create({
@@ -55,16 +91,43 @@ export async function performUptimeCheck(domainId: string) {
 
         // Auto-create/resolve incidents
         if (status === "DOWN") {
-            await autoCreateIncident({
-                clientId: domain.clientId,
-                dataSourceId: domain.id,
-                title: domain.name || domain.externalId,
-                checkedUrl: targetUrl,
-                statusCode: statusCode,
-                responseTime: responseTime,
-            });
+            // Confirmation logic
+            const firstFailure = config.firstFailureAt ? new Date(config.firstFailureAt) : null;
+            const confirmationMins = config.confirmationPeriod || 0;
+
+            if (!firstFailure) {
+                config.firstFailureAt = now.toISOString();
+                delete config.firstSuccessAt;
+            }
+
+            const elapsedMins = firstFailure ? (now.getTime() - firstFailure.getTime()) / 60000 : 0;
+
+            if (elapsedMins >= confirmationMins) {
+                await autoCreateIncident({
+                    clientId: domain.clientId,
+                    dataSourceId: domain.id,
+                    title: domain.name || domain.externalId,
+                    checkedUrl: targetUrl,
+                    statusCode: statusCode,
+                    responseTime: responseTime,
+                    config,
+                });
+            }
         } else {
-            await autoResolveIncidents(domain.id, targetUrl);
+            // Recovery logic
+            const firstSuccess = config.firstSuccessAt ? new Date(config.firstSuccessAt) : null;
+            const recoveryMins = config.recoveryPeriod || 0;
+
+            if (!firstSuccess) {
+                config.firstSuccessAt = now.toISOString();
+                delete config.firstFailureAt;
+            }
+
+            const elapsedMins = firstSuccess ? (now.getTime() - firstSuccess.getTime()) / 60000 : 0;
+
+            if (elapsedMins >= recoveryMins) {
+                await autoResolveIncidents(domain.id, targetUrl, config);
+            }
         }
     }
 
@@ -75,7 +138,7 @@ export async function performUptimeCheck(domainId: string) {
         for (const page of domain.monitoredPages) {
             // Build full URL: if page.url starts with http, use as-is; otherwise append to base
             const pageUrl = page.url.startsWith('http') ? page.url : `${baseUrl}${page.url.startsWith('/') ? '' : '/'}${page.url}`;
-            const result = await checkUrl(pageUrl);
+            const result = await checkUrl(pageUrl, config);
 
             // Update page status
             await (prisma as any).monitoredPage.update({
@@ -97,6 +160,9 @@ export async function performUptimeCheck(domainId: string) {
             }
 
             // Auto-create/resolve incidents for monitored pages
+            // (Simplification: we use the same config toggles but we don't track per-page transient states in the main domain config)
+            // Ideally MonitoredPage would have its own config or status fields.
+            // For now, let's just keep the direct behavior to avoid over-complicating the domain config JSON.
             if (result.statusCode !== null && result.statusCode >= 400) {
                 await autoCreateIncident({
                     clientId: domain.clientId,
@@ -105,9 +171,10 @@ export async function performUptimeCheck(domainId: string) {
                     checkedUrl: pageUrl,
                     statusCode: result.statusCode,
                     responseTime: result.responseTime,
+                    config,
                 });
             } else if (result.statusCode !== null && result.statusCode < 400) {
-                await autoResolveIncidents(domain.id, pageUrl);
+                await autoResolveIncidents(domain.id, pageUrl, config);
             }
         }
     }
@@ -117,7 +184,7 @@ export async function performUptimeCheck(domainId: string) {
         try {
             const host = domain.externalId.replace(/^(https?:\/\/)/, '').split('/')[0];
 
-            const sslDetails = await new Promise((resolve, reject) => {
+            const sslDetails = await new Promise<{ validTo: string; issuer: string; subject: string }>((resolve, reject) => {
                 const socket = tls.connect({
                     host,
                     port: 443,
@@ -150,6 +217,26 @@ export async function performUptimeCheck(domainId: string) {
 
             config.sslDetails = sslDetails;
 
+            // Check for expiration
+            if (config.sslExpiration && sslDetails.validTo) {
+                const expires = new Date(sslDetails.validTo);
+                const daysLeft = Math.floor((expires.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                const threshold = config.sslExpirationDays || 30;
+
+                if (daysLeft <= threshold) {
+                    await (prisma as any).notification.create({
+                        data: {
+                            clientId: domain.clientId,
+                            type: "SSL_EXPIRING",
+                            title: `SSL Certificaat verloopt bijna`,
+                            message: `Het SSL certificaat voor ${domain.externalId} verloopt over ${daysLeft} dagen (${expires.toLocaleDateString('nl-NL')}).`,
+                            severity: daysLeft <= 7 ? "critical" : "warning",
+                            url: domain.externalId,
+                        }
+                    });
+                }
+            }
+
         } catch (error: any) {
             console.error(`[checkDomain] SSL Check failed for ${domain.externalId}:`, error);
             config.sslDetails = { error: "Failed to read certificate" };
@@ -171,28 +258,52 @@ export async function performUptimeCheck(domainId: string) {
 /**
  * Check a single URL and return status, statusCode, and responseTime.
  */
-async function checkUrl(url: string): Promise<{
+async function checkUrl(url: string, config: any = {}): Promise<{
     status: string;
     statusCode: number | null;
     responseTime: number;
+    html?: string;
 }> {
     const startTime = Date.now();
     try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        const timeoutSeconds = config.requestTimeout || 10;
+        const timeoutId = setTimeout(() => controller.abort(), timeoutSeconds * 1000);
+
+        const headers: Record<string, string> = {};
+        if (config.requestHeaders && Array.isArray(config.requestHeaders)) {
+            config.requestHeaders.forEach((h: any) => {
+                if (h.name && h.value) {
+                    headers[h.name] = h.value;
+                }
+            });
+        }
+
+        const method = config.httpMethod || "GET";
+        const body = (["POST", "PUT", "PATCH"].includes(method) && config.requestBody) ? config.requestBody : undefined;
 
         const response = await fetch(url, {
-            method: "GET",
+            method,
+            headers,
+            body,
             signal: controller.signal,
-            redirect: "follow",
+            redirect: config.followRedirects === false ? "manual" : "follow",
         });
 
         clearTimeout(timeoutId);
 
+        let isUp = response.ok;
+        const alertCondition = config.alertCondition || "url_unavailable";
+
+        if (alertCondition === "status_not_2xx") {
+            isUp = response.status >= 200 && response.status < 300;
+        }
+
         return {
-            status: response.ok ? "UP" : "DOWN",
+            status: isUp ? "UP" : "DOWN",
             statusCode: response.status,
             responseTime: Date.now() - startTime,
+            html: isUp ? await response.text() : undefined,
         };
     } catch (error: any) {
         return {
@@ -201,6 +312,18 @@ async function checkUrl(url: string): Promise<{
             responseTime: Date.now() - startTime,
         };
     }
+}
+
+/**
+ * Detect tracking scripts in page source.
+ */
+function detectTrackingScripts(html: string) {
+    const findings = {
+        gtm: /googletagmanager\.com\/gtm\.js/i.test(html) || /gtm-[a-zA-Z0-9]+/i.test(html),
+        ga4: /googletagmanager\.com\/gtag\/js/i.test(html) || /gtag\(/i.test(html),
+        meta: /connect\.facebook\.net\/en_US\/fbevents\.js/i.test(html),
+    };
+    return findings;
 }
 
 /**
@@ -278,6 +401,7 @@ async function autoCreateIncident(opts: {
     checkedUrl: string;
     statusCode: number | null;
     responseTime: number;
+    config?: any;
 }) {
     // Check if there's already an open incident for this URL
     const existing = await (prisma as any).incident.findFirst({
@@ -293,7 +417,7 @@ async function autoCreateIncident(opts: {
     const causeLabel = opts.statusCode ? getStatusLabel(opts.statusCode) : "Connection Timeout";
     const causeCode = opts.statusCode ? String(opts.statusCode) : "T/O";
 
-    await (prisma as any).incident.create({
+    const incident = await (prisma as any).incident.create({
         data: {
             clientId: opts.clientId,
             dataSourceId: opts.dataSourceId,
@@ -302,7 +426,7 @@ async function autoCreateIncident(opts: {
             causeCode: causeCode,
             status: "ONGOING",
             checkedUrl: opts.checkedUrl,
-            httpMethod: "GET",
+            httpMethod: opts.config?.httpMethod || "GET",
             statusCode: opts.statusCode,
             responseTime: opts.responseTime,
             events: {
@@ -334,14 +458,29 @@ async function autoCreateIncident(opts: {
             recipients: client.notificationUsers.map((u: any) => u.email)
         };
 
+        const notifiedChannels = [];
+
         // Fire & Forget: Send Email Alerts
-        if (payload.recipients.length > 0) {
+        if (payload.recipients.length > 0 && opts.config?.notifyEmail !== false) {
             sendIncidentAlertEmail(payload).catch(err => console.error(err));
+            notifiedChannels.push(`E-mail (${payload.recipients.join(', ')})`);
         }
 
         // Fire & Forget: Send Slack Alert
-        if (client.slackWebhookUrl) {
+        if (client.slackWebhookUrl && opts.config?.notifySlack) {
             sendSlackAlert(client.slackWebhookUrl, payload).catch(err => console.error(err));
+            notifiedChannels.push("Slack");
+        }
+
+        if (notifiedChannels.length > 0) {
+            await (prisma as any).incidentEvent.create({
+                data: {
+                    incidentId: incident.id,
+                    type: "NOTIFICATION_SENT",
+                    message: `Notificatie verzonden via: ${notifiedChannels.join(' en ')}`,
+                    userName: "Systeem",
+                }
+            });
         }
     }
 }
@@ -349,7 +488,15 @@ async function autoCreateIncident(opts: {
 /**
  * Auto-resolve open incidents for a specific data source and URL when the site recovers.
  */
-async function autoResolveIncidents(dataSourceId: string, checkedUrl: string) {
+export async function autoResolveIncidents(dataSourceId: string, checkedUrl: string, config: any = {}) {
+    const now = new Date();
+    const dataSource = await (prisma as any).dataSource.findUnique({
+        where: { id: dataSourceId },
+        select: { clientId: true, name: true, externalId: true }
+    });
+
+    if (!dataSource) return;
+
     const openIncidents = await (prisma as any).incident.findMany({
         where: {
             dataSourceId,
@@ -363,7 +510,7 @@ async function autoResolveIncidents(dataSourceId: string, checkedUrl: string) {
             where: { id: inc.id },
             data: {
                 status: "RESOLVED",
-                resolvedAt: new Date(),
+                resolvedAt: now,
                 resolvedBy: "Systeem",
                 events: {
                     create: {
@@ -374,6 +521,51 @@ async function autoResolveIncidents(dataSourceId: string, checkedUrl: string) {
                 },
             },
         });
+
+        const duration = formatDistanceStrict(inc.startedAt, now, { locale: nl });
+
+        // Trigger Resolution Notifications
+        const client = await (prisma as any).client.findUnique({
+            where: { id: dataSource.clientId },
+            select: {
+                name: true,
+                slackWebhookUrl: true,
+                notificationUsers: { select: { email: true } }
+            }
+        });
+
+        if (client) {
+            const payload = {
+                incidentTitle: dataSource.name || dataSource.externalId,
+                incidentCause: inc.cause,
+                clientName: client.name,
+                startedAt: inc.startedAt,
+                duration: duration,
+                recipients: client.notificationUsers.map((u: any) => u.email)
+            };
+
+            const notifiedChannels = [];
+
+            if (payload.recipients.length > 0 && config.notifyEmail !== false) {
+                sendIncidentResolvedEmail(payload).catch(err => console.error(err));
+                notifiedChannels.push(`E-mail (${payload.recipients.join(', ')})`);
+            }
+
+            if (client.slackWebhookUrl && config.notifySlack) {
+                sendSlackResolvedAlert(client.slackWebhookUrl, payload).catch(err => console.error(err));
+                notifiedChannels.push("Slack");
+            }
+
+            if (notifiedChannels.length > 0) {
+                await (prisma as any).incidentEvent.create({
+                    data: {
+                        incidentId: inc.id,
+                        type: "NOTIFICATION_SENT",
+                        message: `Resolutie-notificatie verzonden via: ${notifiedChannels.join(' en ')} (duur: ${duration})`,
+                        userName: "Systeem",
+                    }
+                });
+            }
+        }
     }
 }
-

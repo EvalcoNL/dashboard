@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import MonitorDetail from "../MonitorDetail";
+import { useNotification } from "@/components/NotificationProvider";
 
 interface MonitorDetailPageProps {
     clientId: string;
@@ -11,9 +12,13 @@ interface MonitorDetailPageProps {
     domain: any;
 }
 
-export default function MonitorDetailPage({ clientId, clientName, domain }: MonitorDetailPageProps) {
+function MonitorDetailPageContent({ clientId, clientName, domain }: MonitorDetailPageProps) {
     const router = useRouter();
-    const [activeTab, setActiveTab] = useState("overview");
+    const searchParams = useSearchParams();
+    const { showToast, confirm } = useNotification();
+    const requestedTab = searchParams.get("tab");
+
+    const [activeTab, setActiveTab] = useState(requestedTab || "overview");
     const [isSyncing, setIsSyncing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [pages, setPages] = useState<any[]>(domain.monitoredPages || []);
@@ -23,6 +28,7 @@ export default function MonitorDetailPage({ clientId, clientName, domain }: Moni
             uptimeInterval: cfg.uptimeInterval || 5,
             ssl: cfg.ssl !== false,
             uptime: cfg.uptime !== false,
+            speed: cfg.speed !== false,
             httpMethod: cfg.httpMethod || "GET",
             requestTimeout: cfg.requestTimeout || 30,
             followRedirects: cfg.followRedirects !== false,
@@ -34,14 +40,19 @@ export default function MonitorDetailPage({ clientId, clientName, domain }: Moni
             sslExpiration: cfg.sslExpiration || false,
             sslExpirationDays: cfg.sslExpirationDays || 30,
             domainExpiration: cfg.domainExpiration || false,
-            notifyCall: cfg.notifyCall || false,
-            notifySms: cfg.notifySms || false,
-            notifyPush: cfg.notifyPush || false,
+            notifySlack: cfg.notifySlack || false,
             keepCookies: cfg.keepCookies || false,
             requestBody: cfg.requestBody || "",
             requestHeaders: cfg.requestHeaders || [{ name: "", value: "" }],
         };
     });
+
+    // Update tab if URL changes
+    useEffect(() => {
+        if (requestedTab && requestedTab !== activeTab) {
+            setActiveTab(requestedTab);
+        }
+    }, [requestedTab, activeTab]);
 
     // ── Stats calculation ──
     const getDomainStats = () => {
@@ -50,9 +61,9 @@ export default function MonitorDetailPage({ clientId, clientName, domain }: Moni
         let currentStatus = "Unknown", isUp = true, statusColor = "#9ca3af", lastCheckText = "Geen checks";
         let avgResponseTime = 0, minResponseTime = 0, maxResponseTime = 0;
         let chartData: any[] = [];
-        // Always process historical data if available
+
         if (checks.length > 0) {
-            chartData = [...checks].reverse().map(c => ({
+            chartData = [...checks].reverse().map((c: any) => ({
                 time: new Date(c.checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
                 responseMs: c.responseTime || 0,
             }));
@@ -63,7 +74,7 @@ export default function MonitorDetailPage({ clientId, clientName, domain }: Moni
                 avgResponseTime = Math.round(responseTimes.reduce((a: number, b: number) => a + b, 0) / responseTimes.length);
             }
         }
-        // Set status based on active/paused state
+
         if (!domain.active) {
             currentStatus = "Gepauzeerd";
             statusColor = "#9ca3af";
@@ -75,7 +86,7 @@ export default function MonitorDetailPage({ clientId, clientName, domain }: Moni
             statusColor = isUp ? "#10b981" : "#ef4444";
             const diffMins = Math.floor((Date.now() - new Date(checks[0].checkedAt).getTime()) / 60000);
             lastCheckText = diffMins === 0 ? "Zojuist" : `${diffMins} min geleden`;
-            // Check for page-level incidents: site is UP but pages have errors
+
             if (isUp) {
                 const monitoredPages = domain.monitoredPages || [];
                 const hasPageErrors = monitoredPages.some((p: any) => p.lastStatus && p.lastStatus >= 400);
@@ -130,12 +141,23 @@ export default function MonitorDetailPage({ clientId, clientName, domain }: Moni
     };
 
     const handleDeleteMonitor = async () => {
-        if (!confirm("Weet je zeker dat je deze monitor wilt verwijderen?")) return;
+        const confirmed = await confirm({
+            title: "Monitor verwijderen",
+            message: `Weet je zeker dat je "${domain.name}" wilt verwijderen? Alle historie zal verloren gaan.`,
+            confirmLabel: "Ja, verwijderen",
+            cancelLabel: "Annuleren",
+            type: "danger"
+        });
+
+        if (!confirmed) return;
+
         try {
             await fetch(`/api/data-sources/${domain.id}`, { method: "DELETE" });
+            showToast("success", "Monitor succesvol verwijderd");
             router.push(`/dashboard/projects/${clientId}/monitoring/web`);
         } catch (e) {
             console.error(e);
+            showToast("error", "Fout bij verwijderen van monitor");
         }
     };
 
@@ -181,7 +203,7 @@ export default function MonitorDetailPage({ clientId, clientName, domain }: Moni
                 </p>
             </div>
 
-            {/* ── Tabs + Content (no card wrapper) ─── */}
+            {/* ── Tabs + Content ─── */}
             <MonitorDetail
                 domain={domain}
                 stats={stats}
@@ -223,5 +245,13 @@ export default function MonitorDetailPage({ clientId, clientName, domain }: Moni
                 .back-link:hover { color: var(--color-text-primary) !important; }
             `}</style>
         </div>
+    );
+}
+
+export default function MonitorDetailPage(props: MonitorDetailPageProps) {
+    return (
+        <Suspense fallback={<div style={{ padding: "32px", color: "var(--color-text-muted)" }}>Laden...</div>}>
+            <MonitorDetailPageContent {...props} />
+        </Suspense>
     );
 }

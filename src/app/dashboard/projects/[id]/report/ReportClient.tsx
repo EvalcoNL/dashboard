@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { FileText, Download } from "lucide-react";
 import AIReportsPanel from "@/components/project/AIReportsPanel";
+import { useNotification } from "@/components/NotificationProvider";
 
 export default function ReportClient({
     client,
@@ -13,6 +14,7 @@ export default function ReportClient({
     userRole: string;
 }) {
     const router = useRouter();
+    const { showToast } = useNotification();
 
     const analystReport = client.analystReports?.[0];
     const reportData = analystReport?.reportJson;
@@ -71,7 +73,7 @@ export default function ReportClient({
                 router.refresh();
             } else {
                 const data = await response.json();
-                alert(data.error || "Analyse mislukt");
+                showToast("error", data.error || "Analyse mislukt");
             }
         } catch (error: any) {
             console.error("Failed to analyze:", error);
@@ -89,7 +91,7 @@ export default function ReportClient({
                 router.refresh();
             } else {
                 const data = await response.json();
-                alert(data.error || "Advies generatie mislukt");
+                showToast("error", data.error || "Advies generatie mislukt");
             }
         } catch (error: any) {
             console.error("Failed to generate advice:", error);
@@ -98,7 +100,7 @@ export default function ReportClient({
     };
 
     return (
-        <div style={{ padding: "32px", maxWidth: "1200px", margin: "0 auto" }}>
+        <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "32px" }}>
                 <div>
                     <h1 style={{ fontSize: "2rem", fontWeight: 700, color: "var(--color-text-primary)", marginBottom: "8px" }}>

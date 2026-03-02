@@ -2,7 +2,6 @@ export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
-import EditDomainForm from "./EditDomainForm";
 
 export default async function EditDomainSourcePage({
     params,
@@ -21,12 +20,6 @@ export default async function EditDomainSourcePage({
 
     if (!source) notFound();
 
-    return (
-        <EditDomainForm
-            clientId={id}
-            sourceId={source.id}
-            initialDomain={source.name || source.externalId}
-            initialConfig={source.config as any}
-        />
-    );
+    // Redirect to Web Monitoring page with 'settings' tab open
+    redirect(`/dashboard/projects/${id}/monitoring/web/${sourceId}?tab=settings`);
 }

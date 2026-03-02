@@ -88,7 +88,7 @@ export default function ProjectSwitcher({ t }: ProjectSwitcherProps) {
                 }}
                 className="hover-bg"
             >
-                <span style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", fontWeight: 500 }}>
+                <span className="desktop-only" style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", fontWeight: 500 }}>
                     {t("common", "account")}
                 </span>
                 <span style={{
@@ -108,7 +108,7 @@ export default function ProjectSwitcher({ t }: ProjectSwitcherProps) {
                         top: "100%",
                         left: "-10px",
                         marginTop: "8px",
-                        width: "450px",
+                        width: "min(450px, calc(100vw - 24px))",
                         background: "var(--color-surface-elevated)",
                         border: "1px solid var(--color-border)",
                         borderRadius: "12px",

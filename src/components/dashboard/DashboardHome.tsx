@@ -187,7 +187,7 @@ export default function DashboardHome({
             <div style={{ marginBottom: "16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <h2 style={{ fontSize: "1.1rem", fontWeight: 600 }}>Projecten</h2>
                 <Link
-                    href="/dashboard/projects/new"
+                    href="/projects/new"
                     className="btn btn-primary btn-sm"
                     style={{ textDecoration: "none" }}
                 >

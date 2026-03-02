@@ -1,0 +1,47 @@
+# Dependencies
+node_modules
+npm-debug.log*
+
+# Build output (we build inside Docker)
+.next
+out
+dist
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Docs & tests
+docs/
+*.md
+!README.md
+
+# Env files (mounted separately)
+.env
+.env.*
+!.env.example
+
+# Dev tools
+.eslintrc*
+.prettierrc*
+prisma/dev.db
+prisma/dev.db-journal
+
+# Gemini
+.gemini/
+.agents/

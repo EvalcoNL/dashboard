@@ -1,15 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { performUptimeCheck } from "@/lib/services/domain-checker";
+import { rateLimitCron } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-    // Optional: Add basic authorization for the cron caller
-    // const authHeader = req.headers.get("authorization");
-    // if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    //     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    // }
+    // Rate limit: max 2 requests per minute
+    const rateLimited = rateLimitCron(req);
+    if (rateLimited) return rateLimited;
+
+    // Verify cron secret to prevent unauthorized triggers
+    const authHeader = req.headers.get("authorization");
+    if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     try {
         console.log("[CRON] Starting uptime checks");

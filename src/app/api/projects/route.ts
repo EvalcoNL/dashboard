@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 
-// POST /api/projects — Create new client
+// POST /api/projects — Create new client with optional domain
 export async function POST(req: NextRequest) {
     const session = await auth();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -11,12 +11,23 @@ export async function POST(req: NextRequest) {
 
     try {
         const body = await req.json();
-        const { name, industryType, targetType, targetValue, tolerancePct, evaluationWindowDays, profitMarginPct, currency } = body;
+        const {
+            name,
+            industryType,
+            targetType,
+            targetValue,
+            tolerancePct,
+            evaluationWindowDays,
+            profitMarginPct,
+            currency,
+            domain,
+        } = body;
 
         if (!name || !industryType || !targetType || !targetValue) {
             return NextResponse.json({ error: "Verplichte velden ontbreken" }, { status: 400 });
         }
 
+        // Create the client/project
         const client = await prisma.client.create({
             data: {
                 name,
@@ -29,6 +40,24 @@ export async function POST(req: NextRequest) {
                 currency: currency || "EUR",
             },
         });
+
+        // If a domain was provided, create a WEBSITE DataSource for monitoring
+        if (domain && domain.trim()) {
+            const cleanDomain = domain.trim().replace(/^https?:\/\//, "");
+            const fullUrl = `https://${cleanDomain}`;
+
+            await prisma.dataSource.create({
+                data: {
+                    clientId: client.id,
+                    type: "WEBSITE",
+                    name: cleanDomain,
+                    category: "MONITOR",
+                    externalId: fullUrl,
+                    token: "", // not needed for website monitoring
+                    active: true,
+                },
+            });
+        }
 
         return NextResponse.json(client, { status: 201 });
     } catch (error: any) {

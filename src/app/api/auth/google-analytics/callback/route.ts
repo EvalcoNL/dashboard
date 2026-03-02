@@ -10,9 +10,14 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const code = searchParams.get("code");
     const clientId = searchParams.get("state"); // clientId passed in state
+    const error = searchParams.get("error");
+    const origin = new URL(req.url).origin;
 
-    if (!code || !clientId) {
-        return NextResponse.json({ error: "Missing code or state" }, { status: 400 });
+    if (error || !code || !clientId) {
+        const redirectPath = clientId
+            ? `/dashboard/projects/${clientId}/data/sources?error=${error === "access_denied" ? "Koppeling geannuleerd" : "AnalyticsLinkFailed"}`
+            : "/dashboard";
+        return NextResponse.redirect(`${origin}${redirectPath}`);
     }
 
     try {

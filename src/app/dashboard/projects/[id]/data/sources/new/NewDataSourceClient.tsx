@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ArrowLeft, Globe } from "lucide-react";
 import Link from "next/link";
 import SourceCard from "@/components/data-sources/SourceCard";
+import SampleDataManager from "../SampleDataManager";
 import ApiKeyLinkModal from "@/components/data-sources/ApiKeyLinkModal";
 import LoginCredentialsModal from "@/components/data-sources/LoginCredentialsModal";
 import { PlatformIcon, PLATFORMS, getPlatformMeta } from "@/lib/config/platform-icons";
@@ -81,6 +82,7 @@ export default function NewDataSourceClient({ clientId, clientName }: NewDataSou
                     LINKEDIN: "linkedin",
                     PINTEREST: "pinterest",
                     MICROSOFT_ADS: "microsoft-ads",
+                    SLACK: "slack",
                 };
                 return { href: `/api/auth/${slugMap[platformKey]}/link?clientId=${clientId}` };
             }
@@ -180,6 +182,14 @@ export default function NewDataSourceClient({ clientId, clientName }: NewDataSou
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "24px" }}>
                     {analytics.map(p => renderCard(p.key))}
                     {renderCard("WEBSITE")}
+                </div>
+
+                {/* Sample Data */}
+                <div style={{ marginTop: "48px", paddingTop: "32px", borderTop: "1px solid var(--color-border)" }}>
+                    <h2 style={{ fontSize: "1.25rem", fontWeight: 600, color: "var(--color-text-primary)", marginBottom: "16px" }}>
+                        Demo & Testen
+                    </h2>
+                    <SampleDataManager clientId={clientId} />
                 </div>
             </div>
 

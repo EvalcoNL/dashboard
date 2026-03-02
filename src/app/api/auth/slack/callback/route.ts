@@ -82,6 +82,38 @@ export async function GET(req: NextRequest) {
             data: { slackWebhookUrl: webhookUrl },
         });
 
+        // Also save as a formal DataSource so it shows up in "Connected Apps"
+        const existingSlackSource = await prisma.dataSource.findFirst({
+            where: {
+                clientId: clientId,
+                type: "SLACK",
+                externalId: "SLACK"
+            }
+        });
+
+        if (existingSlackSource) {
+            await prisma.dataSource.update({
+                where: { id: existingSlackSource.id },
+                data: {
+                    active: true,
+                    config: { webhookUrl } as any,
+                }
+            });
+        } else {
+            await prisma.dataSource.create({
+                data: {
+                    clientId: clientId,
+                    externalId: "SLACK",
+                    type: "SLACK",
+                    name: "Slack Notifications",
+                    category: "APP",
+                    active: true,
+                    token: "WEBHOOK",
+                    config: { webhookUrl } as any
+                }
+            });
+        }
+
         // Redirect back to incidents page
         return NextResponse.redirect(new URL(`/dashboard/projects/${clientId}/monitoring/incidents`, req.url));
 

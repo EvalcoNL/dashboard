@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { aiService } from "@/lib/services/ai-service";
 import { aggregateCampaigns } from "@/lib/services/kpi-engine";
+import { queryNormalizedMetrics } from "@/lib/normalized-helpers";
 
 export async function POST(
     req: NextRequest,
@@ -21,29 +22,21 @@ export async function POST(
         const client = await prisma.client.findUnique({
             where: { id: clientId },
             include: {
-                campaignMetrics: {
-                    orderBy: { date: "desc" },
-                    take: 700
-                },
-                merchantCenterHealth: {
-                    orderBy: { date: "desc" },
-                    take: 1
-                },
                 analystReports: {
                     orderBy: { createdAt: "desc" },
                     take: 1
                 }
             }
-        }) as any;
+        });
 
         if (!client) {
             return NextResponse.json({ error: "Client not found" }, { status: 404 });
         }
 
-        // 2. Prepare data for AI
+        // 2. Prepare data for AI using ClickHouse metrics
         const now = new Date();
         const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        const currentMetrics = client.campaignMetrics.filter((m: any) => new Date(m.date) >= sevenDaysAgo);
+        const currentMetrics = await queryNormalizedMetrics(clientId, sevenDaysAgo);
         const currentPeriod = aggregateCampaigns(currentMetrics as any);
 
         const aiInput = {
@@ -52,7 +45,7 @@ export async function POST(
             targetType: client.targetType,
             targetValue: client.targetValue,
             currentPerformance: currentPeriod,
-            merchantHealth: client.merchantCenterHealth[0] || null,
+            merchantHealth: null,
         };
 
         // 3. Generate Report

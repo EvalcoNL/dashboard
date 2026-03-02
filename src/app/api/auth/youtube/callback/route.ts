@@ -10,9 +10,16 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const code = searchParams.get("code");
     const clientId = searchParams.get("state");
-    if (!code || !clientId) return NextResponse.json({ error: "Missing code or state" }, { status: 400 });
+    const error = searchParams.get("error");
 
     const origin = new URL(req.url).origin;
+
+    if (error || !code || !clientId) {
+        const redirectPath = clientId
+            ? `/dashboard/projects/${clientId}/data/sources?error=${error === "access_denied" ? "Koppeling geannuleerd" : "YouTubeLinkFailed"}`
+            : "/dashboard";
+        return NextResponse.redirect(`${origin}${redirectPath}`);
+    }
 
     try {
         const redirectUri = `${origin}/api/auth/youtube/callback`;

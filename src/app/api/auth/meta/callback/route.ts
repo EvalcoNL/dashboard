@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 
+import { syncScheduler } from "@/lib/data-integration/sync-scheduler";
+
 export async function GET(req: NextRequest) {
     const session = await auth();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -10,9 +12,16 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const code = searchParams.get("code");
     const clientId = searchParams.get("state");
-    if (!code || !clientId) return NextResponse.json({ error: "Missing code or state" }, { status: 400 });
+    const error = searchParams.get("error");
 
     const origin = new URL(req.url).origin;
+
+    if (error || !code || !clientId) {
+        const redirectPath = clientId
+            ? `/dashboard/projects/${clientId}/data/sources?error=${error === "access_denied" ? "Koppeling geannuleerd" : "MetaLinkFailed"}`
+            : "/dashboard";
+        return NextResponse.redirect(`${origin}${redirectPath}`);
+    }
 
     try {
         const redirectUri = `${origin}/api/auth/meta/callback`;
@@ -51,7 +60,7 @@ export async function GET(req: NextRequest) {
         const bizData = await bizRes.json();
         const biz = bizData.data?.[0];
 
-        await prisma.dataSource.create({
+        const newSource = await prisma.dataSource.create({
             data: {
                 clientId, type: "META", category: "APP",
                 externalId: biz?.id || "default",
@@ -59,6 +68,11 @@ export async function GET(req: NextRequest) {
                 token: accessToken, active: true,
             },
         });
+
+        // Auto-trigger first sync in background
+        syncScheduler.scheduleNow(newSource.id).catch(err =>
+            console.error(`[AutoSync] Failed to schedule sync for Meta source ${newSource.id}:`, err)
+        );
 
         return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/data/sources`);
     } catch (error: any) {

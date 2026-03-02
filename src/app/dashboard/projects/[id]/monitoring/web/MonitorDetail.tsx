@@ -4,10 +4,11 @@ import React, { useState } from "react";
 import {
     Globe, Plus, RotateCcw, ExternalLink, Trash2, FileWarning,
     Shield, Settings, Pause, Play, Lock, Mail, Wifi, Eye,
-    Phone, MessageSquare, Bell, ChevronDown, ChevronRight, AlertTriangle
+    Phone, MessageSquare, Bell, ChevronDown, ChevronRight, AlertTriangle, Search
 } from "lucide-react";
 import Link from "next/link";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { useNotification } from "@/components/NotificationProvider";
 
 // ── Shared styles ───────────────────────────────
 const kpiCardStyle: React.CSSProperties = {
@@ -101,9 +102,11 @@ export default function MonitorDetail({
     isSaving, isSyncing, pages, onSync, onPause, onSaveSettings,
     onDeleteMonitor, onAddPage, onDeletePage
 }: MonitorDetailProps) {
+    const { showToast } = useNotification();
     const [newPageUrl, setNewPageUrl] = React.useState("");
     const [newPageLabel, setNewPageLabel] = React.useState("");
     const [isAddingPage, setIsAddingPage] = React.useState(false);
+    const [isTestingNotif, setIsTestingNotif] = useState(false);
     const [showAdvanced, setShowAdvanced] = useState(false);
 
     // Use actual incidents from the database instead of deriving them
@@ -160,13 +163,37 @@ export default function MonitorDetail({
                 ))}
                 <div style={{ flex: 1 }} />
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 0" }}>
-                    <button onClick={() => alert("Test notificatie verzonden!")} style={{
-                        padding: "8px 16px", borderRadius: "8px", border: "1px solid var(--color-border)",
-                        background: "var(--color-surface-elevated)", color: "var(--color-text-primary)",
-                        fontSize: "0.8rem", fontWeight: 500, cursor: "pointer",
-                        display: "flex", alignItems: "center", gap: "6px", transition: "all 0.2s",
-                    }} className="action-btn">
-                        <Bell size={14} /> Test notificatie
+                    <button
+                        disabled={isTestingNotif}
+                        onClick={async () => {
+                            setIsTestingNotif(true);
+                            try {
+                                const res = await fetch(`/api/data-sources/${domain.id}/test-notification`, {
+                                    method: "POST"
+                                });
+                                const data = await res.json();
+                                if (res.ok) {
+                                    showToast("success", `Testbericht succesvol verstuurd! (Email: ${data.channels?.email ? '✅' : '❌'}, Slack: ${data.channels?.slack ? '✅' : '❌'})`);
+                                } else {
+                                    showToast("error", data.error || "Fout bij versturen van testbericht");
+                                }
+                            } catch (e) {
+                                console.error(e);
+                                showToast("error", "Er ging iets mis met het versturen van de test.");
+                            } finally {
+                                setIsTestingNotif(false);
+                            }
+                        }}
+                        style={{
+                            padding: "8px 16px", borderRadius: "8px", border: "1px solid var(--color-border)",
+                            background: "var(--color-surface-elevated)", color: "var(--color-text-primary)",
+                            fontSize: "0.8rem", fontWeight: 500, cursor: isTestingNotif ? "not-allowed" : "pointer",
+                            display: "flex", alignItems: "center", gap: "6px", transition: "all 0.2s",
+                            opacity: isTestingNotif ? 0.6 : 1
+                        }}
+                        className="action-btn"
+                    >
+                        <Bell size={14} /> {isTestingNotif ? "Testen..." : "Test notificatie"}
                     </button>
                     <button onClick={onPause} style={{
                         padding: "8px 16px", borderRadius: "8px", border: "1px solid var(--color-border)",
@@ -225,6 +252,26 @@ export default function MonitorDetail({
                             <div style={kpiSubStyle}>Laatste 30 dagen</div>
                         </div>
                     </div>
+
+                    {/* Data Tracking Shortcut */}
+                    <Link href={`/dashboard/projects/${domain.clientId}/monitoring/tracking`} style={{ textDecoration: "none" }}>
+                        <div style={{
+                            background: "var(--color-surface-elevated)", borderRadius: "12px", padding: "16px 20px", border: "1px solid var(--color-border)",
+                            display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px",
+                            transition: "all 0.2s", cursor: "pointer"
+                        }} className="glass-card-hover">
+                            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                <div style={{ width: "36px", height: "36px", borderRadius: "8px", background: "rgba(99, 102, 241, 0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                    <Search size={18} color="var(--color-brand)" />
+                                </div>
+                                <div>
+                                    <h4 style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>Conversie Tracking Monitoren</h4>
+                                    <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", margin: "2px 0 0 0" }}>Controleer of GTM, GA4 en Meta pixels correct vuren op dit domein.</p>
+                                </div>
+                            </div>
+                            <ChevronRight size={18} color="var(--color-text-muted)" />
+                        </div>
+                    </Link>
 
                     {/* Chart + SSL */}
                     <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "16px", marginBottom: "24px" }}>
@@ -352,10 +399,8 @@ export default function MonitorDetail({
                             <label style={fieldLabelStyle}>Wanneer er een nieuw incident is</label>
                             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                                 {[
-                                    { key: "notifyCall", label: "Bellen", icon: <Phone size={13} /> },
-                                    { key: "notifySms", label: "SMS", icon: <MessageSquare size={13} /> },
                                     { key: "notifyEmail", label: "E-mail", icon: <Mail size={13} /> },
-                                    { key: "notifyPush", label: "Push", icon: <Bell size={13} /> },
+                                    { key: "notifySlack", label: "Slack", icon: <MessageSquare size={13} /> },
                                 ].map(n => (
                                     <button
                                         key={n.key}
@@ -375,6 +420,12 @@ export default function MonitorDetail({
                                         {n.icon} {n.label}
                                     </button>
                                 ))}
+                            </div>
+                            <div style={{ marginTop: "12px", padding: "12px", background: "rgba(99,102,241,0.05)", borderRadius: "8px", border: "1px solid rgba(99,102,241,0.1)" }}>
+                                <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", margin: 0, display: "flex", alignItems: "center", gap: "6px" }}>
+                                    <Bell size={14} />
+                                    Notificatie kanalen kunnen worden ingesteld via de <Link href={`/dashboard/projects/${domain.clientId}/monitoring/incidents?tab=settings`} style={{ color: "var(--color-brand)", fontWeight: 600, textDecoration: "none" }} className="hover-underline">Incidenten instellingen</Link>.
+                                </p>
                             </div>
                         </div>
                     </SettingsSection>
@@ -516,7 +567,7 @@ export default function MonitorDetail({
                                 </div>
                             )}
 
-                            <div style={{ display: "flex", gap: "24px" }}>
+                            <div style={{ display: "flex", gap: "24px", marginBottom: "16px" }}>
                                 <button
                                     onClick={() => updateSetting('followRedirects', !s.followRedirects)}
                                     style={{
@@ -542,6 +593,19 @@ export default function MonitorDetail({
                                         {s.keepCookies && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
                                     </div>
                                     Cookies behouden bij redirects
+                                </button>
+                                <button
+                                    onClick={() => updateSetting('speed', !s.speed)}
+                                    style={{
+                                        display: "flex", alignItems: "center", gap: "10px",
+                                        background: "none", border: "none", cursor: "pointer", padding: 0,
+                                        color: "var(--color-text-primary)", fontSize: "0.85rem", fontWeight: 500,
+                                    }}
+                                >
+                                    <div style={checkboxStyle(s.speed)}>
+                                        {s.speed && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
+                                    </div>
+                                    Page Speed monitoring
                                 </button>
                             </div>
                         </SettingsSection>
@@ -818,7 +882,7 @@ export default function MonitorDetail({
                                 <button disabled={isAddingPage || !newPageUrl.trim() || !canAddMore} onClick={async () => {
                                     const validated = validatePageInput(newPageUrl.trim());
                                     if (!validated) {
-                                        alert(`Alleen pagina's op ${mainDomain} kunnen worden toegevoegd.`);
+                                        showToast("error", `Alleen pagina's op ${mainDomain} kunnen worden toegevoegd.`);
                                         return;
                                     }
                                     setIsAddingPage(true);
@@ -903,6 +967,7 @@ export default function MonitorDetail({
                 .advanced-toggle:hover { color: var(--color-text-primary) !important; }
                 .delete-header-btn:hover { color: #ef4444 !important; }
                 .incident-row:hover { background: var(--color-surface-hover) !important; }
+                .hover-underline:hover { text-decoration: underline !important; }
                 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
             `}</style>
         </div>

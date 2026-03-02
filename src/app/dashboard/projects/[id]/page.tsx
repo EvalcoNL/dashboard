@@ -2,76 +2,74 @@ export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
-import ProjectDetail from "@/components/project/ProjectDetail";
+import ProjectHubClient from "@/components/project/ProjectHubClient";
+import { aggregateNormalizedMetrics } from "@/lib/normalized-helpers";
 
-export default async function ProjectDetailPage({
+export default async function ProjectHomePage({
     params,
-    searchParams,
 }: {
     params: Promise<{ id: string }>;
-    searchParams: Promise<{ days?: string }>;
 }) {
     const session = await auth();
     if (!session) redirect("/login");
 
     const { id } = await params;
-    const { days: daysParam } = await searchParams;
-    const days = parseInt(daysParam || "7", 10);
-    const totalDaysNeeded = days * 2;
 
-    // Calculate dates starting from "Yesterday" to avoid incomplete "Today" data
-    const now = new Date();
-    const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59);
-    const startDate = new Date(yesterday.getTime() - totalDaysNeeded * 24 * 60 * 60 * 1000);
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    const client = await prisma.client.findUnique({
-        where: { id },
-        include: {
-            dataSources: true,
-            campaignMetrics: {
-                where: {
-                    date: {
-                        gte: startDate,
-                        lte: yesterday
-                    },
-                },
-                orderBy: { date: "desc" },
-            },
-            merchantCenterHealth: {
-                orderBy: { date: "desc" },
-                take: 1,
-            },
-        },
-    });
+    const [client, monitoringData, performanceSummary, ongoingIncidents] = await Promise.all([
+        prisma.client.findUnique({
+            where: { id },
+            include: {
+                dataSources: {
+                    where: { active: true },
+                    include: {
+                        uptimeChecks: {
+                            orderBy: { checkedAt: "desc" },
+                            take: 1
+                        }
+                    }
+                }
+            }
+        }),
+        // Monitoring Stats
+        prisma.dataSource.findMany({
+            where: { clientId: id, active: true },
+            select: {
+                id: true,
+                type: true,
+                externalId: true,
+                config: true,
+                uptimeChecks: {
+                    orderBy: { checkedAt: "desc" },
+                    take: 1
+                }
+            }
+        }),
+        // Performance Stats (last 7 days) via ClickHouse
+        aggregateNormalizedMetrics(id, sevenDaysAgo),
+        // Ongoing Incidents
+        prisma.incident.count({
+            where: { clientId: id, status: { not: "RESOLVED" } }
+        })
+    ]);
 
     if (!client) notFound();
 
-    // Get daily aggregated data for chart
-    const dailyMetrics = await prisma.campaignMetric.groupBy({
-        by: ["date"],
-        where: {
-            clientId: id,
-            date: {
-                gte: startDate,
-                lte: yesterday
-            },
-        },
-        _sum: {
-            spend: true,
-            conversions: true,
-            conversionValue: true,
-            clicks: true,
-            impressions: true,
-        },
-        orderBy: { date: "asc" },
+    // Get latest health score from analyst reports
+    const latestReport = await prisma.analystReport.findFirst({
+        where: { clientId: id },
+        orderBy: { createdAt: "desc" }
     });
 
     return (
-        <ProjectDetail
+        <ProjectHubClient
             client={client}
-            dailyMetrics={dailyMetrics}
+            monitoringData={monitoringData}
+            performanceSummary={performanceSummary}
+            ongoingIncidents={ongoingIncidents}
+            healthScore={latestReport?.healthScore || null}
             userRole={session.user.role}
-            initialDays={days}
         />
     );
 }

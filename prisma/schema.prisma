@@ -7,19 +7,44 @@ datasource db {
 }
 
 model User {
-  id               String          @id @default(cuid())
-  name             String
-  email            String          @unique
-  passwordHash     String          @map("password_hash")
-  role             String          @default("STRATEGIST")
-  twoFactorEnabled Boolean         @default(false) @map("two_factor_enabled")
-  twoFactorSecret  String?         @map("two_factor_secret")
-  createdAt        DateTime        @default(now()) @map("created_at")
-  advisorActions   AdvisorReport[] @relation("reviewedBy")
-  notificationClients Client[]     @relation("NotificationUsers")
-  clients          Client[]        @relation("ClientAccess")
+  id                  String          @id @default(cuid())
+  name                String
+  email               String          @unique
+  passwordHash        String          @map("password_hash")
+  role                String          @default("STRATEGIST")
+  emailVerified       Boolean         @default(false) @map("email_verified")
+  twoFactorEnabled    Boolean         @default(false) @map("two_factor_enabled")
+  twoFactorSecret     String?         @map("two_factor_secret")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  advisorActions      AdvisorReport[] @relation("reviewedBy")
+  clients             Client[]        @relation("ClientAccess")
+  notificationClients Client[]        @relation("NotificationUsers")
 
   @@map("users")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([email])
+  @@index([token])
+  @@map("password_reset_tokens")
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([email])
+  @@index([token])
+  @@map("email_verification_tokens")
 }
 
 model Client {
@@ -33,16 +58,17 @@ model Client {
   profitMarginPct      Float?                 @map("profit_margin_pct")
   currency             String                 @default("EUR")
   createdAt            DateTime               @default(now()) @map("created_at")
+  slackWebhookUrl      String?                @map("slack_webhook_url")
   analystReports       AnalystReport[]
-  campaignMetrics      CampaignMetric[]
+  clientInvites        ClientInvite[]
   dataSources          DataSource[]
+  incidents            Incident[]
   merchantCenterHealth MerchantCenterHealth[]
   notifications        Notification[]
-  incidents            Incident[]
-  notificationUsers    User[]                 @relation("NotificationUsers")
-  slackWebhookUrl      String?                @map("slack_webhook_url")
   users                User[]                 @relation("ClientAccess")
-  clientInvites        ClientInvite[]
+  notificationUsers    User[]                 @relation("NotificationUsers")
+  datasets             Dataset[]
+  dashboards           Dashboard[]
 
   @@map("clients")
 }
@@ -52,10 +78,9 @@ model ClientInvite {
   clientId  String   @map("client_id")
   email     String
   token     String   @unique
-  status    String   @default("PENDING") // PENDING, ACCEPTED, REVOKED
+  status    String   @default("PENDING")
   createdAt DateTime @default(now()) @map("created_at")
   expiresAt DateTime @map("expires_at")
-  
   client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@index([clientId])
@@ -65,33 +90,45 @@ model ClientInvite {
 }
 
 model DataSource {
-  id           String           @id @default(cuid())
-  clientId     String           @map("client_id")
-  type         String
-  name         String?
-  category     String           @default("DATA_SOURCE") // 'DATA_SOURCE' | 'APP'
-  externalId   String           @map("external_id")
-  config       Json?
-  token        String           @map("token")
-  active       Boolean          @default(true)
-  linkedAt     DateTime         @default(now()) @map("linked_at")
-  lastSyncedAt DateTime?        @map("last_synced_at")
-  metrics      CampaignMetric[]
-  uptimeChecks UptimeCheck[]
-  client       Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  id             String               @id @default(cuid())
+  clientId       String               @map("client_id")
+  type           String
+  name           String?
+  category       String               @default("DATA_SOURCE")
+  externalId     String               @map("external_id")
+  config         Json?
+  token          String               @map("token")
+  active         Boolean              @default(true)
+  linkedAt       DateTime             @default(now()) @map("linked_at")
+  lastSyncedAt   DateTime?            @map("last_synced_at")
+  // Sync fields (merged from DataConnection)
+  connectorId    String?              @map("connector_id")
+  syncInterval   Int                  @default(1440) @map("sync_interval")
+  lookbackDays   Int                  @default(30) @map("lookback_days")
+  syncStatus     String               @default("ACTIVE") @map("sync_status") // ACTIVE, PAUSED, ERROR
+  syncError      String?              @map("sync_error")
+  // Relations
+  client         Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  connector      ConnectorDefinition? @relation(fields: [connectorId], references: [id])
+  incidents      Incident[]
   linkedAccounts LinkedAccount[]
   monitoredPages MonitoredPage[]
-  incidents    Incident[]
+  uptimeChecks   UptimeCheck[]
+  // normalizedData now stored in ClickHouse metrics_data table
+  syncJobs       SyncJob[]
+  syncAccounts   DataSourceAccount[]
 
   @@index([clientId, type])
+  @@index([connectorId])
+  @@index([syncStatus])
   @@map("data_sources")
 }
 
 model UptimeCheck {
   id           String     @id @default(cuid())
   dataSourceId String     @map("data_source_id")
-  status       String     // "UP" or "DOWN"
-  responseTime Int        @map("response_time") // in ms
+  status       String
+  responseTime Int        @map("response_time")
   statusCode   Int?       @map("status_code")
   checkedAt    DateTime   @default(now()) @map("checked_at")
   dataSource   DataSource @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
@@ -100,30 +137,7 @@ model UptimeCheck {
   @@map("uptime_checks")
 }
 
-model CampaignMetric {
-  id              String      @id @default(cuid())
-  clientId        String      @map("client_id")
-  campaignId      String      @map("campaign_id")
-  campaignName    String      @map("campaign_name")
-  campaignType    String      @map("campaign_type")
-  date            DateTime
-  spend           Float
-  conversions     Float
-  conversionValue Float       @map("conversion_value")
-  clicks          Int
-  impressions     Int
-  status          String
-  servingStatus   String      @map("serving_status")
-  dataSourceId    String?     @map("data_source_id")
-  dataSource      DataSource? @relation(fields: [dataSourceId], references: [id])
-  client          Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
-
-  @@unique([campaignId, date])
-  @@index([clientId, date])
-  @@index([campaignId, date])
-  @@index([dataSourceId])
-  @@map("campaign_metrics")
-}
+// NOTE: CampaignMetric data is now stored in ClickHouse (metrics_data table)
 
 model MerchantCenterHealth {
   id               String   @id @default(cuid())
@@ -207,8 +221,8 @@ model LinkedAccount {
   email        String
   name         String?
   role         String?
-  status       String     @default("ACTIVE") // ACTIVE, REVOKED, PENDING
-  kind         String     @default("USER")   // USER, MANAGER
+  status       String     @default("ACTIVE")
+  kind         String     @default("USER")
   createdAt    DateTime   @default(now()) @map("created_at")
   dataSource   DataSource @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
 
@@ -233,12 +247,12 @@ model UserRole {
 model Notification {
   id         String   @id @default(cuid())
   clientId   String   @map("client_id")
-  type       String   // "STATUS_CODE_ERROR" | "DOWNTIME" | "SSL_EXPIRY"
+  type       String
   title      String
   message    String
-  severity   String   @default("warning") // "info" | "warning" | "critical"
+  severity   String   @default("warning")
   read       Boolean  @default(false)
-  url        String?  // monitored URL that triggered this
+  url        String?
   statusCode Int?     @map("status_code")
   createdAt  DateTime @default(now()) @map("created_at")
   client     Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -251,8 +265,8 @@ model Notification {
 model MonitoredPage {
   id            String     @id @default(cuid())
   dataSourceId  String     @map("data_source_id")
-  url           String     // path or full URL to check
-  label         String?    // optional display name
+  url           String
+  label         String?
   active        Boolean    @default(true)
   lastStatus    Int?       @map("last_status")
   lastCheckedAt DateTime?  @map("last_checked_at")
@@ -263,27 +277,27 @@ model MonitoredPage {
 }
 
 model Incident {
-  id              String          @id @default(cuid())
-  clientId        String          @map("client_id")
-  dataSourceId    String?         @map("data_source_id")
-  title           String          // e.g. "evalco.nl/deadfaf"
-  cause           String          // e.g. "Status 404"
-  causeCode       String?         @map("cause_code") // "404", "T/O", "503"
-  status          String          @default("ONGOING") // ONGOING | ACKNOWLEDGED | RESOLVED
-  checkedUrl      String?         @map("checked_url")
-  httpMethod      String          @default("GET") @map("http_method")
-  statusCode      Int?            @map("status_code")
-  responseTime    Float?          @map("response_time")
-  resolvedIp      String?         @map("resolved_ip")
-  startedAt       DateTime        @default(now()) @map("started_at")
-  acknowledgedAt  DateTime?       @map("acknowledged_at")
-  acknowledgedBy  String?         @map("acknowledged_by")
-  resolvedAt      DateTime?       @map("resolved_at")
-  resolvedBy      String?         @map("resolved_by")
-  createdAt       DateTime        @default(now()) @map("created_at")
-  client          Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  dataSource      DataSource?     @relation(fields: [dataSourceId], references: [id], onDelete: SetNull)
-  events          IncidentEvent[]
+  id             String          @id @default(cuid())
+  clientId       String          @map("client_id")
+  dataSourceId   String?         @map("data_source_id")
+  title          String
+  cause          String
+  causeCode      String?         @map("cause_code")
+  status         String          @default("ONGOING")
+  checkedUrl     String?         @map("checked_url")
+  httpMethod     String          @default("GET") @map("http_method")
+  statusCode     Int?            @map("status_code")
+  responseTime   Float?          @map("response_time")
+  resolvedIp     String?         @map("resolved_ip")
+  startedAt      DateTime        @default(now()) @map("started_at")
+  acknowledgedAt DateTime?       @map("acknowledged_at")
+  acknowledgedBy String?         @map("acknowledged_by")
+  resolvedAt     DateTime?       @map("resolved_at")
+  resolvedBy     String?         @map("resolved_by")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  events         IncidentEvent[]
+  dataSource     DataSource?     @relation(fields: [dataSourceId], references: [id])
+  client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@index([clientId, status])
   @@index([dataSourceId])
@@ -294,7 +308,7 @@ model Incident {
 model IncidentEvent {
   id         String   @id @default(cuid())
   incidentId String   @map("incident_id")
-  type       String   // CREATED | ACKNOWLEDGED | RESOLVED | ESCALATED | COMMENT
+  type       String
   message    String?
   userId     String?  @map("user_id")
   userName   String?  @map("user_name")
@@ -305,3 +319,223 @@ model IncidentEvent {
   @@map("incident_events")
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// DATA INTEGRATION PLATFORM — Universal Data Model
+// ═══════════════════════════════════════════════════════════════════
+
+// Catalog of all supported connectors (Google Ads, Meta Ads, GA4, etc.)
+model ConnectorDefinition {
+  id              String           @id @default(cuid())
+  slug            String           @unique // e.g. "google-ads", "meta-ads", "ga4"
+  name            String // e.g. "Google Ads", "Meta Ads"
+  category        String // PAID_SEARCH, PAID_SOCIAL, ANALYTICS, ORGANIC_SOCIAL, ECOMMERCE, CRM, EMAIL, PROGRAMMATIC, SEO, AFFILIATE, CUSTOM
+  authType        String           @map("auth_type") // oauth2, api_key, basic, custom
+  oauthScopes     String?          @map("oauth_scopes") // JSON array of required scopes
+  apiBaseUrl      String?          @map("api_base_url")
+  iconUrl         String?          @map("icon_url")
+  description     String?
+  isActive        Boolean          @default(true) @map("is_active")
+  configSchema    Json?            @map("config_schema") // JSON schema for connection config
+  createdAt       DateTime         @default(now()) @map("created_at")
+  dataSources     DataSource[]
+  dimensions      DimensionDefinition[]
+  metrics         MetricDefinition[]
+  derivedMetrics  DerivedMetricDefinition[]
+
+  @@index([category])
+  @@map("connector_definitions")
+}
+
+// Sub-accounts under a data source (e.g., multiple ad accounts under one OAuth)
+model DataSourceAccount {
+  id              String           @id @default(cuid())
+  dataSourceId    String           @map("data_source_id")
+  externalId      String           @map("external_id")
+  name            String?
+  currency        String           @default("EUR")
+  timezone        String           @default("Europe/Amsterdam")
+  isActive        Boolean          @default(true) @map("is_active")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  dataSource      DataSource       @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+  // normalizedData now stored in ClickHouse metrics_data table
+
+  @@unique([dataSourceId, externalId])
+  @@index([dataSourceId])
+  @@map("data_source_accounts")
+}
+
+// Definition of a dimension for a connector (what can be split/grouped by)
+model DimensionDefinition {
+  id              String              @id @default(cuid())
+  connectorId     String              @map("connector_id")
+  slug            String              // e.g. "campaign_name", "device", "country"
+  name            String              // Human-readable: "Campaign Name", "Device", "Country"
+  canonicalName   String?             @map("canonical_name") // Maps to universal dimension
+  level           String?             // Which data level this dimension applies to (campaign, ad_group, ad)
+  dataType        String              @default("STRING") @map("data_type") // STRING, NUMBER, DATE, BOOLEAN
+  description     String?
+  isDefault       Boolean             @default(false) @map("is_default") // Included by default in fetches
+  createdAt       DateTime            @default(now()) @map("created_at")
+  connector       ConnectorDefinition @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+
+  @@unique([connectorId, slug, level])
+  @@index([connectorId])
+  @@index([canonicalName])
+  @@map("dimension_definitions")
+}
+
+// Definition of a metric for a connector (what can be measured)
+model MetricDefinition {
+  id              String              @id @default(cuid())
+  connectorId     String              @map("connector_id")
+  slug            String              // e.g. "impressions", "clicks", "cost"
+  name            String              // Human-readable: "Impressions", "Clicks", "Cost"
+  canonicalName   String?             @map("canonical_name") // Maps to universal metric
+  level           String?             // Which data level this metric applies to
+  dataType        String              @default("NUMBER") @map("data_type") // NUMBER, CURRENCY, PERCENTAGE, DURATION
+  aggregationType String              @default("SUM") @map("aggregation_type") // SUM, AVG, MIN, MAX, NONE (non-aggregatable)
+  description     String?
+  isDefault       Boolean             @default(false) @map("is_default") // Included by default in fetches
+  createdAt       DateTime            @default(now()) @map("created_at")
+  connector       ConnectorDefinition @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+
+  @@unique([connectorId, slug, level])
+  @@index([connectorId])
+  @@index([canonicalName])
+  @@map("metric_definitions")
+}
+
+// NOTE: NormalizedMetric data is now stored in ClickHouse (metrics_data table)
+// See: scripts/clickhouse-init/clickhouse-init.sql for the schema
+// See: src/lib/clickhouse-queries.ts for the query layer
+
+// Dataset definitions — logical groupings for dashboard reporting
+model Dataset {
+  id              String          @id @default(cuid())
+  clientId        String          @map("client_id")
+  slug            String          // e.g. "paid-performance", "seo-performance"
+  name            String          // "Paid Advertising Performance"
+  description     String?
+  isSystem        Boolean         @default(false) @map("is_system") // Pre-built vs custom
+  config          Json?           // { selectedDimensions: [...], selectedMetrics: [...], filters: [...] }
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  client          Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  sources         DatasetSource[]
+
+  @@unique([clientId, slug])
+  @@index([clientId])
+  @@map("datasets")
+}
+
+// Links datasets to their data sources
+model DatasetSource {
+  id              String         @id @default(cuid())
+  datasetId       String         @map("dataset_id")
+  dataSourceId    String         @map("data_source_id")
+  level           String?        // Which level from this source feeds this dataset
+  dimensionMapping Json?         @map("dimension_mapping")
+  metricMapping   Json?          @map("metric_mapping")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  dataset         Dataset        @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+
+  @@unique([datasetId, dataSourceId, level])
+  @@index([datasetId])
+  @@map("dataset_sources")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CUSTOM DASHBOARDS
+// ═══════════════════════════════════════════════════════════════════
+
+model Dashboard {
+  id          String            @id @default(cuid())
+  clientId    String            @map("client_id")
+  name        String
+  description String?
+  starred     Boolean           @default(false)
+  filters     Json?             // [{ dimension, operator, values }]
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+  client      Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  widgets     DashboardWidget[]
+
+  @@index([clientId])
+  @@map("dashboards")
+}
+
+model DashboardWidget {
+  id          String    @id @default(cuid())
+  dashboardId String    @map("dashboard_id")
+  type        String    // kpi, line_chart, bar_chart, pie_chart, table, text
+  title       String
+  position    Json      // { x, y, w, h } grid position
+  sortOrder   Int       @default(0) @map("sort_order")
+  config      Json?     // { metric, metrics, dimensions, compareMode, limit, text, ... }
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  dashboard   Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+
+  @@index([dashboardId])
+  @@map("dashboard_widgets")
+}
+
+// Derived/calculated metric definitions (CTR = clicks/impressions, ROAS = revenue/cost)
+model DerivedMetricDefinition {
+  id              String              @id @default(cuid())
+  connectorId     String?             @map("connector_id") // null = universal/cross-platform
+  clientId        String?             @map("client_id") // null = system-wide
+  slug            String
+  name            String
+  formula         String              // e.g. "clicks / impressions * 100" or "conversion_value / cost"
+  inputMetrics    Json                @map("input_metrics") // ["clicks", "impressions"]
+  outputType      String              @default("PERCENTAGE") @map("output_type") // PERCENTAGE, CURRENCY, NUMBER, RATIO
+  description     String?
+  createdAt       DateTime            @default(now()) @map("created_at")
+  connector       ConnectorDefinition? @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+
+  @@index([connectorId])
+  @@index([clientId])
+  @@map("derived_metric_definitions")
+}
+
+// Sync job tracking — each data fetch operation
+model SyncJob {
+  id              String     @id @default(cuid())
+  dataSourceId    String     @map("data_source_id")
+  status          String     @default("PENDING") // PENDING, RUNNING, COMPLETED, FAILED, CANCELLED
+  syncMode        String     @default("INCREMENTAL") @map("sync_mode") // INCREMENTAL, FULL, DELTA
+  level           String?    // Which level(s) were synced
+  dateFrom        DateTime?  @map("date_from")
+  dateTo          DateTime?  @map("date_to")
+  recordsFetched  Int?       @map("records_fetched")
+  recordsStored   Int?       @map("records_stored")
+  recordsNew      Int?       @map("records_new")
+  recordsUpdated  Int?       @map("records_updated")
+  recordsDeleted  Int?       @map("records_deleted")
+  recordsSkipped  Int?       @map("records_skipped")
+  errorMessage    String?    @map("error_message")
+  startedAt       DateTime?  @map("started_at")
+  completedAt     DateTime?  @map("completed_at")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  dataSource      DataSource @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+  logs            SyncLog[]
+
+  @@index([dataSourceId, status])
+  @@index([createdAt])
+  @@map("sync_jobs")
+}
+
+// Detailed logs for sync operations
+model SyncLog {
+  id        String   @id @default(cuid())
+  jobId     String   @map("job_id")
+  level     String   @default("INFO") // DEBUG, INFO, WARN, ERROR
+  message   String
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  job       SyncJob  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, createdAt])
+  @@map("sync_logs")
+}

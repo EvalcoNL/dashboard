@@ -10,7 +10,7 @@ export default middleware((req) => {
     const { pathname } = req.nextUrl;
 
     // Public routes (don't require auth)
-    const publicRoutes = ["/login", "/api/auth", "/api/cron", "/invite"];
+    const publicRoutes = ["/login", "/api/auth", "/api/cron", "/invite", "/forgot-password", "/reset-password"];
     const isPublic = publicRoutes.some((route) => pathname.startsWith(route));
 
     if (isPublic) return NextResponse.next();

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import DashboardHome from "@/components/dashboard/DashboardHome";
+import { queryNormalizedMetrics } from "@/lib/normalized-helpers";
 
 export default async function DashboardPage() {
     const session = await auth();
@@ -27,22 +28,27 @@ export default async function DashboardPage() {
                     advisorReport: true,
                 },
             },
-            campaignMetrics: {
-                where: {
-                    date: {
-                        gte: fourteenDaysAgo,
-                    },
-                },
-                orderBy: { date: "desc" },
-            },
         },
         orderBy: { name: "asc" },
     });
 
-    // Auto-redirect if user is not admin and only has 1 client
-    if (!isAdmin && clients.length === 1) {
-        redirect(`/dashboard/projects/${clients[0].id}`);
+    // Fetch normalized metrics for each client
+    const clientsWithMetrics = await Promise.all(
+        clients.map(async (client) => {
+            const campaignMetrics = await queryNormalizedMetrics(client.id, fourteenDaysAgo);
+            return { ...client, campaignMetrics };
+        })
+    );
+
+    // Redirect new users without projects to onboarding
+    if (!isAdmin && clientsWithMetrics.length === 0) {
+        redirect("/projects/onboarding");
     }
 
-    return <DashboardHome clients={clients} userName={session.user.name} />;
+    // Auto-redirect if user is not admin and only has 1 client
+    if (!isAdmin && clientsWithMetrics.length === 1) {
+        redirect(`/dashboard/projects/${clientsWithMetrics[0].id}`);
+    }
+
+    return <DashboardHome clients={clientsWithMetrics} userName={session.user.name} />;
 }

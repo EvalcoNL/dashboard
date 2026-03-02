@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Activity, Eye, EyeOff, AlertCircle, ShieldCheck, ChevronLeft, ArrowRight } from "lucide-react";
 
 export default function LoginPage() {
@@ -108,7 +109,7 @@ export default function LoginPage() {
                                 <div className="input-group">
                                     <div className="label-row">
                                         <label htmlFor="password">Wachtwoord</label>
-                                        <a href="#" className="forgot-link">Vergeten?</a>
+                                        <Link href="/forgot-password" title="Wachtwoord vergeten" className="forgot-link">Vergeten?</Link>
                                     </div>
                                     <div className="password-wrapper">
                                         <input
@@ -179,6 +180,11 @@ export default function LoginPage() {
 
                 <footer className="footer">
                     <p>© {new Date().getFullYear()} Evalco &bull; Beveiligd Intern Platform</p>
+                    <p style={{ marginTop: "8px" }}>
+                        <Link href="/register" style={{ color: "#818cf8", textDecoration: "none", fontWeight: 500 }}>
+                            Nog geen account? Registreren
+                        </Link>
+                    </p>
                 </footer>
             </main>
 
@@ -326,10 +332,11 @@ export default function LoginPage() {
 
                 .forgot-link {
                     font-size: 0.75rem;
-                    color: #6366f1;
+                    color: #64748b;
                     text-decoration: none;
+                    transition: color 0.2s;
                 }
-                .forgot-link:hover { text-decoration: underline; }
+                .forgot-link:hover { color: #94a3b8; }
 
                 input {
                     background: rgba(30, 41, 59, 0.5);

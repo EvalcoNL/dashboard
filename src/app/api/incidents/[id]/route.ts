@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
+import { sendIncidentResolvedEmail, sendSlackResolvedAlert } from "@/lib/services/email-service";
 
 // GET /api/incidents/[id] — get single incident with events
 export async function GET(
@@ -79,11 +80,55 @@ export async function PATCH(
             },
         },
         include: {
-            client: { select: { id: true, name: true } },
-            dataSource: { select: { id: true, name: true, externalId: true } },
+            client: {
+                select: {
+                    id: true,
+                    name: true,
+                    slackWebhookUrl: true,
+                    notificationUsers: { select: { email: true } }
+                }
+            },
+            dataSource: { select: { id: true, name: true, externalId: true, config: true } },
             events: { orderBy: { createdAt: "asc" } },
         },
     });
+
+    // If resolved, send notifications
+    if (action === "resolve" && updated.client && updated.dataSource) {
+        const config = updated.dataSource.config as any || {};
+        const client = updated.client;
+
+        const payload = {
+            incidentTitle: updated.dataSource.name || updated.dataSource.externalId,
+            incidentCause: updated.cause,
+            clientName: client.name,
+            startedAt: updated.startedAt,
+            recipients: client.notificationUsers.map((u: any) => u.email)
+        };
+
+        const notifiedChannels = [];
+
+        if (payload.recipients.length > 0 && config.notifyEmail !== false) {
+            sendIncidentResolvedEmail(payload).catch(err => console.error(err));
+            notifiedChannels.push(`E-mail (${payload.recipients.join(', ')})`);
+        }
+
+        if (client.slackWebhookUrl && config.notifySlack) {
+            sendSlackResolvedAlert(client.slackWebhookUrl, payload).catch(err => console.error(err));
+            notifiedChannels.push("Slack");
+        }
+
+        if (notifiedChannels.length > 0) {
+            await (prisma as any).incidentEvent.create({
+                data: {
+                    incidentId: id,
+                    type: "NOTIFICATION_SENT",
+                    message: `Resolutie-notificatie verzonden via: ${notifiedChannels.join(' en ')} (handmatige oplossing)`,
+                    userName: "Systeem",
+                }
+            });
+        }
+    }
 
     return NextResponse.json(updated);
 }

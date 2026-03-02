@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { syncScheduler } from "@/lib/data-integration/sync-scheduler";
 
 export async function PATCH(
     req: NextRequest,
@@ -54,6 +55,11 @@ export async function PATCH(
             // Delete the pending source (no longer needed)
             await prisma.dataSource.delete({ where: { id: sourceId } });
 
+            // Auto-trigger first sync in background
+            syncScheduler.scheduleNow(existingSource.id).catch(err =>
+                console.error(`[AutoSync] Failed to schedule sync for reconnected source ${existingSource.id}:`, err)
+            );
+
             return NextResponse.json(existingSource);
         }
 
@@ -67,6 +73,11 @@ export async function PATCH(
                 config: loginCustomerId ? { loginCustomerId } : undefined,
             },
         });
+
+        // Auto-trigger first sync in background
+        syncScheduler.scheduleNow(source.id).catch(err =>
+            console.error(`[AutoSync] Failed to schedule sync for new source ${source.id}:`, err)
+        );
 
         return NextResponse.json(source);
     } catch (error: any) {
@@ -86,6 +97,18 @@ export async function DELETE(
     const { id: sourceId } = await params;
 
     try {
+        const source = await prisma.dataSource.findUnique({
+            where: { id: sourceId },
+            select: { clientId: true, type: true }
+        });
+
+        if (source?.type === "SLACK") {
+            await prisma.client.update({
+                where: { id: source.clientId },
+                data: { slackWebhookUrl: null }
+            });
+        }
+
         await prisma.dataSource.delete({
             where: { id: sourceId },
         });

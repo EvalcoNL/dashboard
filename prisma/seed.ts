@@ -1,12 +1,12 @@
 /// <reference types="node" />
-import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { PrismaLibSql } from "@prisma/adapter-libsql";
 import { hash } from "bcryptjs";
+import { createHash } from "crypto";
 
 function createPrismaClient() {
     const adapter = new PrismaLibSql({
-        url: process.env.DATABASE_URL!,
+        url: process.env.DATABASE_URL || "file:./dev.db",
         authToken: process.env.DATABASE_AUTH_TOKEN,
     });
     return new PrismaClient({ adapter });
@@ -14,10 +14,18 @@ function createPrismaClient() {
 
 const prisma = createPrismaClient();
 
+function canonicalHash(dataSourceId: string, date: Date, dimensions: Record<string, string>, level: string): string {
+    const key = `${dataSourceId}|${date.toISOString()}|${level}|${JSON.stringify(dimensions)}`;
+    return createHash("sha256").update(key).digest("hex").slice(0, 40);
+}
+
 async function main() {
     console.log("🌱 Seeding database (SQLite)...");
 
-    // Create admin user
+    // ═══════════════════════════════════════════════════════════════
+    // Users
+    // ═══════════════════════════════════════════════════════════════
+
     const adminPassword = await hash("Admin123!", 12);
     const admin = await prisma.user.upsert({
         where: { email: "admin@evalco.nl" },
@@ -30,7 +38,6 @@ async function main() {
         },
     });
 
-    // Create strategist user
     const strategistPassword = await hash("Strategist123!", 12);
     const strategist = await prisma.user.upsert({
         where: { email: "strategist@evalco.nl" },
@@ -45,7 +52,50 @@ async function main() {
 
     console.log("✅ Users created:", { admin: admin.email, strategist: strategist.email });
 
-    // Create demo clients
+    // ═══════════════════════════════════════════════════════════════
+    // Connector Definition (Google Ads)
+    // ═══════════════════════════════════════════════════════════════
+
+    const googleAdsConnector = await prisma.connectorDefinition.upsert({
+        where: { slug: "google-ads" },
+        update: {},
+        create: {
+            id: "connector-google-ads",
+            slug: "google-ads",
+            name: "Google Ads",
+            category: "PAID_SEARCH",
+            authType: "oauth2",
+            description: "Google Ads advertising platform",
+            isActive: true,
+        },
+    });
+
+    console.log("✅ Connector definition created:", googleAdsConnector.slug);
+
+    // ═══════════════════════════════════════════════════════════════
+    // Connector Definition (Google Analytics 4)
+    // ═══════════════════════════════════════════════════════════════
+
+    const ga4Connector = await prisma.connectorDefinition.upsert({
+        where: { slug: "ga4" },
+        update: {},
+        create: {
+            id: "connector-ga4",
+            slug: "ga4",
+            name: "Google Analytics 4",
+            category: "WEB_ANALYTICS",
+            authType: "oauth2",
+            description: "Google Analytics 4 website analytics — sessies, gebruikers, paginaweergaven, conversies",
+            isActive: true,
+        },
+    });
+
+    console.log("✅ Connector definition created:", ga4Connector.slug);
+
+    // ═══════════════════════════════════════════════════════════════
+    // Clients + DataSources
+    // ═══════════════════════════════════════════════════════════════
+
     const client1 = await prisma.client.upsert({
         where: { id: "demo-client-leadgen" },
         update: {},
@@ -91,7 +141,47 @@ async function main() {
 
     console.log("✅ Clients created:", { client1: client1.name, client2: client2.name, client3: client3.name });
 
-    // Create demo campaign metrics (14 days of data)
+    // Create DataSources linked to connector
+    const ds1 = await prisma.dataSource.upsert({
+        where: { id: "ds-leadgen-gads" },
+        update: {},
+        create: {
+            id: "ds-leadgen-gads",
+            clientId: client1.id,
+            type: "GOOGLE_ADS",
+            name: "LeadGen Google Ads",
+            category: "DATA_SOURCE",
+            externalId: "123-456-7890",
+            token: "demo-token-leadgen",
+            active: true,
+            connectorId: googleAdsConnector.id,
+            syncStatus: "ACTIVE",
+        },
+    });
+
+    const ds2 = await prisma.dataSource.upsert({
+        where: { id: "ds-ecom-gads" },
+        update: {},
+        create: {
+            id: "ds-ecom-gads",
+            clientId: client2.id,
+            type: "GOOGLE_ADS",
+            name: "Fashion Store Google Ads",
+            category: "DATA_SOURCE",
+            externalId: "234-567-8901",
+            token: "demo-token-ecom",
+            active: true,
+            connectorId: googleAdsConnector.id,
+            syncStatus: "ACTIVE",
+        },
+    });
+
+    console.log("✅ DataSources created");
+
+    // ═══════════════════════════════════════════════════════════════
+    // Seed campaign data into ClickHouse
+    // ═══════════════════════════════════════════════════════════════
+
     const campaigns = [
         { id: "camp-1", name: "Brand - Search", type: "SEARCH" },
         { id: "camp-2", name: "Non-Brand - Search", type: "SEARCH" },
@@ -103,9 +193,12 @@ async function main() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    const clickhouseRows: Record<string, unknown>[] = [];
+
     for (let dayOffset = 0; dayOffset < 14; dayOffset++) {
         const date = new Date(today);
         date.setDate(date.getDate() - dayOffset);
+        const dateStr = date.toISOString().split("T")[0];
 
         for (const campaign of campaigns) {
             const isRecentWeek = dayOffset < 7;
@@ -121,65 +214,85 @@ async function main() {
             const clicks = Math.floor(spend * (2 + Math.random()));
             const impressions = Math.floor(clicks * (8 + Math.random() * 12));
 
-            // LeadGen client (CPA)
-            await prisma.campaignMetric.upsert({
-                where: {
-                    campaignId_date: {
-                        campaignId: `leadgen-${campaign.id}`,
-                        date: date,
-                    },
-                },
-                update: {},
-                create: {
-                    clientId: client1.id,
-                    campaignId: `leadgen-${campaign.id}`,
-                    campaignName: campaign.name,
-                    campaignType: campaign.type,
-                    date: date,
-                    spend: spend,
-                    conversions: conversions,
-                    conversionValue: convValue,
-                    clicks: clicks,
-                    impressions: impressions,
-                    status: "ENABLED",
-                    servingStatus: campaign.id === "camp-4" && dayOffset < 3 ? "LIMITED" : "ELIGIBLE",
-                },
+            // LeadGen client
+            const leadgenHash = canonicalHash(ds1.id, date, { campaign_id: `leadgen-${campaign.id}` }, "campaign");
+            clickhouseRows.push({
+                canonical_hash: leadgenHash,
+                data_source_id: ds1.id,
+                client_id: client1.id,
+                connector_slug: "google-ads",
+                date: dateStr,
+                level: "campaign",
+                campaign_id: `leadgen-${campaign.id}`,
+                campaign_name: campaign.name,
+                campaign_type: campaign.type,
+                campaign_status: "ENABLED",
+                impressions,
+                clicks,
+                cost: parseFloat(spend.toFixed(2)),
+                conversions: parseFloat(conversions.toFixed(4)),
+                conversion_value: parseFloat(convValue.toFixed(2)),
             });
 
-            // E-commerce client (ROAS)
+            // E-commerce client
             const ecomSpend = spend * 1.5;
             const ecomConversions = conversions * 1.2;
             const ecomConvValue = ecomConversions * (120 + Math.random() * 80);
+            const ecomClicks = Math.floor(ecomSpend * (1.5 + Math.random()));
+            const ecomImpressions = Math.floor(ecomSpend * 15);
 
-            await prisma.campaignMetric.upsert({
-                where: {
-                    campaignId_date: {
-                        campaignId: `ecom-${campaign.id}`,
-                        date: date,
-                    },
-                },
-                update: {},
-                create: {
-                    clientId: client2.id,
-                    campaignId: `ecom-${campaign.id}`,
-                    campaignName: campaign.name,
-                    campaignType: campaign.type,
-                    date: date,
-                    spend: ecomSpend,
-                    conversions: ecomConversions,
-                    conversionValue: ecomConvValue,
-                    clicks: Math.floor(ecomSpend * (1.5 + Math.random())),
-                    impressions: Math.floor(ecomSpend * 15),
-                    status: "ENABLED",
-                    servingStatus: "ELIGIBLE",
-                },
+            const ecomHash = canonicalHash(ds2.id, date, { campaign_id: `ecom-${campaign.id}` }, "campaign");
+            clickhouseRows.push({
+                canonical_hash: ecomHash,
+                data_source_id: ds2.id,
+                client_id: client2.id,
+                connector_slug: "google-ads",
+                date: dateStr,
+                level: "campaign",
+                campaign_id: `ecom-${campaign.id}`,
+                campaign_name: campaign.name,
+                campaign_type: campaign.type,
+                campaign_status: "ENABLED",
+                impressions: ecomImpressions,
+                clicks: ecomClicks,
+                cost: parseFloat(ecomSpend.toFixed(2)),
+                conversions: parseFloat(ecomConversions.toFixed(4)),
+                conversion_value: parseFloat(ecomConvValue.toFixed(2)),
             });
         }
     }
 
-    console.log("✅ Campaign metrics created");
+    // Insert into ClickHouse
+    try {
+        const { createClient } = await import("@clickhouse/client");
+        const ch = createClient({
+            url: process.env.CLICKHOUSE_URL || "http://localhost:8123",
+            username: process.env.CLICKHOUSE_USER || "evalco",
+            password: process.env.CLICKHOUSE_PASSWORD || "evalco_dev",
+            database: process.env.CLICKHOUSE_DATABASE || "evalco",
+        });
 
-    // Create a demo analyst report
+        // Clear existing seed data for these data sources
+        await ch.command({ query: `ALTER TABLE metrics_data DELETE WHERE data_source_id IN ('${ds1.id}', '${ds2.id}')` });
+
+        // Insert new data
+        await ch.insert({
+            table: "metrics_data",
+            values: clickhouseRows,
+            format: "JSONEachRow",
+        });
+
+        await ch.close();
+        console.log(`✅ ClickHouse: ${clickhouseRows.length} campaign records seeded`);
+    } catch (error) {
+        console.warn("⚠️ ClickHouse not available, skipping campaign data seed:", (error as Error).message);
+        console.warn("   Start ClickHouse with: docker-compose up -d clickhouse");
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Demo Analyst Report
+    // ═══════════════════════════════════════════════════════════════
+
     const analystReport = await prisma.analystReport.upsert({
         where: { id: "demo-analyst-report-1" },
         update: {},
@@ -218,7 +331,7 @@ async function main() {
         },
     });
 
-    // Create a demo advisor report
+    // Advisor report
     await prisma.advisorReport.upsert({
         where: { id: "demo-advisor-report-1" },
         update: {},
@@ -261,7 +374,10 @@ async function main() {
 
     console.log("✅ Demo reports created");
 
-    // Create default user roles
+    // ═══════════════════════════════════════════════════════════════
+    // Default User Roles
+    // ═══════════════════════════════════════════════════════════════
+
     const defaultRoles = [
         {
             id: "beheerder",

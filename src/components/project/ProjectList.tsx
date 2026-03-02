@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Users, Plus, ExternalLink, Trash2, Edit2, Target } from "lucide-react";
+import { useNotification } from "@/components/NotificationProvider";
 
 interface ClientItem {
     id: string;
@@ -24,16 +25,30 @@ export default function ProjectList({
     userRole: string;
 }) {
     const router = useRouter();
+    const { showToast, confirm } = useNotification();
     const isAdmin = userRole === "ADMIN";
 
     const handleDelete = async (clientId: string, clientName: string) => {
-        if (!confirm(`Weet je zeker dat je "${clientName}" wilt verwijderen? Dit kan niet ongedaan worden gemaakt.`)) return;
+        const confirmed = await confirm({
+            title: "Project verwijderen",
+            message: `Weet je zeker dat je "${clientName}" wilt verwijderen? Dit kan niet ongedaan worden gemaakt en alle bijbehorende data wordt verwijderd.`,
+            confirmLabel: "Ja, verwijderen",
+            type: "danger"
+        });
 
-        const res = await fetch(`/api/projects/${clientId}`, { method: "DELETE" });
-        if (res.ok) {
-            router.refresh();
-        } else {
-            alert("Fout bij verwijderen. Probeer het opnieuw.");
+        if (!confirmed) return;
+
+        try {
+            const res = await fetch(`/api/projects/${clientId}`, { method: "DELETE" });
+            if (res.ok) {
+                showToast("success", "Project succesvol verwijderd");
+                router.refresh();
+            } else {
+                showToast("error", "Fout bij verwijderen. Probeer het opnieuw.");
+            }
+        } catch (e) {
+            console.error(e);
+            showToast("error", "Er ging iets mis.");
         }
     };
 
@@ -47,7 +62,7 @@ export default function ProjectList({
                     </p>
                 </div>
                 {isAdmin && (
-                    <Link href="/dashboard/projects/new" className="btn btn-primary" style={{ textDecoration: "none" }}>
+                    <Link href="/projects/new" className="btn btn-primary" style={{ textDecoration: "none" }}>
                         <Plus size={18} /> Nieuwe Project
                     </Link>
                 )}

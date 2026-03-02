@@ -1,11 +1,16 @@
 export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/db";
+import { query as chQuery } from "@/lib/clickhouse";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { Plus, Globe, ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { Suspense } from "react";
 import DataSourceActions from "./DataSourceActions";
 import DataSourceIcon from "./DataSourceIcon";
+import SampleDataManager from "./SampleDataManager";
+import ErrorBanner from "./ErrorBanner";
+
 
 export default async function DataSourcesPage({
     params,
@@ -22,6 +27,23 @@ export default async function DataSourcesPage({
     });
 
     if (!client) notFound();
+
+    // Check if sample data is active
+    const sampleSource = await prisma.dataSource.findFirst({
+        where: { clientId: id, name: "__sample__" },
+    });
+    let hasSampleData = false;
+    if (sampleSource) {
+        try {
+            const result = await chQuery<{ cnt: string }>(
+                `SELECT count() AS cnt FROM metrics_data FINAL WHERE data_source_id = {dsId:String}`,
+                { dsId: sampleSource.id }
+            );
+            hasSampleData = Number(result[0]?.cnt || 0) > 0;
+        } catch {
+            hasSampleData = false;
+        }
+    }
 
     // Deduplicate: if a source exists with same externalId+type in both categories, keep only one
     const seenKeys = new Set<string>();
@@ -48,6 +70,10 @@ export default async function DataSourcesPage({
             >
                 <ArrowLeft size={16} /> Terug naar dashboard
             </Link>
+
+            <Suspense fallback={null}>
+                <ErrorBanner />
+            </Suspense>
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "32px" }}>
                 <div>
@@ -78,6 +104,9 @@ export default async function DataSourcesPage({
                     Toevoegen
                 </Link>
             </div>
+
+            {/* SAMPLE DATA MANAGER — only shown when active */}
+            {hasSampleData && <SampleDataManager clientId={id} />}
 
             {/* APPS SECTION */}
             <div style={{ marginBottom: "32px" }}>

@@ -19,7 +19,7 @@ export default async function WebMonitoringPage({
         where: { id },
         include: {
             dataSources: {
-                where: { type: "DOMAIN" },
+                where: { type: { in: ["DOMAIN", "WEBSITE"] } },
                 include: {
                     uptimeChecks: {
                         orderBy: { checkedAt: "desc" },

@@ -12,5 +12,26 @@ services:
     volumes:
       - evalco-db-data:/var/lib/postgresql/data
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: evalco-clickhouse
+    restart: always
+    ports:
+      - '8123:8123'
+      - '9000:9000'
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./scripts/clickhouse-init:/docker-entrypoint-initdb.d
+    environment:
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_USER: evalco
+      CLICKHOUSE_PASSWORD: evalco_dev
+      CLICKHOUSE_DB: evalco
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
 volumes:
   evalco-db-data:
+  clickhouse_data:

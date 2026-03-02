@@ -1,0 +1,24 @@
+# ═══════════════════════════════════════════════════════════════════
+# Dockerfile for Evalco Sync Worker
+# Runs the BullMQ worker as a standalone Node.js process
+# ═══════════════════════════════════════════════════════════════════
+
+FROM node:20-alpine
+WORKDIR /app
+
+RUN apk add --no-cache libc6-compat
+
+# Install dependencies
+COPY package.json package-lock.json ./
+COPY prisma ./prisma/
+RUN npm ci
+RUN npx prisma generate
+
+# Copy source (worker needs the full src for imports)
+COPY . .
+
+# Build TypeScript (worker uses tsx in dev, needs compilation for prod)
+# We use tsx at runtime for simplicity
+ENV NODE_ENV=production
+
+CMD ["npx", "tsx", "src/worker-entry.ts"]

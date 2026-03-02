@@ -1,8 +1,8 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Plus, Loader2 } from "lucide-react";
 import Link from "next/link";
-import React from "react";
+import React, { useState } from "react";
 
 interface SourceCardProps {
     href?: string;
@@ -14,6 +14,8 @@ interface SourceCardProps {
 }
 
 export default function SourceCard({ href, onClick, icon, title, description, isComingSoon }: SourceCardProps) {
+    const [loading, setLoading] = useState(false);
+
     if (isComingSoon) {
         return (
             <div style={{
@@ -56,6 +58,36 @@ export default function SourceCard({ href, onClick, icon, title, description, is
 
     const content = (
         <>
+            {/* Loading overlay */}
+            {loading && (
+                <div style={{
+                    position: "absolute",
+                    inset: 0,
+                    background: "rgba(15, 15, 25, 0.85)",
+                    borderRadius: "16px",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "12px",
+                    zIndex: 10,
+                    backdropFilter: "blur(4px)",
+                }}>
+                    <Loader2
+                        size={28}
+                        color="var(--color-brand)"
+                        style={{ animation: "spin 1s linear infinite" }}
+                    />
+                    <span style={{
+                        color: "var(--color-text-secondary)",
+                        fontSize: "0.85rem",
+                        fontWeight: 500,
+                    }}>
+                        Verbinden...
+                    </span>
+                </div>
+            )}
+
             <div style={{
                 width: "80px",
                 height: "80px",
@@ -102,9 +134,19 @@ export default function SourceCard({ href, onClick, icon, title, description, is
         alignItems: "center",
         gap: "20px",
         transition: "all 0.2s ease",
-        cursor: "pointer",
+        cursor: loading ? "wait" : "pointer",
         position: "relative",
         overflow: "hidden"
+    };
+
+    const handleClick = () => {
+        if (loading) return;
+        setLoading(true);
+        if (onClick) {
+            onClick();
+            // Reset after a short delay for modals
+            setTimeout(() => setLoading(false), 500);
+        }
     };
 
     // If onClick is provided, render a button-like div
@@ -114,10 +156,10 @@ export default function SourceCard({ href, onClick, icon, title, description, is
                 <div
                     style={sharedStyle}
                     className="source-card"
-                    onClick={onClick}
+                    onClick={handleClick}
                     role="button"
                     tabIndex={0}
-                    onKeyDown={(e) => e.key === "Enter" && onClick()}
+                    onKeyDown={(e) => e.key === "Enter" && handleClick()}
                 >
                     {content}
                 </div>
@@ -126,6 +168,10 @@ export default function SourceCard({ href, onClick, icon, title, description, is
                         transform: translateY(-4px);
                         border-color: var(--color-brand) !important;
                         background: rgba(99, 102, 241, 0.05) !important;
+                    }
+                    @keyframes spin {
+                        from { transform: rotate(0deg); }
+                        to { transform: rotate(360deg); }
                     }
                 `}</style>
             </>
@@ -138,6 +184,7 @@ export default function SourceCard({ href, onClick, icon, title, description, is
                 href={href || "#"}
                 style={sharedStyle}
                 className="source-card"
+                onClick={() => setLoading(true)}
             >
                 {content}
             </Link>
@@ -147,6 +194,10 @@ export default function SourceCard({ href, onClick, icon, title, description, is
                     transform: translateY(-4px);
                     border-color: var(--color-brand) !important;
                     background: rgba(99, 102, 241, 0.05) !important;
+                }
+                @keyframes spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
                 }
             `}</style>
         </>

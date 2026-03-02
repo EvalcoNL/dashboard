@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import ReportClient from "./ReportClient";
+import { hasNormalizedData } from "@/lib/normalized-helpers";
 
 export default async function ClientReportPage({
     params,
@@ -14,13 +15,9 @@ export default async function ClientReportPage({
 
     const { id } = await params;
 
-    // We only need basic campaign metrics to check `hasCampaignData`
     const client = await prisma.client.findUnique({
         where: { id },
         include: {
-            campaignMetrics: {
-                take: 1,
-            },
             analystReports: {
                 orderBy: { createdAt: "desc" },
                 take: 1,
@@ -31,5 +28,13 @@ export default async function ClientReportPage({
 
     if (!client) notFound();
 
-    return <ReportClient client={client} userRole={session.user.role} />;
+    const hasData = await hasNormalizedData(id);
+
+    // Build compatible object for ReportClient
+    const clientWithMetrics = {
+        ...client,
+        campaignMetrics: hasData ? [{}] : [], // Just needs length check
+    };
+
+    return <ReportClient client={clientWithMetrics} userRole={session.user.role} />;
 }

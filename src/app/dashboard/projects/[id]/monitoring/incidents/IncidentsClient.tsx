@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, Search, ShieldAlert, Shield, ShieldCheck, Settings, Bell, Mail, MessageSquare, Save, X, ExternalLink } from "lucide-react";
 import { useState } from "react";
+import { useNotification } from "@/components/NotificationProvider";
 
 interface Incident {
     id: string;
@@ -70,6 +71,7 @@ export default function IncidentsClient({
     const router = useRouter();
     const searchParams = useSearchParams();
     const slackError = searchParams.get("error");
+    const { showToast, confirm } = useNotification();
 
     const [search, setSearch] = useState("");
     const [activeTab, setActiveTab] = useState<"overview" | "settings">("overview");
@@ -104,10 +106,10 @@ export default function IncidentsClient({
             });
             if (!res.ok) throw new Error("Failed to save settings");
             router.refresh();
-            alert("Instellingen opgeslagen!");
+            showToast("success", "Instellingen opgeslagen!");
         } catch (error) {
             console.error(error);
-            alert("Er ging iets mis met opslaan.");
+            showToast("error", "Er ging iets mis met opslaan.");
         } finally {
             setSaving(false);
         }
@@ -117,7 +119,7 @@ export default function IncidentsClient({
 
     const handleTestNotifications = async () => {
         if (!emailEnabled && !slackEnabled) {
-            alert("Er zijn geen e-mail of Slack notificaties ingesteld om te testen. Vink een kanaal aan en sla de instellingen eerst op.");
+            showToast("warning", "Er zijn geen e-mail of Slack notificaties ingesteld om te testen. Vink een kanaal aan en sla de instellingen eerst op.");
             return;
         }
 
@@ -129,7 +131,7 @@ export default function IncidentsClient({
             const data = await res.json();
 
             if (res.ok) {
-                alert(`Testbericht succesvol verstuurd!\n\nEmail: ${data.channels?.email ? '✅' : '❌'}\nSlack: ${data.channels?.slack ? '✅' : '❌'}`);
+                showToast("success", `Testbericht succesvol verstuurd! (Email: ${data.channels?.email ? '✅' : '❌'}, Slack: ${data.channels?.slack ? '✅' : '❌'})`);
             } else {
                 let errorMsg = data.error || "Failed to trigger test";
                 if (data.details) errorMsg += `\nDetails: ${data.details}`;
@@ -137,7 +139,7 @@ export default function IncidentsClient({
             }
         } catch (error: any) {
             console.error("Test notification error:", error);
-            alert(`Fout bij het versturen van testbericht: ${error.message}`);
+            showToast("error", `Fout bij het versturen van testbericht: ${error.message}`);
         } finally {
             setTestingNotifs(false);
         }
@@ -419,10 +421,15 @@ export default function IncidentsClient({
                                             </span>
                                         </div>
                                         <button
-                                            onClick={() => {
-                                                if (window.confirm("Zeker weten dat je Slack wilt ontkoppelen?")) {
+                                            onClick={async () => {
+                                                const confirmed = await confirm({
+                                                    title: "Slack ontkoppelen",
+                                                    message: "Weet je zeker dat je Slack wilt ontkoppelen? Je zult geen meldingen meer ontvangen in je Slack kanaal.",
+                                                    confirmLabel: "Ja, ontkoppelen",
+                                                    type: "danger"
+                                                });
+                                                if (confirmed) {
                                                     setSlackUrl("");
-                                                    // Auto-save happens separately or we can trigger it immediately
                                                 }
                                             }}
                                             style={{

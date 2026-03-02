@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Users, MoreHorizontal, UserPlus, Trash2, Mail, Clock, X, Send } from "lucide-react";
+import { useNotification } from "@/components/NotificationProvider";
 
 interface User {
     id: string;
@@ -29,6 +30,7 @@ export default function ProjectAccessManager({
     pendingInvites: PendingInvite[];
 }) {
     const router = useRouter();
+    const { showToast } = useNotification();
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>(linkedUserIds);
     const [loading, setLoading] = useState(false);
 
@@ -59,10 +61,11 @@ export default function ProjectAccessManager({
             if (!res.ok) throw new Error("Opslaan mislukt");
 
             setSelectedUserIds(newUserIds);
+            showToast("success", "Toegang bijgewerkt");
             router.refresh();
         } catch (error) {
             console.error(error);
-            alert("Er is iets misgegaan bij het opslaan van de toegang.");
+            showToast("error", "Er is iets misgegaan bij het opslaan van de toegang.");
         } finally {
             setLoading(false);
             setOpenMenuId(null);
@@ -93,10 +96,11 @@ export default function ProjectAccessManager({
 
             setInviteEmail("");
             setShowInviteModal(false);
+            showToast("success", `Uitnodiging verstuurd naar ${inviteEmail}`);
             router.refresh();
         } catch (error: any) {
             console.error(error);
-            alert(error.message || "Er is een fout opgetreden bij het uitnodigen.");
+            showToast("error", error.message || "Er is een fout opgetreden bij het uitnodigen.");
         } finally {
             setLoading(false);
         }
@@ -109,11 +113,11 @@ export default function ProjectAccessManager({
                 method: "POST"
             });
             if (!res.ok) throw new Error("Opnieuw versturen mislukt");
-            alert("Uitnodiging is succesvol opnieuw verstuurd!");
+            showToast("success", "Uitnodiging is succesvol opnieuw verstuurd!");
             router.refresh();
         } catch (error) {
             console.error(error);
-            alert("Er is iets misgegaan bij het opnieuw versturen van de uitnodiging.");
+            showToast("error", "Er is iets misgegaan bij het opnieuw versturen van de uitnodiging.");
         } finally {
             setLoading(false);
             setOpenMenuId(null);
@@ -131,10 +135,11 @@ export default function ProjectAccessManager({
 
             if (!res.ok) throw new Error("Intrekken mislukt");
 
+            showToast("success", "Uitnodiging ingetrokken");
             router.refresh();
         } catch (error) {
             console.error(error);
-            alert("Er is iets misgegaan bij het intrekken van de uitnodiging.");
+            showToast("error", "Er is iets misgegaan bij het intrekken van de uitnodiging.");
         } finally {
             setLoading(false);
             setOpenMenuId(null);

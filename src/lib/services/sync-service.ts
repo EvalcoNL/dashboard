@@ -1,10 +1,18 @@
 import { googleAdsService } from "@/lib/integrations/google-ads";
 import { prisma } from "@/lib/db";
+import { insert } from "@/lib/clickhouse";
 import { format, subDays } from "date-fns";
+import { createHash } from "crypto";
+
+function canonicalHash(dataSourceId: string, date: Date, dimensions: Record<string, string>, level: string): string {
+    const key = `${dataSourceId}|${date.toISOString()}|${level}|${JSON.stringify(dimensions)}`;
+    return createHash("sha256").update(key).digest("hex").slice(0, 40);
+}
 
 export class SyncService {
     /**
      * Synchronizes campaign metrics for a specific client.
+     * Writes campaign metrics to ClickHouse metrics_data table.
      */
     async syncClientData(clientId: string, daysBack: number = 90) {
         const client = await prisma.client.findUnique({
@@ -33,45 +41,40 @@ export class SyncService {
                     config?.loginCustomerId
                 );
 
-                // Batch upsert all metrics in a single transaction
-                const upsertOps = metrics.map((m) =>
-                    prisma.campaignMetric.upsert({
-                        where: {
-                            campaignId_date: {
-                                campaignId: m.campaignId.toString(),
-                                date: m.date,
-                            },
-                        },
-                        update: {
-                            campaignName: m.campaignName,
-                            campaignType: m.campaignType,
-                            spend: m.spend,
-                            conversions: m.conversions,
-                            conversionValue: m.conversionValue,
-                            clicks: m.clicks,
-                            impressions: m.impressions,
-                            status: m.status,
-                            servingStatus: m.servingStatus,
-                            dataSourceId: source.id,
-                        },
-                        create: {
-                            clientId: clientId,
-                            dataSourceId: source.id,
-                            campaignId: m.campaignId.toString(),
-                            campaignName: m.campaignName,
-                            campaignType: m.campaignType,
-                            date: m.date,
-                            spend: m.spend,
-                            conversions: m.conversions,
-                            conversionValue: m.conversionValue,
-                            clicks: m.clicks,
-                            impressions: m.impressions,
-                            status: m.status,
-                            servingStatus: m.servingStatus,
-                        },
-                    })
-                );
-                await prisma.$transaction(upsertOps);
+                // Build ClickHouse rows from campaign metrics
+                const clickhouseRows = metrics.map((m) => {
+                    const dimensions = {
+                        campaign_id: m.campaignId.toString(),
+                        campaign_name: m.campaignName,
+                        campaign_type: m.campaignType,
+                        status: m.status,
+                        serving_status: m.servingStatus,
+                    };
+                    const hash = canonicalHash(source.id, m.date, dimensions, "campaign");
+
+                    return {
+                        canonical_hash: hash,
+                        data_source_id: source.id,
+                        client_id: clientId,
+                        connector_slug: 'google-ads',
+                        date: format(m.date, "yyyy-MM-dd"),
+                        level: 'campaign',
+                        campaign_id: m.campaignId.toString(),
+                        campaign_name: m.campaignName,
+                        campaign_type: m.campaignType,
+                        campaign_status: m.status,
+                        cost: m.spend,
+                        conversions: m.conversions,
+                        conversion_value: m.conversionValue,
+                        clicks: m.clicks,
+                        impressions: m.impressions,
+                    };
+                });
+
+                // Batch insert into ClickHouse
+                if (clickhouseRows.length > 0) {
+                    await insert('metrics_data', clickhouseRows);
+                }
                 totalRecordsSynced += metrics.length;
 
                 // Sync account users (linked accounts / access management)
@@ -108,7 +111,6 @@ export class SyncService {
                     }
                 } catch (userErr) {
                     console.error(`Failed to sync account users for source ${source.id}:`, userErr);
-                    // Don't fail the entire sync if user access fetch fails
                 }
 
                 // Update last synced
