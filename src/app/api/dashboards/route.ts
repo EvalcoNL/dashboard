@@ -83,9 +83,9 @@ export async function POST(request: Request) {
                         dashboardId: dashboard.id,
                         type: w.type,
                         title: w.title,
-                        position: w.position,
+                        position: w.position as object,
                         sortOrder: i,
-                        config: w.config,
+                        config: w.config as object,
                     })),
                 });
             }
