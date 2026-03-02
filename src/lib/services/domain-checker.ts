@@ -20,7 +20,7 @@ export async function performUptimeCheck(domainId: string) {
         include: { monitoredPages: { where: { active: true } } }
     });
 
-    if (!domain || domain.type !== "DOMAIN") {
+    if (!domain || !["DOMAIN", "WEBSITE"].includes(domain.type)) {
         throw new Error("Invalid domain data source");
     }
 
