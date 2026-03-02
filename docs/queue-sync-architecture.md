@@ -1,47 +1,56 @@
 # Queue-Based Sync Architecture
 
-> Migratie van cron-based naar queue-based sync met BullMQ + Redis.  
-> Geïmplementeerd: 2 maart 2026
+> Self-hosted BullMQ + Redis sync pipeline op Hetzner (CPX42).  
+> Geüpdatet: 2 maart 2026
 
 ---
 
 ## Waarom
 
-| Probleem (oud) | Impact |
+| Probleem (oud) | Oplossing |
 |---|---|
-| Vercel Hobby plan: **10s function timeout** | Syncs van 20-40s falen in productie |
-| In-memory `isRunning` flag | Serverless = geen gedeeld geheugen |
-| Alles draait in 1 serverless functie | Geen parallellisme, geen retry queue |
-| Geen prioriteit | Handmatige sync wacht op automatische scheduler |
+| Vercel Hobby plan: **10s function timeout** | Self-hosted: geen timeouts |
+| In-memory `isRunning` flag | Redis-backed BullMQ queue |
+| Alles in 1 serverless functie | Aparte worker container met concurrency |
+| Geen prioriteit | BullMQ priority queues |
 
 ## Architectuur
 
 ```
 ┌─────────────────────┐     ┌──────────────┐     ┌──────────────────┐
-│  Next.js (Vercel)   │────>│ Redis Queue  │────>│  Worker Process  │
-│                     │     │  (Upstash)   │     │  (Railway/VPS)   │
-│ - Dashboard UI      │     │              │     │                  │
-│ - Scheduler tick    │     │  BullMQ      │     │ - syncEngine     │
-│ - Manual triggers   │     │  Priority Q  │     │ - Connectors     │
-│                     │     │              │     │ - Normalization   │
+│  Next.js App        │────>│ Redis Queue  │────>│  Worker Process  │
+│  (Docker: app)      │     │  (Docker)    │     │  (Docker: worker)│
+│                     │     │              │     │                  │
+│ - Dashboard UI      │     │  BullMQ      │     │ - syncEngine     │
+│ - Scheduler tick    │     │  Priority Q  │     │ - Connectors     │
+│ - Manual triggers   │     │              │     │ - Normalization   │
+│ - Uptime cron       │     │              │     │                  │
 └─────────────────────┘     └──────────────┘     └────────┬─────────┘
                                                           │
                                                ┌──────────┴──────────┐
                                                │                     │
                                           ┌────┴────┐         ┌─────┴─────┐
-                                          │  Turso  │         │ClickHouse │
-                                          │ (SQLite)│         │ (Metrics) │
+                                          │ SQLite  │         │ClickHouse │
+                                          │ (lokaal)│         │ (Metrics) │
                                           └─────────┘         └───────────┘
 ```
 
 ### Flow
 
-1. **Vercel Cron** roept elke 5 min `/api/data-integration/sync/cron` aan
+1. **Crontab** op de host roept elke 5 min de sync cron aan via `docker exec`
 2. **Scheduler** (`sync-scheduler.ts`) vindt data sources die "due" zijn
 3. Scheduler **enqueued** sync jobs naar de BullMQ queue in Redis
-4. **Worker** (`worker-entry.ts`) draait als apart process, pakt jobs op
-5. Worker roept de bestaande `syncEngine.syncDataSource()` aan
-6. Data wordt opgeslagen in ClickHouse, status in Turso
+4. **Worker** (`worker-entry.ts`) draait als apart Docker container, pakt jobs op
+5. Worker roept `syncEngine.syncDataSource()` aan
+6. Metrics data → ClickHouse, status/metadata → SQLite
+
+### Uptime Monitoring
+
+- **Crontab** roept elke 2 min `/api/cron/uptime` aan via `docker exec`
+- Checkt alle actieve DOMAIN/WEBSITE data sources
+- Slaat uptime checks op in SQLite
+- Maakt automatisch incidents aan bij downtime
+- Stuurt notificaties via email en/of Slack
 
 ### Fallback Modus
 
@@ -49,31 +58,38 @@ Zonder Redis (bijv. lokale dev) valt alles automatisch terug naar directe execut
 
 ---
 
+## Docker Services
+
+| Service | Container | Beschrijving |
+|---|---|---|
+| `app` | `evalco-app` | Next.js dashboard (port 3000 intern) |
+| `worker` | `evalco-worker` | BullMQ sync worker (concurrency=3) |
+| `redis` | `evalco-redis` | Queue backend (noeviction policy) |
+| `clickhouse` | `evalco-clickhouse` | Analytics data store |
+| `nginx` | `evalco-nginx` | Reverse proxy (port 80) |
+
+Alle services delen een `evalco-net` Docker network. SQLite database wordt gedeeld via `sqlite_data` Docker volume gemount op `/app/data`.
+
+---
+
 ## Bestanden
 
-### Nieuw
+### Queue & Worker
 
 | Bestand | Beschrijving |
 |---|---|
-| `src/lib/data-integration/sync-queue.ts` | Queue definitie, Redis connectie, producer functies (`addSyncJob`, `addBulkSyncJobs`) |
-| `src/lib/data-integration/sync-worker.ts` | BullMQ worker met stalled detection, auto-pause na 3 failures |
-| `src/worker-entry.ts` | Standalone entry point voor worker process |
+| `src/lib/data-integration/sync-queue.ts` | Queue definitie, Redis connectie, producer functies |
+| `src/lib/data-integration/sync-worker.ts` | BullMQ worker met stalled detection, auto-pause |
+| `src/worker-entry.ts` | Standalone entry point voor worker container |
+| `src/lib/data-integration/sync-scheduler.ts` | Scheduler tick — enqueued jobs naar BullMQ |
+| `src/lib/services/domain-checker.ts` | Uptime/SSL/pixel monitoring checks |
 
-### Gewijzigd
+### Cron Endpoints
 
-| Bestand | Wijziging |
-|---|---|
-| `src/lib/data-integration/sync-scheduler.ts` | `tick()` enqueued nu naar BullMQ i.p.v. directe execution |
-| `src/app/api/data-integration/sync/route.ts` | Delegeert naar queue-aware scheduler |
-| `package.json` | Nieuwe scripts: `worker:dev`, `worker:start` |
-
-### Ongewijzigd
-
-| Bestand | Waarom |
-|---|---|
-| `src/lib/data-integration/sync-engine.ts` | Core sync logica — wordt nu door worker aangeroepen i.p.v. door serverless |
-| `src/lib/data-integration/normalization-service.ts` | Data opslag logica — ongewijzigd |
-| Alle connectors (`google-ads`, `ga4`, `meta`, etc.) | Connector logica — ongewijzigd |
+| Endpoint | Interval | Beschrijving |
+|---|---|---|
+| `/api/data-integration/sync/cron` | 5 min | Data sync scheduler tick |
+| `/api/cron/uptime` | 2 min | Uptime monitoring checks |
 
 ---
 
@@ -99,11 +115,11 @@ Backoff:   Exponential
 
 - Check interval: elke 2 minuten
 - Max stalled retries: 2
-- Als een worker crasht tijdens een job, wordt de job automatisch opnieuw opgepakt
+- Gecrashte jobs worden automatisch opnieuw opgepakt
 
 ### Auto-Pause
 
-Na 3 gefaalde sync jobs binnen 24 uur wordt de data source automatisch op `ERROR` gezet en gestopt. De gebruiker moet de source handmatig hervatten via het dashboard.
+Na 3 gefaalde sync jobs binnen 24 uur wordt de data source op `ERROR` gezet. Handmatig hervatten via het dashboard.
 
 ### Job Retention
 
@@ -112,102 +128,76 @@ Na 3 gefaalde sync jobs binnen 24 uur wordt de data source automatisch op `ERROR
 
 ---
 
+## Crontab (Server)
+
+De cron jobs draaien op de **host** en gebruiken `docker exec` om de app container te bereiken:
+
+```cron
+# Sync scheduler (elke 5 min)
+*/5 * * * * docker exec evalco-app node -e "fetch('http://localhost:3000/api/data-integration/sync/cron', { headers: { 'x-cron-secret': 'SECRET' } }).then(r=>r.text()).then(console.log)" > /dev/null 2>&1
+
+# Uptime checks (elke 2 min)
+*/2 * * * * docker exec evalco-app node -e "fetch('http://localhost:3000/api/cron/uptime', { headers: { 'Authorization': 'Bearer SECRET' } }).then(r=>r.text()).then(console.log)" > /dev/null 2>&1
+```
+
+---
+
 ## Lokaal Draaien
 
 ### Zonder Redis (fallback)
 
 ```bash
-# Alleen de Next.js app — syncs draaien direct
 npm run dev
 ```
 
 ### Met Redis (queue mode)
 
 ```bash
-# Terminal 1: Redis (via Docker)
+# Terminal 1: Redis
 docker run -d --name redis -p 6379:6379 redis
 
-# Terminal 2: Next.js app
+# Terminal 2: Next.js
 REDIS_URL=redis://localhost:6379 npm run dev
 
 # Terminal 3: Worker
 REDIS_URL=redis://localhost:6379 npm run worker:dev
 ```
 
-### Environment Variables
+---
+
+## Environment Variables
 
 | Variabele | Verplicht | Beschrijving |
 |---|---|---|
+| `DATABASE_URL` | Ja | SQLite file pad (`file:./data/evalco.db`) |
 | `REDIS_URL` | Nee* | Redis connection string. *Zonder → fallback naar direct |
+| `CLICKHOUSE_URL` | Ja | ClickHouse HTTP URL |
+| `CLICKHOUSE_USER` | Ja | ClickHouse gebruiker |
+| `CLICKHOUSE_PASSWORD` | Ja | ClickHouse wachtwoord |
+| `NEXTAUTH_URL` | Ja | Publieke URL (`https://dash.evalco.nl`) |
+| `NEXTAUTH_SECRET` | Ja | Session encryptie |
+| `CRON_SECRET` | Ja | Beveiliging voor cron endpoints |
 | `WORKER_CONCURRENCY` | Nee | Max parallelle sync jobs (default: 3) |
-
----
-
-## Productie Setup
-
-### 1. Redis — Upstash (aanbevolen)
-
-- Gratis tier: 10.000 commands/dag
-- Serverless-friendly
-- Geen server beheer nodig
-
-```env
-REDIS_URL=rediss://default:xxx@eu1-xxx.upstash.io:6379
-```
-
-### 2. Worker — Railway (aanbevolen)
-
-- Starter plan: $5/maand
-- Draait 24/7 als apart process
-- Auto-deploy vanuit Git
-
-```dockerfile
-# Dockerfile voor worker
-FROM node:20-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --production
-COPY . .
-RUN npx prisma generate
-CMD ["npm", "run", "worker:start"]
-```
-
-### 3. Vercel Cron
-
-Configureer in `vercel.json`:
-
-```json
-{
-  "crons": [
-    {
-      "path": "/api/data-integration/sync/cron?secret=YOUR_SECRET",
-      "schedule": "*/5 * * * *"
-    }
-  ]
-}
-```
 
 ---
 
 ## Monitoring
 
-### Queue Health Endpoint
+### Queue Health
 
-`GET /api/data-integration/sync` (zonder parameters) retourneert:
+`GET /api/data-integration/sync` retourneert queue status:
 
 ```json
 {
   "status": {
     "isRunning": false,
     "totalConnections": 3,
-    "activeConnections": 3,
     "runningJobs": 0,
     "queue": {
       "waiting": 0,
       "active": 0,
       "completed": 42,
-      "failed": 1,
-      "delayed": 0
+      "failed": 1
     }
   }
 }
@@ -215,47 +205,8 @@ Configureer in `vercel.json`:
 
 ### Worker Logs
 
-De worker logt automatisch:
-- `✅` bij voltooide jobs (incl. recordcount)
-- `❌` bij gefaalde jobs (incl. attempt nummer)
-- `⚠️` bij gestalled jobs
-- Elke minuut een health summary als er actieve/wachtende jobs zijn
-
----
-
-## API Referentie
-
-### `addSyncJob(payload, opts?)`
-
-Voeg een sync job toe aan de queue.
-
-```typescript
-import { addSyncJob } from '@/lib/data-integration/sync-queue';
-
-await addSyncJob({
-  dataSourceId: 'cm...',
-  mode: 'INCREMENTAL',
-  priority: 1,        // Optional, default 5
-});
+```bash
+docker logs -f evalco-worker
 ```
 
-### `addBulkSyncJobs(payloads)`
-
-Meerdere jobs in bulk toevoegen (efficiënter dan losse calls).
-
-```typescript
-import { addBulkSyncJobs } from '@/lib/data-integration/sync-queue';
-
-await addBulkSyncJobs([
-  { dataSourceId: 'cm1', mode: 'INCREMENTAL' },
-  { dataSourceId: 'cm2', mode: 'INCREMENTAL' },
-]);
-```
-
-### `isQueueAvailable()`
-
-Check of Redis bereikbaar is. Retourneert `boolean`.
-
-### `getQueueHealth()`
-
-Retourneert huidige queue statistieken (`waiting`, `active`, `completed`, `failed`, `delayed`).
+De worker logt: ✅ voltooide jobs, ❌ gefaalde jobs, ⚠️ gestalled jobs.
