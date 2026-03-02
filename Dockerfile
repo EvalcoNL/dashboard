@@ -9,8 +9,8 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 
-# Install libc6 for Prisma compatibility
-RUN apk add --no-cache libc6-compat
+# Install glibc compatibility for Prisma
+RUN apk add --no-cache gcompat || apk add --no-cache libc6-compat || true
 
 COPY package.json package-lock.json ./
 COPY prisma ./prisma/

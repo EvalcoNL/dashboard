@@ -6,7 +6,7 @@
 FROM node:20-alpine
 WORKDIR /app
 
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache gcompat || apk add --no-cache libc6-compat || true
 
 # Install dependencies
 COPY package.json package-lock.json ./
