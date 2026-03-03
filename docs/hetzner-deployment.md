@@ -22,7 +22,7 @@ Alle services draaien als Docker containers op één server:
 │  │  :6379   │  │   :8123          │                  │
 │  └──────────┘  └──────────────────┘                  │
 │                                                      │
-│  Database: Turso (extern, cloud)                     │
+│  Database: SQLite (lokaal, Docker volume)             │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -57,7 +57,7 @@ Waarde: <SERVER IP>
 TTL: 300
 ```
 
-Resultaat: `dash.evalco.nl → 1.2.3.4`
+Resultaat: `dash.evalco.nl → 178.104.15.143`
 
 ## Stap 3 — Server Installeren
 
@@ -81,36 +81,27 @@ cd dashboard
 
 ### 4a. Environment variables
 
-Kopieer het `.env.production` bestand en voeg toe:
-
-```bash
-cp .env.production .env.production.local
-nano .env.production.local
-```
-
-Voeg toe of pas aan:
+Pas `.env.production` aan:
 
 ```env
-# Bestaand (Turso)
-DATABASE_URL="libsql://..."
-DATABASE_AUTH_TOKEN="..."
+# Database (lokaal SQLite op Docker volume)
+DATABASE_URL="file:./data/evalco.db"
 
-# Nieuw
+# Services (intern Docker netwerk)
 REDIS_URL=redis://redis:6379
 CLICKHOUSE_URL=http://clickhouse:8123
 CLICKHOUSE_USER=evalco
 CLICKHOUSE_PASSWORD=CHANGE_ME_TO_SECURE_PASSWORD
 CLICKHOUSE_DATABASE=evalco
 
-# Cron bescherming
+# Security
 CRON_SECRET=CHANGE_ME_TO_RANDOM_STRING
+ENCRYPTION_KEY=CHANGE_ME_TO_RANDOM_64_HEX_CHARS
 
 # Auth
 NEXTAUTH_URL=https://dash.evalco.nl
-NEXTAUTH_SECRET=CHANGE_ME_TO_RANDOM_STRING
+AUTH_SECRET=CHANGE_ME_TO_RANDOM_STRING
 ```
-
-Wijzig `.env.production` in `docker-compose.prod.yml` naar `.env.production.local`.
 
 ### 4b. Domein instellen
 
@@ -149,13 +140,8 @@ crontab -e
 Voeg toe:
 
 ```cron
-*/5 * * * * curl -s -H "x-cron-secret: JOUW_CRON_SECRET" http://localhost:3000/api/data-integration/sync/cron > /dev/null 2>&1
-```
-
-Of via de Nginx URL:
-
-```cron
-*/5 * * * * curl -s -H "x-cron-secret: JOUW_CRON_SECRET" https://dash.evalco.nl/api/data-integration/sync/cron > /dev/null 2>&1
+*/5 * * * * curl -s -H "Authorization: Bearer JOUW_CRON_SECRET" http://localhost:3000/api/data-integration/sync/cron > /dev/null 2>&1
+*/5 * * * * curl -s -H "Authorization: Bearer JOUW_CRON_SECRET" http://localhost:3000/api/cron/uptime > /dev/null 2>&1
 ```
 
 ---
@@ -224,6 +210,5 @@ Na eerste deploy is ClickHouse leeg. Trigger een full sync vanuit het dashboard:
 | Component | Maandelijks |
 |---|---|
 | Hetzner CX22 | €3.99 |
-| Turso (bestaand) | Gratis/Pro |
 | Domein | €1-2 |
 | **Totaal** | **~€5-6/mnd** |

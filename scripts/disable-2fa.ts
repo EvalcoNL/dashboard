@@ -5,7 +5,6 @@ dotenv.config();
 async function main() {
     const client = createClient({
         url: process.env.DATABASE_URL!,
-        authToken: process.env.DATABASE_AUTH_TOKEN!,
     });
 
     console.log("Disabling 2FA for admin@evalco.nl...");

@@ -58,10 +58,11 @@ ssh root@178.104.15.143
 |---|---|
 | **URL** | `redis://redis:6379` (intern) |
 
-### Turso (extern, cloud)
+### SQLite (lokaal op Docker volume)
 | | |
 |---|---|
-| **URL** | `libsql://database-amethyst-flower-vercel-icfg-qrygmr26pktkzve1jqwvmx1s.aws-eu-west-1.turso.io` |
+| **Path** | `/app/data/evalco.db` (in Docker container) |
+| **Volume** | `sqlite_data` |
 
 ## Cron
 

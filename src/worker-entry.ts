@@ -9,7 +9,7 @@
 // Environment:
 //   REDIS_URL             — Redis connection string (required)
 //   WORKER_CONCURRENCY    — Max parallel sync jobs (default: 3)
-//   DATABASE_URL          — Turso/SQLite connection string
+//   DATABASE_URL          — SQLite connection string
 // ═══════════════════════════════════════════════════════════════════
 
 import { createSyncWorker } from '@/lib/data-integration/sync-worker';
