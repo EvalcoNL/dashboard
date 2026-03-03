@@ -5,19 +5,19 @@
 | Maatregel | Status | Detail |
 |-----------|--------|--------|
 | Wachtwoord hashing | ✅ Actief | bcryptjs met 12 salt rounds |
-| 2FA (TOTP) | ✅ Optioneel | Via `otplib`, met backup codes en encrypted secrets |
-| JWT sessies | ✅ Actief | Via NextAuth met `AUTH_SECRET` |
+| 2FA (TOTP) | ✅ Verplicht | Via `otplib`, met backup codes, encrypted secrets, enforcement |
+| JWT sessies | ✅ Actief | Via NextAuth met `AUTH_SECRET`, DB-refresh voor 2FA flag |
 | Security headers | ✅ Actief | X-Frame-Options, HSTS, nosniff, Referrer-Policy, CSP |
 | IDOR bescherming | ✅ Actief | `requireProjectAccess`, `requireDataSourceAccess` helpers |
 | Admin role-check | ✅ Actief | `requireAdmin()` op alle admin routes |
 | Cron secret verplicht | ✅ Actief | `CRON_SECRET` vereist, geen bypass als leeg |
 | OAuth token encryptie | ✅ Actief | AES-256-GCM via `ENCRYPTION_KEY` |
 | Input validatie | ✅ Actief | Email formaat, wachtwoord complexiteit, max lengtes |
-| Audit logging | ✅ Actief | Login, 2FA, admin acties worden gelogd |
-| Rate limiting (in-memory) | ✅ Actief | Login, API, en cron endpoints |
+| Audit logging | ✅ Actief | Login, login failed, 2FA, admin acties |
+| Rate limiting | ✅ Actief | Login, register, check-2fa, API, cron (in-memory) |
 | `poweredByHeader: false` | ✅ Actief | Geen X-Powered-By header |
 | Content Security Policy | ✅ Actief | Strikte CSP in `next.config.ts` |
-| Middleware auth redirect | ✅ Actief | Alle dashboard routes vereisen login |
+| Middleware auth redirect | ✅ Actief | Alle dashboard routes vereisen login + 2FA |
 
 ---
 
@@ -55,6 +55,7 @@
 | 4.3 | Sync engine decrypt tokens bij gebruik | ✅ |
 | 4.4 | 2FA secrets encrypted opgeslagen | ✅ |
 | 4.5 | Slack webhook URL encrypted opgeslagen | ✅ |
+| 4.6 | `ENCRYPTION_KEY` geconfigureerd in `.env` | ✅ |
 
 ### Fase 5 — 2FA ✅
 
@@ -66,8 +67,8 @@
 | 5.4 | 2FA disable functionaliteit | ✅ |
 | 5.5 | 2FA setup pagina (`/dashboard/security/2fa-setup`) | ✅ |
 | 5.6 | Twee-staps login flow (credential check → 2FA code invoer) | ✅ |
-
-> **Let op:** 2FA enforcement (verplicht stellen) is uitgeschakeld omdat de JWT `twoFactorEnabled` flag stale wordt na het inschakelen van 2FA. Dit vereist een session-refresh mechanisme. 2FA is beschikbaar als optionele feature via dashboard instellingen.
+| 5.7 | 2FA enforcement via middleware (redirect naar setup) | ✅ |
+| 5.8 | JWT session refresh voor `twoFactorEnabled` uit database | ✅ |
 
 ### Fase 6 — Input validatie & Audit logging ✅
 
@@ -78,7 +79,17 @@
 | 6.3 | Max length op naam (100 chars) | ✅ |
 | 6.4 | `AuditLog` model in Prisma schema | ✅ |
 | 6.5 | `auditLog()` helper in `src/lib/audit.ts` | ✅ |
-| 6.6 | Audit logging voor: LOGIN, 2FA_ENABLED, 2FA_DISABLED, BACKUP_CODE_USED, USER_DELETED | ✅ |
+| 6.6 | Audit logging: LOGIN, LOGIN_FAILED, 2FA_ENABLED, 2FA_DISABLED, BACKUP_CODE_USED, USER_DELETED | ✅ |
+
+### Fase 7 — Rate Limiting ✅
+
+| # | Actie | Status |
+|---|-------|--------|
+| 7.1 | Login rate limiting (5/min per IP) | ✅ |
+| 7.2 | Check-2FA rate limiting (5/min per IP) | ✅ |
+| 7.3 | Register rate limiting (5/min per IP) | ✅ |
+| 7.4 | API rate limiting (120/min per IP) | ✅ |
+| 7.5 | Cron rate limiting (2/min global) | ✅ |
 
 ---
 
@@ -86,12 +97,14 @@
 
 | Bestand | Functie |
 |---------|---------|
-| `src/lib/auth.ts` | NextAuth configuratie, credentials provider, 2FA verificatie |
+| `src/lib/auth.ts` | NextAuth configuratie, credentials provider, 2FA verificatie, audit logging |
 | `src/lib/encryption.ts` | AES-256-GCM encrypt/decrypt voor tokens en secrets |
 | `src/lib/audit.ts` | Audit logging helper |
-| `src/middleware.ts` | Auth redirect, route bescherming |
-| `src/auth.config.ts` | NextAuth config (JWT callbacks, session) |
-| `src/app/api/auth/check-2fa/route.ts` | Pre-login 2FA check endpoint |
+| `src/lib/rate-limit.ts` | In-memory rate limiter met IP-detectie |
+| `src/lib/api-guard.ts` | Auth helpers: requireAuth, requireProjectAccess, requireAdmin |
+| `src/middleware.ts` | Auth redirect, 2FA enforcement |
+| `src/auth.config.ts` | NextAuth config (JWT callbacks met DB refresh, session) |
+| `src/app/api/auth/check-2fa/route.ts` | Pre-login 2FA check (rate-limited) |
 | `src/app/api/user/2fa/setup/route.ts` | 2FA secret generatie |
 | `src/app/api/user/2fa/verify/route.ts` | 2FA verificatie + backup codes genereren |
 | `src/app/api/user/2fa/disable/route.ts` | 2FA uitschakelen |
@@ -108,11 +121,9 @@
 
 ---
 
-## Openstaande punten
+## Out of scope (voor nu)
 
-| Item | Prioriteit | Beschrijving |
-|------|------------|--------------|
-| 2FA enforcement | Medium | Vereist session-refresh na 2FA enable om redirect loops te voorkomen |
-| Redis rate limiting | Laag | Vervang in-memory rate limiter voor horizontale schaalbaarheid |
-| WAF / DDoS | N/A | Infra-niveau, niet code-niveau |
-| Penetration testing | Aanbevolen | Door externe partij |
+- Redis-backed rate limiting (huidige schaal is acceptabel)
+- WAF / DDoS bescherming (infra-niveau)
+- Penetration testing door derden
+- SOC2/ISO27001 compliance

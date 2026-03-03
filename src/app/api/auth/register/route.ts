@@ -3,8 +3,13 @@ import { prisma } from "@/lib/db";
 import { hash } from "bcryptjs";
 import { randomUUID } from "crypto";
 import { sendVerificationEmail } from "@/lib/services/email-verification";
+import { rateLimitLogin } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
+    // Rate limit: 5 registration attempts per minute per IP
+    const rateLimited = rateLimitLogin(req);
+    if (rateLimited) return rateLimited;
+
     try {
         const { name, email, password } = await req.json();
 

@@ -6,12 +6,32 @@ export const authConfig = {
         signIn: "/login",
     },
     callbacks: {
-        async jwt({ token, user }: any) {
+        async jwt({ token, user, trigger }: any) {
             if (user) {
                 token.role = user.role;
                 token.id = user.id;
                 token.twoFactorEnabled = user.twoFactorEnabled ?? false;
             }
+
+            // On session refresh (not initial sign-in), fetch fresh twoFactorEnabled from DB
+            // This prevents stale JWT after enabling/disabling 2FA
+            if (!user && token.id && trigger !== "signIn") {
+                try {
+                    // Dynamic import to avoid Edge bundling issues
+                    const { prisma } = await import("@/lib/db");
+                    const dbUser = await prisma.user.findUnique({
+                        where: { id: token.id as string },
+                        select: { twoFactorEnabled: true, role: true },
+                    });
+                    if (dbUser) {
+                        token.twoFactorEnabled = dbUser.twoFactorEnabled;
+                        token.role = dbUser.role;
+                    }
+                } catch {
+                    // Silently fail — keep existing token values
+                }
+            }
+
             return token;
         },
         async session({ session, token }: any) {

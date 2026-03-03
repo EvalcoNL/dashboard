@@ -62,14 +62,20 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                         where: { email: credentials.email as string },
                     });
 
-                    if (!user) return null;
+                    if (!user) {
+                        auditLog({ action: 'LOGIN_FAILED', details: `Unknown email: ${credentials.email}` });
+                        return null;
+                    }
 
                     const isValid = await compare(
                         credentials.password as string,
                         user.passwordHash
                     );
 
-                    if (!isValid) return null;
+                    if (!isValid) {
+                        auditLog({ userId: user.id, action: 'LOGIN_FAILED', details: 'Invalid password' });
+                        return null;
+                    }
 
                     if (user.twoFactorEnabled) {
                         const token = credentials.twoFactorToken as string;

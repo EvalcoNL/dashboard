@@ -24,10 +24,17 @@ export default middleware((req) => {
         return NextResponse.redirect(loginUrl);
     }
 
-    // Note: 2FA enforcement (redirecting users without 2FA to setup) is disabled
-    // because the JWT twoFactorEnabled flag becomes stale after enabling 2FA,
-    // causing infinite redirect loops. 2FA remains available as an optional feature
-    // in dashboard settings. To enforce, implement a session refresh mechanism.
+    // 2FA enforcement: redirect users without 2FA to setup page
+    // The JWT callback in auth.config.ts refreshes twoFactorEnabled from DB
+    // to prevent stale JWT issues after enabling 2FA
+    const twoFactorEnabled = (session.user as any)?.twoFactorEnabled;
+    const is2FASetupPage = pathname.startsWith("/dashboard/security/2fa-setup");
+    const isSettingsPage = pathname.startsWith("/dashboard/settings");
+    const isApiRoute = pathname.startsWith("/api/");
+
+    if (!twoFactorEnabled && !is2FASetupPage && !isSettingsPage && !isApiRoute && pathname.startsWith("/dashboard")) {
+        return NextResponse.redirect(new URL("/dashboard/security/2fa-setup", req.url));
+    }
 
     return NextResponse.next();
 });
