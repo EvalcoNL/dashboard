@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import GlobalIncidentsClient from "./GlobalIncidentsClient";
+import { getGlobalNotificationSettings } from "@/lib/services/notification-resolver";
 
 export default async function GlobalIncidentsPage() {
     const session = await auth();
@@ -26,5 +27,32 @@ export default async function GlobalIncidentsPage() {
         createdAt: inc.createdAt?.toISOString(),
     }));
 
-    return <GlobalIncidentsClient incidents={serialized} />;
+    // Get all users for the user picker
+    const allUsers = await (prisma as any).user.findMany({
+        select: { id: true, name: true, email: true },
+        orderBy: { name: "asc" }
+    });
+
+    // Get global notification settings
+    const globalSettings = await getGlobalNotificationSettings();
+
+    // Get clients with their notification mode
+    const clients = await (prisma as any).client.findMany({
+        select: {
+            id: true,
+            name: true,
+            notificationMode: true,
+        },
+        orderBy: { name: "asc" }
+    });
+
+    return (
+        <GlobalIncidentsClient
+            incidents={serialized}
+            allUsers={allUsers}
+            globalNotificationUserIds={globalSettings.userIds}
+            globalSlackWebhookUrl={globalSettings.slackWebhookUrl || ""}
+            clients={clients}
+        />
+    );
 }

@@ -6,6 +6,7 @@ import {
     sendSlackAlert,
     sendSlackResolvedAlert
 } from "@/lib/services/email-service";
+import { resolveNotificationConfig } from "@/lib/services/notification-resolver";
 import { formatDistanceStrict } from "date-fns";
 import { nl } from "date-fns/locale";
 
@@ -439,23 +440,20 @@ async function autoCreateIncident(opts: {
         },
     });
 
-    // Fetch the client's notification settings
+    // Resolve notification config (respects global/custom/disabled mode)
+    const notifConfig = await resolveNotificationConfig(opts.clientId);
     const client = await (prisma as any).client.findUnique({
         where: { id: opts.clientId },
-        select: {
-            name: true,
-            slackWebhookUrl: true,
-            notificationUsers: { select: { email: true } }
-        }
+        select: { name: true }
     });
 
-    if (client) {
+    if (client && notifConfig.enabled) {
         const payload = {
             incidentTitle: opts.title,
             incidentCause: `Status ${causeCode}`,
             clientName: client.name,
             startedAt: new Date(),
-            recipients: client.notificationUsers.map((u: any) => u.email)
+            recipients: notifConfig.recipients
         };
 
         const notifiedChannels = [];
@@ -467,8 +465,8 @@ async function autoCreateIncident(opts: {
         }
 
         // Fire & Forget: Send Slack Alert
-        if (client.slackWebhookUrl && opts.config?.notifySlack) {
-            sendSlackAlert(client.slackWebhookUrl, payload).catch(err => console.error(err));
+        if (notifConfig.slackWebhookUrl && opts.config?.notifySlack) {
+            sendSlackAlert(notifConfig.slackWebhookUrl, payload).catch(err => console.error(err));
             notifiedChannels.push("Slack");
         }
 
@@ -524,24 +522,21 @@ export async function autoResolveIncidents(dataSourceId: string, checkedUrl: str
 
         const duration = formatDistanceStrict(inc.startedAt, now, { locale: nl });
 
-        // Trigger Resolution Notifications
+        // Trigger Resolution Notifications (respects global/custom/disabled mode)
+        const notifConfig = await resolveNotificationConfig(dataSource.clientId);
         const client = await (prisma as any).client.findUnique({
             where: { id: dataSource.clientId },
-            select: {
-                name: true,
-                slackWebhookUrl: true,
-                notificationUsers: { select: { email: true } }
-            }
+            select: { name: true }
         });
 
-        if (client) {
+        if (client && notifConfig.enabled) {
             const payload = {
                 incidentTitle: dataSource.name || dataSource.externalId,
                 incidentCause: inc.cause,
                 clientName: client.name,
                 startedAt: inc.startedAt,
                 duration: duration,
-                recipients: client.notificationUsers.map((u: any) => u.email)
+                recipients: notifConfig.recipients
             };
 
             const notifiedChannels = [];
@@ -551,8 +546,8 @@ export async function autoResolveIncidents(dataSourceId: string, checkedUrl: str
                 notifiedChannels.push(`E-mail (${payload.recipients.join(', ')})`);
             }
 
-            if (client.slackWebhookUrl && config.notifySlack) {
-                sendSlackResolvedAlert(client.slackWebhookUrl, payload).catch(err => console.error(err));
+            if (notifConfig.slackWebhookUrl && config.notifySlack) {
+                sendSlackResolvedAlert(notifConfig.slackWebhookUrl, payload).catch(err => console.error(err));
                 notifiedChannels.push("Slack");
             }
 

@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { encrypt } from "@/lib/encryption";
 
 export async function GET(req: NextRequest) {
     const session = await auth();
@@ -54,7 +55,7 @@ export async function GET(req: NextRequest) {
                 type: "GOOGLE_ANALYTICS",
                 category: "APP",
                 externalId: "PENDING",
-                token: refreshToken, // Store the global refresh token for GA
+                token: encrypt(refreshToken), // Store encrypted refresh token for GA
                 active: false,
                 name: "Pending Google Analytics Link"
             }

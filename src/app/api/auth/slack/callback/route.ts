@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { encrypt } from "@/lib/encryption";
 
 export async function GET(req: NextRequest) {
     const session = await auth();
@@ -79,7 +80,7 @@ export async function GET(req: NextRequest) {
         // Save the webhook URL to the Client record
         await prisma.client.update({
             where: { id: clientId },
-            data: { slackWebhookUrl: webhookUrl },
+            data: { slackWebhookUrl: encrypt(webhookUrl) },
         });
 
         // Also save as a formal DataSource so it shows up in "Connected Apps"

@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { encrypt } from "@/lib/encryption";
 import { syncScheduler } from "@/lib/data-integration/sync-scheduler";
 
 export async function GET(req: NextRequest) {
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest) {
                 clientId, type: "MICROSOFT_ADS", category: "APP",
                 externalId: "microsoft-ads",
                 name: "Microsoft Ads",
-                token: refreshToken, active: true,
+                token: encrypt(refreshToken), active: true,
             },
         });
 

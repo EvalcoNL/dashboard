@@ -16,11 +16,11 @@ import { connectionHealthMonitor } from '@/lib/data-integration/connection-healt
  * Protected by CRON_SECRET header.
  */
 export async function GET(request: Request) {
-    // Verify cron secret
+    // Verify cron secret — mandatory, block if not configured
     const cronSecret = request.headers.get('x-cron-secret') || new URL(request.url).searchParams.get('secret');
     const expectedSecret = process.env.CRON_SECRET;
 
-    if (expectedSecret && cronSecret !== expectedSecret) {
+    if (!expectedSecret || cronSecret !== expectedSecret) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -44,7 +44,7 @@ export async function GET(request: Request) {
     } catch (error) {
         console.error('Cron sync tick failed:', error);
         return NextResponse.json(
-            { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
+            { success: false, error: 'Sync cron failed' },
             { status: 500 }
         );
     }

@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { encrypt } from "@/lib/encryption";
 
 export async function GET(req: NextRequest) {
     const session = await auth();
@@ -53,7 +54,7 @@ export async function GET(req: NextRequest) {
                 clientId, type: "PINTEREST", category: "APP",
                 externalId: userData.username || "default",
                 name: `Pinterest - ${userData.username || "Account"}`,
-                token: accessToken, active: true,
+                token: encrypt(accessToken), active: true,
             },
         });
 

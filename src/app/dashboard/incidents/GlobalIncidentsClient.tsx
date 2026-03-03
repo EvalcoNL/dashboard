@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, Search, ShieldAlert, Shield, ShieldCheck } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { CheckCircle2, Search, ShieldAlert, Shield, ShieldCheck, Settings, Bell, Mail, MessageSquare, Save, Globe, ToggleLeft, ToggleRight } from "lucide-react";
 import { useState } from "react";
+import { useNotification } from "@/components/NotificationProvider";
 
 interface Incident {
     id: string;
@@ -16,6 +18,18 @@ interface Incident {
     resolvedAt: string | null;
     client: { id: string; name: string };
     dataSource: { id: string; name: string | null; externalId: string } | null;
+}
+
+interface User {
+    id: string;
+    name: string;
+    email: string;
+}
+
+interface ClientInfo {
+    id: string;
+    name: string;
+    notificationMode: string;
 }
 
 function timeAgo(dateStr: string) {
@@ -57,15 +71,80 @@ function getStatusLabel(status: string) {
     }
 }
 
-export default function GlobalIncidentsClient({ incidents }: { incidents: Incident[] }) {
+function getModeLabel(mode: string) {
+    switch (mode) {
+        case "global": return { label: "Globaal", color: "#6366f1", bg: "rgba(99,102,241,0.1)" };
+        case "custom": return { label: "Eigen", color: "#f59e0b", bg: "rgba(245,158,11,0.1)" };
+        case "disabled": return { label: "Uit", color: "#9ca3af", bg: "rgba(156,163,175,0.1)" };
+        default: return { label: mode, color: "#9ca3af", bg: "rgba(156,163,175,0.1)" };
+    }
+}
+
+export default function GlobalIncidentsClient({
+    incidents,
+    allUsers,
+    globalNotificationUserIds,
+    globalSlackWebhookUrl,
+    clients
+}: {
+    incidents: Incident[];
+    allUsers: User[];
+    globalNotificationUserIds: string[];
+    globalSlackWebhookUrl: string;
+    clients: ClientInfo[];
+}) {
+    const router = useRouter();
+    const { showToast, confirm } = useNotification();
     const [search, setSearch] = useState("");
-    const activeCount = incidents.filter(i => i.status !== "RESOLVED").length;
+    const [activeTab, setActiveTab] = useState<"overview" | "settings">("overview");
+
+    // Settings state
+    const [selectedUserIds, setSelectedUserIds] = useState<string[]>(globalNotificationUserIds);
+    const [slackUrl, setSlackUrl] = useState(globalSlackWebhookUrl);
+    const [saving, setSaving] = useState(false);
+
+    const emailEnabled = selectedUserIds.length > 0;
+    const slackEnabled = slackUrl.trim().length > 0;
+
+    const handleUserToggle = (userId: string) => {
+        if (selectedUserIds.includes(userId)) {
+            setSelectedUserIds(selectedUserIds.filter(id => id !== userId));
+        } else {
+            setSelectedUserIds([...selectedUserIds, userId]);
+        }
+    };
+
+    const handleSaveSettings = async () => {
+        setSaving(true);
+        try {
+            const res = await fetch("/api/settings/notifications", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    userIds: selectedUserIds,
+                    slackWebhookUrl: slackUrl
+                }),
+            });
+            if (!res.ok) throw new Error("Failed to save settings");
+            router.refresh();
+            showToast("success", "Globale instellingen opgeslagen!");
+        } catch (error) {
+            console.error(error);
+            showToast("error", "Er ging iets mis met opslaan.");
+        } finally {
+            setSaving(false);
+        }
+    };
 
     const filtered = incidents.filter(inc =>
         inc.title.toLowerCase().includes(search.toLowerCase()) ||
         inc.cause.toLowerCase().includes(search.toLowerCase()) ||
         inc.client?.name.toLowerCase().includes(search.toLowerCase())
     );
+
+    const globalCount = clients.filter(c => c.notificationMode === "global").length;
+    const customCount = clients.filter(c => c.notificationMode === "custom").length;
+    const disabledCount = clients.filter(c => c.notificationMode === "disabled").length;
 
     return (
         <div style={{ padding: "32px", maxWidth: "1100px", margin: "0 auto" }}>
@@ -74,132 +153,404 @@ export default function GlobalIncidentsClient({ incidents }: { incidents: Incide
                 <h1 style={{ fontSize: "1.8rem", fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>
                     Incidents
                 </h1>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                    <div style={{
-                        display: "flex", alignItems: "center", gap: "8px", padding: "8px 14px",
-                        borderRadius: "8px", border: "1px solid var(--color-border)",
-                        background: "var(--color-surface-elevated)", minWidth: "220px",
-                    }}>
-                        <Search size={15} color="var(--color-text-muted)" />
-                        <input
-                            value={search}
-                            onChange={e => setSearch(e.target.value)}
-                            placeholder="Search"
-                            style={{
-                                background: "transparent", border: "none", outline: "none",
-                                color: "var(--color-text-primary)", fontSize: "0.85rem", width: "100%",
-                            }}
-                        />
-                        <kbd style={{
-                            fontSize: "0.65rem", padding: "2px 6px", borderRadius: "4px",
-                            background: "rgba(99,102,241,0.2)", color: "var(--color-brand)",
-                            fontWeight: 600, fontFamily: "monospace",
-                        }}>/</kbd>
-                    </div>
-                </div>
             </div>
 
-            {/* Table */}
-            {filtered.length === 0 ? (
-                <div style={{
-                    textAlign: "center", padding: "60px", color: "var(--color-text-muted)",
-                    background: "var(--color-surface)", borderRadius: "10px",
-                    border: "1px solid var(--color-border)",
-                }}>
-                    <CheckCircle2 size={36} style={{ marginBottom: "12px", opacity: 0.3 }} />
-                    <div style={{ fontSize: "1rem", fontWeight: 600, color: "var(--color-text-primary)", marginBottom: "6px" }}>
-                        Geen incidenten gevonden
-                    </div>
-                    <div style={{ fontSize: "0.85rem" }}>Alles draait soepel.</div>
-                </div>
-            ) : (
-                <div style={{ borderRadius: "10px", overflow: "hidden", border: "1px solid var(--color-border)" }}>
-                    {/* Table header */}
-                    <div style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 200px 180px",
-                        padding: "10px 20px",
-                        background: "rgba(255,255,255,0.02)",
-                        borderBottom: "1px solid var(--color-border)",
-                        fontSize: "0.7rem", fontWeight: 600, color: "var(--color-text-muted)",
-                        textTransform: "uppercase", letterSpacing: "0.04em",
-                    }}>
-                        <div>Incident</div>
-                        <div>Started at</div>
-                        <div>Length</div>
+            {/* Tabs */}
+            <div style={{
+                display: "flex", gap: "24px", marginBottom: "24px",
+                borderBottom: "1px solid var(--color-border)", paddingBottom: "1px"
+            }}>
+                <button
+                    onClick={() => setActiveTab("overview")}
+                    style={{
+                        background: "none", border: "none", outline: "none", cursor: "pointer",
+                        padding: "0 4px 12px 4px", fontSize: "0.9rem", fontWeight: 600,
+                        color: activeTab === "overview" ? "var(--color-brand)" : "var(--color-text-muted)",
+                        borderBottom: activeTab === "overview" ? "2px solid var(--color-brand)" : "2px solid transparent",
+                        transition: "all 0.15s", display: "flex", alignItems: "center", gap: "8px"
+                    }}
+                >
+                    <ShieldAlert size={16} /> Overzicht
+                </button>
+                <button
+                    onClick={() => setActiveTab("settings")}
+                    style={{
+                        background: "none", border: "none", outline: "none", cursor: "pointer",
+                        padding: "0 4px 12px 4px", fontSize: "0.9rem", fontWeight: 600,
+                        color: activeTab === "settings" ? "var(--color-brand)" : "var(--color-text-muted)",
+                        borderBottom: activeTab === "settings" ? "2px solid var(--color-brand)" : "2px solid transparent",
+                        transition: "all 0.15s", display: "flex", alignItems: "center", gap: "8px"
+                    }}
+                >
+                    <Settings size={16} /> Instellingen
+                </button>
+            </div>
+
+            {activeTab === "overview" ? (
+                <>
+                    {/* Search */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", marginBottom: "16px" }}>
+                        <div style={{
+                            display: "flex", alignItems: "center", gap: "8px", padding: "8px 14px",
+                            borderRadius: "8px", border: "1px solid var(--color-border)",
+                            background: "var(--color-surface-elevated)", minWidth: "220px",
+                        }}>
+                            <Search size={15} color="var(--color-text-muted)" />
+                            <input
+                                value={search}
+                                onChange={e => setSearch(e.target.value)}
+                                placeholder="Search"
+                                style={{
+                                    background: "transparent", border: "none", outline: "none",
+                                    color: "var(--color-text-primary)", fontSize: "0.85rem", width: "100%",
+                                }}
+                            />
+                            <kbd style={{
+                                fontSize: "0.65rem", padding: "2px 6px", borderRadius: "4px",
+                                background: "rgba(99,102,241,0.2)", color: "var(--color-brand)",
+                                fontWeight: 600, fontFamily: "monospace",
+                            }}>/</kbd>
+                        </div>
                     </div>
 
-                    {/* Table rows */}
-                    {filtered.map(inc => {
-                        const { icon: SIcon, color: sColor } = getStatusIcon(inc.status);
-                        const sLabel = getStatusLabel(inc.status);
+                    {/* Table */}
+                    {filtered.length === 0 ? (
+                        <div style={{
+                            textAlign: "center", padding: "60px", color: "var(--color-text-muted)",
+                            background: "var(--color-surface)", borderRadius: "10px",
+                            border: "1px solid var(--color-border)",
+                        }}>
+                            <CheckCircle2 size={36} style={{ marginBottom: "12px", opacity: 0.3 }} />
+                            <div style={{ fontSize: "1rem", fontWeight: 600, color: "var(--color-text-primary)", marginBottom: "6px" }}>
+                                Geen incidenten gevonden
+                            </div>
+                            <div style={{ fontSize: "0.85rem" }}>Alles draait soepel.</div>
+                        </div>
+                    ) : (
+                        <div style={{ borderRadius: "10px", overflow: "hidden", border: "1px solid var(--color-border)" }}>
+                            <div style={{
+                                display: "grid",
+                                gridTemplateColumns: "1fr 200px 180px",
+                                padding: "10px 20px",
+                                background: "rgba(255,255,255,0.02)",
+                                borderBottom: "1px solid var(--color-border)",
+                                fontSize: "0.7rem", fontWeight: 600, color: "var(--color-text-muted)",
+                                textTransform: "uppercase", letterSpacing: "0.04em",
+                            }}>
+                                <div>Incident</div>
+                                <div>Started at</div>
+                                <div>Length</div>
+                            </div>
 
-                        return (
-                            <Link key={inc.id} href={`/dashboard/projects/${inc.clientId}/monitoring/incidents/${inc.id}`} style={{ textDecoration: "none" }}>
-                                <div style={{
-                                    display: "grid",
-                                    gridTemplateColumns: "1fr 200px 180px",
-                                    padding: "16px 20px",
-                                    borderBottom: "1px solid rgba(255,255,255,0.03)",
-                                    background: "var(--color-surface)",
-                                    alignItems: "center",
-                                    transition: "background 0.15s",
-                                    cursor: "pointer",
-                                }} className="incident-row">
-                                    {/* Incident info */}
-                                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                            {filtered.map(inc => {
+                                const { icon: SIcon, color: sColor } = getStatusIcon(inc.status);
+
+                                return (
+                                    <Link key={inc.id} href={`/dashboard/projects/${inc.clientId}/monitoring/incidents/${inc.id}`} style={{ textDecoration: "none" }}>
                                         <div style={{
-                                            width: "32px", height: "32px", borderRadius: "8px",
-                                            background: `${sColor}15`,
-                                            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                                        }}>
-                                            <SIcon size={16} color={sColor} />
+                                            display: "grid",
+                                            gridTemplateColumns: "1fr 200px 180px",
+                                            padding: "16px 20px",
+                                            borderBottom: "1px solid rgba(255,255,255,0.03)",
+                                            background: "var(--color-surface)",
+                                            alignItems: "center",
+                                            transition: "background 0.15s",
+                                            cursor: "pointer",
+                                        }} className="incident-row">
+                                            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                                <div style={{
+                                                    width: "32px", height: "32px", borderRadius: "8px",
+                                                    background: `${sColor}15`,
+                                                    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                                                }}>
+                                                    <SIcon size={16} color={sColor} />
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--color-text-primary)", marginBottom: "2px" }}>
+                                                        {inc.title}
+                                                    </div>
+                                                    <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                                                        {inc.cause}
+                                                        {inc.client && <span> · {inc.client.name}</span>}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
+                                                {timeAgo(inc.startedAt)}
+                                            </div>
+
+                                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                                {inc.status === "ONGOING" && (
+                                                    <>
+                                                        <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#ef4444" }} />
+                                                        <span style={{ fontSize: "0.8rem", color: "#ef4444", fontWeight: 500 }}>Ongoing</span>
+                                                    </>
+                                                )}
+                                                {inc.status === "ACKNOWLEDGED" && (
+                                                    <>
+                                                        <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#f59e0b" }} />
+                                                        <span style={{ fontSize: "0.8rem", color: "#f59e0b", fontWeight: 500 }}>Acknowledged</span>
+                                                    </>
+                                                )}
+                                                {inc.status === "RESOLVED" && (
+                                                    <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
+                                                        {formatDuration(inc.startedAt, inc.resolvedAt)}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </Link>
+                                );
+                            })}
+                        </div>
+                    )}
+                </>
+            ) : (
+                /* ── Settings Tab ── */
+                <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+                    {/* Global Notification Settings */}
+                    <div style={{
+                        background: "var(--color-surface-elevated)",
+                        borderRadius: "10px",
+                        border: "1px solid var(--color-border)",
+                        padding: "32px"
+                    }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "24px" }}>
+                            <Bell size={24} color="var(--color-brand)" />
+                            <div>
+                                <h2 style={{ fontSize: "1.2rem", fontWeight: 600, margin: 0, color: "var(--color-text-primary)" }}>
+                                    Globale Notificaties
+                                </h2>
+                                <p style={{ fontSize: "0.85rem", color: "var(--color-text-muted)", margin: "4px 0 0 0" }}>
+                                    Standaard notificatie-instellingen die door alle projecten worden geërfd (tenzij individueel overschreven).
+                                </p>
+                            </div>
+                        </div>
+
+                        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                            {/* Email Settings */}
+                            <div style={{
+                                display: "flex", flexDirection: "column",
+                                padding: "20px", background: "rgba(0,0,0,0.1)", borderRadius: "8px",
+                                border: "1px solid rgba(255,255,255,0.05)"
+                            }}>
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+                                    <div style={{ display: "flex", gap: "16px" }}>
+                                        <div style={{ width: "40px", height: "40px", borderRadius: "8px", background: "rgba(99,102,241,0.1)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-brand)" }}>
+                                            <Mail size={18} />
                                         </div>
                                         <div>
-                                            <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--color-text-primary)", marginBottom: "2px" }}>
-                                                {inc.title}
-                                            </div>
-                                            <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-                                                {inc.cause}
-                                                {inc.client && <span> · {inc.client.name}</span>}
+                                            <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--color-text-primary)" }}>E-mail Notificaties</div>
+                                            <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", marginTop: "4px" }}>
+                                                Selecteer de standaard ontvangers voor alle projecten.
                                             </div>
                                         </div>
                                     </div>
-
-                                    {/* Started at */}
-                                    <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
-                                        {timeAgo(inc.startedAt)}
-                                    </div>
-
-                                    {/* Length / Status */}
-                                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                        {inc.status === "ONGOING" && (
-                                            <>
-                                                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#ef4444" }} />
-                                                <span style={{ fontSize: "0.8rem", color: "#ef4444", fontWeight: 500 }}>Ongoing</span>
-                                            </>
-                                        )}
-                                        {inc.status === "ACKNOWLEDGED" && (
-                                            <>
-                                                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#f59e0b" }} />
-                                                <span style={{ fontSize: "0.8rem", color: "#f59e0b", fontWeight: 500 }}>Acknowledged</span>
-                                            </>
-                                        )}
-                                        {inc.status === "RESOLVED" && (
-                                            <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
-                                                {formatDuration(inc.startedAt, inc.resolvedAt)}
-                                            </span>
-                                        )}
+                                    <div style={{ fontSize: "0.8rem", color: emailEnabled ? "var(--color-brand)" : "var(--color-text-muted)", fontWeight: 600 }}>
+                                        {emailEnabled ? "Ingeschakeld" : "Uitgeschakeld"}
                                     </div>
                                 </div>
-                            </Link>
-                        );
-                    })}
+
+                                <div style={{
+                                    display: "grid", gap: "8px", paddingLeft: "56px",
+                                    borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: "16px"
+                                }}>
+                                    {allUsers.map(user => (
+                                        <label key={user.id} style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedUserIds.includes(user.id)}
+                                                onChange={() => handleUserToggle(user.id)}
+                                                style={{ cursor: "pointer", width: "16px", height: "16px", accentColor: "var(--color-brand)" }}
+                                            />
+                                            <div>
+                                                <div style={{ fontSize: "0.85rem", color: "var(--color-text-primary)", fontWeight: 500 }}>{user.name}</div>
+                                                <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>{user.email}</div>
+                                            </div>
+                                        </label>
+                                    ))}
+                                    {allUsers.length === 0 && (
+                                        <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>Geen systeemgebruikers gevonden.</div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Slack Settings */}
+                            <div style={{
+                                display: "flex", flexDirection: "column",
+                                padding: "20px", background: "rgba(0,0,0,0.1)", borderRadius: "8px",
+                                border: "1px solid rgba(255,255,255,0.05)"
+                            }}>
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+                                    <div style={{ display: "flex", gap: "16px" }}>
+                                        <div style={{ width: "40px", height: "40px", borderRadius: "8px", background: "rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-secondary)" }}>
+                                            <MessageSquare size={18} />
+                                        </div>
+                                        <div>
+                                            <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--color-text-primary)" }}>Slack Waarschuwingen</div>
+                                            <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", marginTop: "4px" }}>
+                                                Koppel een Slack Webhook URL om updates in een kanaal te ontvangen.
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div style={{ fontSize: "0.8rem", color: slackEnabled ? "var(--color-brand)" : "var(--color-text-muted)", fontWeight: 600 }}>
+                                        {slackEnabled ? "Geconfigureerd" : "Niet geconfigureerd"}
+                                    </div>
+                                </div>
+
+                                <div style={{ paddingLeft: "56px" }}>
+                                    {slackEnabled ? (
+                                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                            <div style={{
+                                                flex: 1, maxWidth: "400px", padding: "8px 12px", borderRadius: "6px",
+                                                background: "rgba(16, 185, 129, 0.05)", border: "1px solid rgba(16, 185, 129, 0.2)",
+                                                color: "var(--color-text-primary)", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "8px"
+                                            }}>
+                                                <ShieldCheck size={16} color="#10b981" />
+                                                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                    Verbonden met Slack Webhook
+                                                </span>
+                                            </div>
+                                            <button
+                                                onClick={async () => {
+                                                    const confirmed = await confirm({
+                                                        title: "Slack ontkoppelen",
+                                                        message: "Weet je zeker dat je de globale Slack koppeling wilt verwijderen? Projecten met globale instellingen zullen geen Slack meldingen meer ontvangen.",
+                                                        confirmLabel: "Ja, ontkoppelen",
+                                                        type: "danger"
+                                                    });
+                                                    if (confirmed) {
+                                                        setSlackUrl("");
+                                                    }
+                                                }}
+                                                style={{
+                                                    padding: "8px 12px", borderRadius: "6px", background: "rgba(239, 68, 68, 0.1)",
+                                                    border: "1px solid rgba(239, 68, 68, 0.2)", color: "#ef4444",
+                                                    fontSize: "0.8rem", fontWeight: 600, cursor: "pointer", transition: "all 0.15s"
+                                                }}
+                                                className="hover-opacity"
+                                            >
+                                                Ontkoppelen
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            <button
+                                                onClick={() => {
+                                                    const url = prompt("Voer de Slack Webhook URL in:", "https://hooks.slack.com/services/...");
+                                                    if (url && url.startsWith("https://hooks.slack.com/")) {
+                                                        setSlackUrl(url);
+                                                    } else if (url) {
+                                                        showToast("error", "Ongeldige Slack Webhook URL. Gebruik een URL die begint met https://hooks.slack.com/");
+                                                    }
+                                                }}
+                                                style={{
+                                                    display: "inline-flex", alignItems: "center", gap: "8px",
+                                                    padding: "8px 16px", borderRadius: "6px", background: "var(--color-surface-hover)",
+                                                    border: "1px solid var(--color-border)", color: "var(--color-text-primary)",
+                                                    fontSize: "0.85rem", fontWeight: 600, cursor: "pointer", transition: "all 0.15s"
+                                                }}
+                                                className="hover-bg-int"
+                                            >
+                                                Slack Koppelen
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Save Button */}
+                            <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "4px" }}>
+                                <button
+                                    onClick={handleSaveSettings}
+                                    disabled={saving}
+                                    style={{
+                                        display: "inline-flex", alignItems: "center", gap: "8px",
+                                        padding: "8px 16px", fontSize: "0.85rem", fontWeight: 600,
+                                        background: "var(--color-brand)", color: "#fff",
+                                        border: "none", borderRadius: "6px",
+                                        cursor: saving ? "not-allowed" : "pointer",
+                                        opacity: saving ? 0.7 : 1
+                                    }}
+                                >
+                                    <Save size={16} />
+                                    {saving ? "Opslaan..." : "Instellingen Opslaan"}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Per-Project Overview */}
+                    <div style={{
+                        background: "var(--color-surface-elevated)",
+                        borderRadius: "10px",
+                        border: "1px solid var(--color-border)",
+                        padding: "32px"
+                    }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
+                            <Globe size={20} color="var(--color-brand)" />
+                            <div>
+                                <h3 style={{ fontSize: "1rem", fontWeight: 600, margin: 0, color: "var(--color-text-primary)" }}>
+                                    Project Overzicht
+                                </h3>
+                                <p style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", margin: "2px 0 0 0" }}>
+                                    Elk project kan de globale instellingen erven of eigen instellingen gebruiken.
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Summary badges */}
+                        <div style={{ display: "flex", gap: "16px", marginBottom: "16px" }}>
+                            <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: "6px" }}>
+                                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#6366f1" }} />
+                                {globalCount} globaal
+                            </div>
+                            <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: "6px" }}>
+                                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#f59e0b" }} />
+                                {customCount} eigen
+                            </div>
+                            <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: "6px" }}>
+                                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#9ca3af" }} />
+                                {disabledCount} uit
+                            </div>
+                        </div>
+
+                        {/* Client list */}
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                            {clients.map(client => {
+                                const mode = getModeLabel(client.notificationMode);
+                                return (
+                                    <Link key={client.id} href={`/dashboard/projects/${client.id}/monitoring/incidents?tab=settings`} style={{ textDecoration: "none" }}>
+                                        <div style={{
+                                            display: "flex", alignItems: "center", justifyContent: "space-between",
+                                            padding: "12px 16px", borderRadius: "8px",
+                                            background: "rgba(0,0,0,0.1)", transition: "background 0.15s",
+                                            cursor: "pointer"
+                                        }} className="client-row">
+                                            <div style={{ fontSize: "0.9rem", fontWeight: 500, color: "var(--color-text-primary)" }}>
+                                                {client.name}
+                                            </div>
+                                            <span style={{
+                                                fontSize: "0.7rem", fontWeight: 600,
+                                                padding: "3px 10px", borderRadius: "99px",
+                                                background: mode.bg, color: mode.color,
+                                                textTransform: "uppercase", letterSpacing: "0.03em"
+                                            }}>
+                                                {mode.label}
+                                            </span>
+                                        </div>
+                                    </Link>
+                                );
+                            })}
+                        </div>
+                    </div>
                 </div>
             )}
 
             <style jsx>{`
                 .incident-row:hover { background: var(--color-surface-hover) !important; }
+                .client-row:hover { background: rgba(255,255,255,0.03) !important; }
             `}</style>
         </div>
     );

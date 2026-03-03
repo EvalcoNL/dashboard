@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { auth } from "@/lib/auth";
+import { requireDataSourceAccess } from "@/lib/api-guard";
 import { NextResponse } from "next/server";
 
 export async function PATCH(
@@ -7,18 +7,15 @@ export async function PATCH(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const session = await auth();
-        if (!session) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
-
         const { id } = await params;
+        const [, authError] = await requireDataSourceAccess(id);
+        if (authError) return authError;
+
         const body = await request.json();
 
         // Ensure we're only updating allowed fields
         const { name, externalId, config, active } = body;
 
-        // Verify ownership (or could be left to broader org rules, but let's just update the specific record)
         const updatedSource = await prisma.dataSource.update({
             where: { id },
             data: {
@@ -33,8 +30,32 @@ export async function PATCH(
     } catch (error: any) {
         console.error("Failed to update data source:", error);
         return NextResponse.json(
-            { error: error.message || "Failed to update data source" },
+            { error: "Failed to update data source" },
             { status: 500 }
         );
     }
 }
+
+export async function DELETE(
+    _request: Request,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    try {
+        const { id } = await params;
+        const [, authError] = await requireDataSourceAccess(id);
+        if (authError) return authError;
+
+        await prisma.dataSource.delete({
+            where: { id }
+        });
+
+        return NextResponse.json({ success: true });
+    } catch (error: any) {
+        console.error("Failed to delete data source:", error);
+        return NextResponse.json(
+            { error: "Failed to delete data source" },
+            { status: 500 }
+        );
+    }
+}
+

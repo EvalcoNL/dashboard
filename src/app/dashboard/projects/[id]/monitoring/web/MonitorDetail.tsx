@@ -303,9 +303,9 @@ export default function MonitorDetail({
                                 </div>
                                 <div style={{ marginBottom: "14px" }}>
                                     <div style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.03em" }}>Domein</div>
-                                    <a href={`https://${domain.externalId}`} target="_blank" rel="noopener noreferrer"
+                                    <a href={domain.externalId.startsWith('http') ? domain.externalId : `https://${domain.externalId}`} target="_blank" rel="noopener noreferrer"
                                         style={{ color: "var(--color-brand)", textDecoration: "none", fontSize: "0.85rem", fontWeight: 500, display: "flex", alignItems: "center", gap: "4px" }}>
-                                        {domain.externalId} <ExternalLink size={12} />
+                                        {domain.externalId.replace(/^https?:\/\//, '')} <ExternalLink size={12} />
                                     </a>
                                 </div>
                                 {stats.config.sslDetails && !stats.config.sslDetails.error && (
@@ -383,7 +383,7 @@ export default function MonitorDetail({
                             <label style={fieldLabelStyle}>URL om te monitoren</label>
                             <input
                                 type="text"
-                                value={`https://${domain.externalId}`}
+                                value={domain.externalId.startsWith('http') ? domain.externalId : `https://${domain.externalId}`}
                                 readOnly
                                 style={{ ...inputStyle, opacity: 0.7, cursor: "default" }}
                             />
@@ -829,8 +829,8 @@ export default function MonitorDetail({
 
                 {/* ─── PAGES TAB ─── */}
                 {tab === 'pages' && (() => {
-                    const mainDomain = domain.externalId;
-                    const mainUrl = `https://${mainDomain}`;
+                    const mainDomain = domain.externalId.replace(/^https?:\/\//, '');
+                    const mainUrl = domain.externalId.startsWith('http') ? domain.externalId : `https://${domain.externalId}`;
                     const lastCheck = (domain.uptimeChecks || [])[0];
                     const mainStatusColor = !domain.active ? "#9ca3af" : lastCheck ? (lastCheck.status === "UP" ? "#10b981" : "#ef4444") : "#9ca3af";
                     const mainStatusOk = lastCheck?.status === "UP";

@@ -59,7 +59,10 @@ export default function IncidentsClient({
     incidents,
     allUsers,
     notificationUsers,
-    initialSlackWebhookUrl
+    initialSlackWebhookUrl,
+    initialNotificationMode,
+    hasGlobalSettings,
+    currentUserEmail
 }: {
     clientId: string;
     clientName: string;
@@ -67,6 +70,9 @@ export default function IncidentsClient({
     allUsers: User[];
     notificationUsers: User[];
     initialSlackWebhookUrl: string;
+    initialNotificationMode: string;
+    hasGlobalSettings: boolean;
+    currentUserEmail: string;
 }) {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -76,12 +82,20 @@ export default function IncidentsClient({
     const [search, setSearch] = useState("");
     const [activeTab, setActiveTab] = useState<"overview" | "settings">("overview");
 
-    const [selectedUserIds, setSelectedUserIds] = useState<string[]>(
-        notificationUsers.map(u => u.id)
-    );
+    // Auto-select current user if no notification users are configured
+    const currentUser = allUsers.find(u => u.email === currentUserEmail);
+    const initialUserIds = notificationUsers.length > 0
+        ? notificationUsers.map(u => u.id)
+        : currentUser ? [currentUser.id] : [];
+
+    const [selectedUserIds, setSelectedUserIds] = useState<string[]>(initialUserIds);
     const [slackUrl, setSlackUrl] = useState(initialSlackWebhookUrl);
+    // If no global settings exist, force mode to "custom" instead of "global"
+    const effectiveInitialMode = (!hasGlobalSettings && initialNotificationMode === "global") ? "custom" : initialNotificationMode;
+    const [notificationMode, setNotificationMode] = useState(effectiveInitialMode);
     const [saving, setSaving] = useState(false);
 
+    const isCustomMode = notificationMode === "custom";
     const emailEnabled = selectedUserIds.length > 0;
     const slackEnabled = slackUrl.trim().length > 0;
 
@@ -101,7 +115,8 @@ export default function IncidentsClient({
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     userIds: selectedUserIds,
-                    slackWebhookUrl: slackUrl
+                    slackWebhookUrl: slackUrl,
+                    notificationMode: notificationMode
                 }),
             });
             if (!res.ok) throw new Error("Failed to save settings");
@@ -336,7 +351,43 @@ export default function IncidentsClient({
                         </div>
                     </div>
 
-                    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                    {/* Notification Mode Selector */}
+                    <div style={{
+                        display: "flex", gap: "8px", marginBottom: "24px",
+                        padding: "4px", background: "rgba(0,0,0,0.2)", borderRadius: "10px",
+                        border: "1px solid rgba(255,255,255,0.05)"
+                    }}>
+                        {[
+                            ...(hasGlobalSettings ? [{ value: "global", label: "Globale instellingen", desc: "Erft standaard notificaties" }] : []),
+                            { value: "custom", label: "Eigen instellingen", desc: "Aangepaste configuratie" },
+                            { value: "disabled", label: "Uitgeschakeld", desc: "Geen notificaties" },
+                        ].map(opt => (
+                            <button
+                                key={opt.value}
+                                onClick={() => setNotificationMode(opt.value)}
+                                style={{
+                                    flex: 1, padding: "12px 16px", borderRadius: "8px",
+                                    border: "none", cursor: "pointer",
+                                    background: notificationMode === opt.value ? "var(--color-surface-elevated)" : "transparent",
+                                    boxShadow: notificationMode === opt.value ? "0 2px 8px rgba(0,0,0,0.2)" : "none",
+                                    transition: "all 0.2s"
+                                }}
+                            >
+                                <div style={{
+                                    fontSize: "0.85rem", fontWeight: 600,
+                                    color: notificationMode === opt.value ? "var(--color-brand)" : "var(--color-text-muted)"
+                                }}>{opt.label}</div>
+                                <div style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", marginTop: "2px" }}>{opt.desc}</div>
+                            </button>
+                        ))}
+                    </div>
+
+                    <div style={{
+                        display: "flex", flexDirection: "column", gap: "20px",
+                        opacity: isCustomMode ? 1 : 0.4,
+                        pointerEvents: isCustomMode ? "auto" : "none",
+                        transition: "opacity 0.2s"
+                    }}>
                         {/* Email Settings */}
                         <div style={{
                             display: "flex", flexDirection: "column",
@@ -467,9 +518,11 @@ export default function IncidentsClient({
                                 )}
                             </div>
                         </div>
+                    </div>
 
-                        {/* Save Actions */}
-                        <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "12px" }}>
+                    {/* Save Actions — always clickable */}
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "12px" }}>
+                        {isCustomMode && (
                             <button
                                 onClick={handleTestNotifications}
                                 disabled={testingNotifs}
@@ -486,23 +539,23 @@ export default function IncidentsClient({
                                 <Bell size={16} />
                                 {testingNotifs ? "Testen..." : "Test Notificaties"}
                             </button>
-                            <button
-                                onClick={handleSaveSettings}
-                                disabled={saving}
-                                className="glass-card"
-                                style={{
-                                    display: "inline-flex", alignItems: "center", gap: "8px",
-                                    padding: "8px 16px", fontSize: "0.85rem", fontWeight: 600,
-                                    background: "var(--color-brand)", color: "#fff",
-                                    border: "none", borderRadius: "6px",
-                                    cursor: saving ? "not-allowed" : "pointer",
-                                    opacity: saving ? 0.7 : 1
-                                }}
-                            >
-                                <Save size={16} />
-                                {saving ? "Opslaan..." : "Instellingen Opslaan"}
-                            </button>
-                        </div>
+                        )}
+                        <button
+                            onClick={handleSaveSettings}
+                            disabled={saving}
+                            className="glass-card"
+                            style={{
+                                display: "inline-flex", alignItems: "center", gap: "8px",
+                                padding: "8px 16px", fontSize: "0.85rem", fontWeight: 600,
+                                background: "var(--color-brand)", color: "#fff",
+                                border: "none", borderRadius: "6px",
+                                cursor: saving ? "not-allowed" : "pointer",
+                                opacity: saving ? 0.7 : 1
+                            }}
+                        >
+                            <Save size={16} />
+                            {saving ? "Opslaan..." : "Instellingen Opslaan"}
+                        </button>
                     </div>
                 </div>
             )}

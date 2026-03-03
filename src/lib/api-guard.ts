@@ -100,3 +100,72 @@ export async function requireDashboardAccess(dashboardId: string): Promise<[Auth
 
     return [{ ...session, dashboardClientId: dashboard.clientId } as AuthSession & { dashboardClientId: string }, null];
 }
+
+/**
+ * Require authentication AND verify the user has access to the given project (client).
+ * The project ID is actually the client ID in the data model.
+ */
+export async function requireProjectAccess(projectId: string): Promise<[AuthSession, null] | [null, NextResponse]> {
+    return requireClientAccess(projectId);
+}
+
+/**
+ * Require authentication AND verify the user has access to the data source's client.
+ * Returns the session + the data source record.
+ */
+export async function requireDataSourceAccess(dataSourceId: string): Promise<[AuthSession & { dataSource: { id: string; clientId: string } }, null] | [null, NextResponse]> {
+    const [session, authError] = await requireAuth();
+    if (authError) return [null, authError];
+
+    const dataSource = await prisma.dataSource.findUnique({
+        where: { id: dataSourceId },
+        select: { id: true, clientId: true },
+    });
+
+    if (!dataSource) {
+        return [null, NextResponse.json(
+            { success: false, error: 'Data source not found' },
+            { status: 404 }
+        )];
+    }
+
+    // Admins can access everything
+    if (session.user.role === 'ADMIN') {
+        return [{ ...session, dataSource } as AuthSession & { dataSource: { id: string; clientId: string } }, null];
+    }
+
+    // Check if user has access to this client
+    const client = await prisma.client.findFirst({
+        where: {
+            id: dataSource.clientId,
+            users: { some: { id: session.user.id } },
+        },
+        select: { id: true },
+    });
+
+    if (!client) {
+        return [null, NextResponse.json(
+            { success: false, error: 'Access denied' },
+            { status: 403 }
+        )];
+    }
+
+    return [{ ...session, dataSource } as AuthSession & { dataSource: { id: string; clientId: string } }, null];
+}
+
+/**
+ * Require ADMIN role. Returns the session or a 403 response.
+ */
+export async function requireAdmin(): Promise<[AuthSession, null] | [null, NextResponse]> {
+    const [session, authError] = await requireAuth();
+    if (authError) return [null, authError];
+
+    if (session.user.role !== 'ADMIN') {
+        return [null, NextResponse.json(
+            { success: false, error: 'Admin access required' },
+            { status: 403 }
+        )];
+    }
+
+    return [session, null];
+}

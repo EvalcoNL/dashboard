@@ -10,9 +10,10 @@ export async function GET(req: NextRequest) {
     const rateLimited = rateLimitCron(req);
     if (rateLimited) return rateLimited;
 
-    // Verify cron secret to prevent unauthorized triggers
+    // Verify cron secret — mandatory, block if not configured
     const authHeader = req.headers.get("authorization");
-    if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    const cronSecret = process.env.CRON_SECRET;
+    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -41,14 +42,22 @@ export async function GET(req: NextRequest) {
 
             // Check if it's time to scan this domain again
             if (msSinceLastSync >= (intervalMinutes * 60 * 1000) - 5000) { // 5s buffer
+                try {
+                    // Execute the centralized check
+                    const result = await performUptimeCheck(domain.id);
 
-                // Execture the centralized check
-                const result = await performUptimeCheck(domain.id);
-
-                results.push({
-                    domain: domain.externalId,
-                    ...result
-                });
+                    results.push({
+                        domain: domain.externalId,
+                        ...result
+                    });
+                } catch (domainError: any) {
+                    console.error(`[CRON] Uptime check failed for ${domain.externalId}:`, domainError?.message || domainError);
+                    results.push({
+                        domain: domain.externalId,
+                        status: "ERROR",
+                        error: domainError?.message || "Unknown error"
+                    });
+                }
             }
         }
 

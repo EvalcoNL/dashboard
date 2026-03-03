@@ -2,6 +2,8 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { Prisma } from "@prisma/client";
+import { auditLog } from "@/lib/audit";
 
 export async function POST() {
     const session = await auth();
@@ -14,9 +16,12 @@ export async function POST() {
             where: { id: session.user.id },
             data: {
                 twoFactorEnabled: false,
-                twoFactorSecret: null
+                twoFactorSecret: null,
+                backupCodes: Prisma.JsonNull
             }
         });
+
+        auditLog({ userId: session.user.id, action: '2FA_DISABLED' });
 
         return NextResponse.json({ message: "Two-factor authentication disabled successfully" });
     } catch (error: any) {

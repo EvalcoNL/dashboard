@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { encrypt } from "@/lib/encryption";
 
 export async function GET(req: NextRequest) {
     const session = await auth();
@@ -53,7 +54,7 @@ export async function GET(req: NextRequest) {
                     clientId, type: "GOOGLE_BUSINESS", category: "APP",
                     externalId: "PENDING",
                     name: "Google Business Profile (geen accounts gevonden)",
-                    token: refreshToken, active: false,
+                    token: encrypt(refreshToken), active: false,
                 },
             });
             return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/data/sources?error=NoBusinessAccounts`);
@@ -76,7 +77,7 @@ export async function GET(req: NextRequest) {
                         clientId, type: "GOOGLE_BUSINESS", category: "APP",
                         externalId: accountId,
                         name: accountName,
-                        token: refreshToken, active: true,
+                        token: encrypt(refreshToken), active: true,
                     },
                 });
             }
@@ -89,7 +90,7 @@ export async function GET(req: NextRequest) {
                 clientId, type: "GOOGLE_BUSINESS", category: "APP",
                 externalId: "PENDING",
                 name: "Pending Google Business Profile Link",
-                token: refreshToken, active: false,
+                token: encrypt(refreshToken), active: false,
                 config: {
                     accounts: accounts.map((a: any) => ({
                         id: a.name?.split("/").pop() || "unknown",

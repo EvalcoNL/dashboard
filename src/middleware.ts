@@ -24,6 +24,11 @@ export default middleware((req) => {
         return NextResponse.redirect(loginUrl);
     }
 
+    // Note: 2FA enforcement (redirecting users without 2FA to setup) is disabled
+    // because the JWT twoFactorEnabled flag becomes stale after enabling 2FA,
+    // causing infinite redirect loops. 2FA remains available as an optional feature
+    // in dashboard settings. To enforce, implement a session refresh mechanism.
+
     return NextResponse.next();
 });
 

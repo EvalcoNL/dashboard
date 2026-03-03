@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useParams } from "next/navigation";
 import { useNotification } from "@/components/NotificationProvider";
 import {
     RefreshCw, Clock, Play, Pause,
     CheckCircle, AlertTriangle, XCircle, Zap,
     RotateCcw, Loader2, Database, X,
-    Calendar, History, Timer, ChevronRight, Settings, AlertOctagon,
+    Calendar, History, Timer, ChevronRight, Settings, AlertOctagon, Globe, ExternalLink, ChevronDown,
 } from "lucide-react";
 
 interface SyncJob {
@@ -82,8 +83,16 @@ export default function SyncClient() {
     const [syncingAll, setSyncingAll] = useState(false);
     const [selectedSource, setSelectedSource] = useState<string | null>(null);
     const [backfillFrom, setBackfillFrom] = useState("");
+    const [backfillExpanded, setBackfillExpanded] = useState(false);
     const [expandedJobError, setExpandedJobError] = useState<string | null>(null);
     const { confirm, showToast } = useNotification();
+
+    const isWebSource = (s: DataSource) => ['DOMAIN', 'WEBSITE'].includes(s.type);
+
+    const getUptimeInterval = (s: DataSource): number => {
+        const cfg = s as any;
+        return cfg.config?.uptimeInterval || 5;
+    };
 
     const fetchData = useCallback(async () => {
         try {
@@ -331,7 +340,7 @@ export default function SyncClient() {
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
                         <thead>
                             <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                                {["Bron", "Status", "Interval", "Laatste Sync", "Records", ""].map(h => (
+                                {["Bron", "Type", "Status", "Interval", "Laatste Sync", "Records", ""].map(h => (
                                     <th key={h} style={{
                                         padding: "10px 16px", textAlign: "left", fontSize: "0.7rem", fontWeight: 600,
                                         color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em",
@@ -371,6 +380,16 @@ export default function SyncClient() {
                                             </div>
                                         </td>
                                         <td style={{ padding: "12px 16px" }}>
+                                            <span style={{
+                                                fontSize: "0.75rem", fontWeight: 500,
+                                                padding: "3px 8px", borderRadius: "4px",
+                                                background: "rgba(99,102,241,0.08)",
+                                                color: "var(--color-text-secondary)",
+                                            }}>
+                                                {source.connector?.name || CONNECTOR_NAMES[source.type] || source.type}
+                                            </span>
+                                        </td>
+                                        <td style={{ padding: "12px 16px" }}>
                                             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                                                 {statusBadge(source.syncStatus)}
                                                 {showError && source.syncStatus !== "ERROR" && (
@@ -385,7 +404,10 @@ export default function SyncClient() {
                                             </div>
                                         </td>
                                         <td style={{ padding: "12px 16px", fontSize: "0.85rem", color: "var(--color-text-secondary)" }}>
-                                            {getIntervalLabel(source.syncInterval)}
+                                            {isWebSource(source)
+                                                ? `${getUptimeInterval(source)} min`
+                                                : getIntervalLabel(source.syncInterval)
+                                            }
                                         </td>
                                         <td style={{ padding: "12px 16px", fontSize: "0.85rem", color: "var(--color-text-secondary)" }}>
                                             {formatTimeAgo(source.lastSyncedAt || source.lastSyncAt)}
@@ -412,14 +434,14 @@ export default function SyncClient() {
                 </div>
             )}
 
-            {/* ═══ SIDE PANEL (slide-out right) ═══ */}
-            {selected && (
+            {/* ═══ SIDE PANEL (slide-out right) — rendered via Portal ═══ */}
+            {selected && typeof document !== 'undefined' && createPortal(
                 <>
                     {/* Backdrop */}
                     <div
                         onClick={() => setSelectedSource(null)}
                         style={{
-                            position: "fixed", inset: 0, zIndex: 998,
+                            position: "fixed", inset: 0, zIndex: 1050,
                             background: "rgba(0,0,0,0.4)", backdropFilter: "blur(2px)",
                             animation: "fadeIn 0.2s ease",
                         }}
@@ -427,7 +449,7 @@ export default function SyncClient() {
                     {/* Panel */}
                     <div style={{
                         position: "fixed", top: 0, right: 0, bottom: 0,
-                        width: "480px", maxWidth: "90vw", zIndex: 999,
+                        width: "480px", maxWidth: "90vw", zIndex: 1051,
                         background: "var(--color-surface-elevated, #1a1d2e)",
                         borderLeft: "1px solid rgba(255,255,255,0.08)",
                         overflowY: "auto",
@@ -496,160 +518,228 @@ export default function SyncClient() {
                             )}
 
                             {/* ─── Sync Actions ─── */}
-                            <div>
-                                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
-                                    <Zap size={16} style={{ color: "var(--color-brand)" }} />
-                                    <h3 style={{ fontWeight: 600, fontSize: "0.9rem" }}>Synchroniseren</h3>
-                                </div>
-                                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                                    {/* Incremental */}
-                                    <button
-                                        onClick={() => triggerSync(selected.id, 'INCREMENTAL')}
-                                        disabled={syncing[selected.id]}
-                                        style={actionBtnStyle("#6366f1", "rgba(99, 102, 241, 0.08)")}
-                                    >
-                                        <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1 }}>
-                                            {syncing[selected.id]
-                                                ? <Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} />
-                                                : <RefreshCw size={18} />
-                                            }
-                                            <div style={{ textAlign: "left" }}>
-                                                <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>Incrementeel synchroniseren</div>
-                                                <div style={{ fontSize: "0.72rem", opacity: 0.7, fontWeight: 400 }}>Alleen nieuwe data ophalen sinds laatste sync</div>
-                                            </div>
-                                        </div>
-                                    </button>
-                                    {/* Delta */}
-                                    <button
-                                        onClick={() => triggerSync(selected.id, 'DELTA')}
-                                        disabled={syncing[selected.id]}
-                                        style={actionBtnStyle("#10b981", "rgba(16, 185, 129, 0.08)")}
-                                    >
-                                        <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1 }}>
-                                            <Zap size={18} />
-                                            <div style={{ textAlign: "left" }}>
-                                                <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>Delta sync</div>
-                                                <div style={{ fontSize: "0.72rem", opacity: 0.7, fontWeight: 400 }}>Vergelijk data en werk alleen gewijzigde rijen bij</div>
-                                            </div>
-                                        </div>
-                                    </button>
-                                    {/* Full Resync */}
-                                    <button
-                                        onClick={async () => {
-                                            const confirmed = await confirm({
-                                                title: "Volledig opnieuw laden",
-                                                message: "Weet je zeker dat je alle data wilt verwijderen en opnieuw wilt ophalen? Dit kan enkele minuten duren.",
-                                                confirmLabel: "Ja, opnieuw laden",
-                                                type: "danger",
-                                            });
-                                            if (confirmed) triggerSync(selected.id, 'FULL');
-                                        }}
-                                        disabled={syncing[selected.id]}
-                                        style={actionBtnStyle("#ef4444", "rgba(239, 68, 68, 0.06)")}
-                                    >
-                                        <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1 }}>
-                                            <RotateCcw size={18} />
-                                            <div style={{ textAlign: "left" }}>
-                                                <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>Volledig opnieuw laden</div>
-                                                <div style={{ fontSize: "0.72rem", opacity: 0.7, fontWeight: 400 }}>Verwijder bestaande data en haal alles opnieuw op</div>
-                                            </div>
-                                        </div>
-                                    </button>
-                                    {/* Backfill */}
+                            {isWebSource(selected) ? (
+                                /* Web Monitoring Source — show monitoring info instead of sync actions */
+                                <div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                                        <Globe size={16} style={{ color: "var(--color-brand)" }} />
+                                        <h3 style={{ fontWeight: 600, fontSize: "0.9rem" }}>Web Monitoring</h3>
+                                    </div>
                                     <div style={{
-                                        padding: "12px 14px", borderRadius: "10px",
-                                        background: "rgba(245, 158, 11, 0.05)", border: "1px solid rgba(245, 158, 11, 0.12)",
+                                        padding: "14px 16px", borderRadius: "10px",
+                                        background: "rgba(99, 102, 241, 0.04)", border: "1px solid rgba(99, 102, 241, 0.12)",
+                                        display: "flex", flexDirection: "column", gap: "12px",
                                     }}>
-                                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                                            <Calendar size={16} style={{ color: "#f59e0b" }} />
-                                            <span style={{ fontWeight: 600, fontSize: "0.85rem", color: "#f59e0b" }}>Backfill</span>
-                                            <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>— Historische data aanvullen</span>
-                                        </div>
-                                        <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
-                                            <div style={{ flex: 1 }}>
-                                                <label style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", display: "block", marginBottom: "4px" }}>Vanaf datum</label>
-                                                <input
-                                                    type="date"
-                                                    value={backfillFrom}
-                                                    onChange={e => setBackfillFrom(e.target.value)}
-                                                    max={new Date().toISOString().split('T')[0]}
-                                                    style={dateInputStyle}
-                                                />
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                            <div>
+                                                <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>Controle-interval</div>
+                                                <div style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
+                                                    Website wordt automatisch gecontroleerd
+                                                </div>
                                             </div>
-                                            <button
-                                                onClick={() => triggerBackfill(selected.id)}
-                                                disabled={!backfillFrom || syncing[selected.id]}
+                                            <span style={{
+                                                padding: "4px 12px", borderRadius: "6px",
+                                                background: "rgba(99, 102, 241, 0.1)", color: "#818cf8",
+                                                fontSize: "0.85rem", fontWeight: 600,
+                                            }}>
+                                                Elke {getUptimeInterval(selected)} min
+                                            </span>
+                                        </div>
+                                        <div style={{
+                                            display: "flex", alignItems: "center", gap: "8px",
+                                            padding: "10px 12px", borderRadius: "8px",
+                                            background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)",
+                                        }}>
+                                            <Settings size={14} style={{ color: "var(--color-text-muted)" }} />
+                                            <span style={{ fontSize: "0.78rem", color: "var(--color-text-muted)", flex: 1 }}>
+                                                Interval en monitoring instellingen worden beheerd vanuit de web monitoring pagina.
+                                            </span>
+                                            <a
+                                                href={`/dashboard/projects/${projectId}/monitoring/web/${selected.id}`}
                                                 style={{
-                                                    padding: "8px 14px", borderRadius: "6px",
-                                                    background: backfillFrom ? "#f59e0b" : "rgba(255,255,255,0.05)",
-                                                    color: backfillFrom ? "#000" : "var(--color-text-muted)",
-                                                    border: "none", fontWeight: 600, fontSize: "0.8rem",
-                                                    cursor: backfillFrom ? "pointer" : "not-allowed",
-                                                    display: "flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap",
+                                                    display: "flex", alignItems: "center", gap: "4px",
+                                                    fontSize: "0.78rem", color: "var(--color-brand)", fontWeight: 600,
+                                                    textDecoration: "none", whiteSpace: "nowrap",
                                                 }}
                                             >
-                                                {syncing[selected.id] ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <RotateCcw size={14} />}
-                                                Starten
+                                                Instellingen <ExternalLink size={12} />
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                /* External Data Source — show full sync actions */
+                                <div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                                        <Zap size={16} style={{ color: "var(--color-brand)" }} />
+                                        <h3 style={{ fontWeight: 600, fontSize: "0.9rem" }}>Synchroniseren</h3>
+                                    </div>
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                        {/* Incremental */}
+                                        <button
+                                            onClick={() => triggerSync(selected.id, 'INCREMENTAL')}
+                                            disabled={syncing[selected.id]}
+                                            style={actionBtnStyle("#6366f1", "rgba(99, 102, 241, 0.08)")}
+                                        >
+                                            <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1 }}>
+                                                {syncing[selected.id]
+                                                    ? <Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} />
+                                                    : <RefreshCw size={18} />
+                                                }
+                                                <div style={{ textAlign: "left" }}>
+                                                    <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>Incrementeel synchroniseren</div>
+                                                    <div style={{ fontSize: "0.72rem", opacity: 0.7, fontWeight: 400 }}>Alleen nieuwe data ophalen sinds laatste sync</div>
+                                                </div>
+                                            </div>
+                                        </button>
+                                        {/* Delta */}
+                                        <button
+                                            onClick={() => triggerSync(selected.id, 'DELTA')}
+                                            disabled={syncing[selected.id]}
+                                            style={actionBtnStyle("#10b981", "rgba(16, 185, 129, 0.08)")}
+                                        >
+                                            <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1 }}>
+                                                <Zap size={18} />
+                                                <div style={{ textAlign: "left" }}>
+                                                    <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>Delta sync</div>
+                                                    <div style={{ fontSize: "0.72rem", opacity: 0.7, fontWeight: 400 }}>Vergelijk data en werk alleen gewijzigde rijen bij</div>
+                                                </div>
+                                            </div>
+                                        </button>
+                                        {/* Full Resync */}
+                                        <button
+                                            onClick={async () => {
+                                                const confirmed = await confirm({
+                                                    title: "Volledig opnieuw laden",
+                                                    message: "Weet je zeker dat je alle data wilt verwijderen en opnieuw wilt ophalen? Dit kan enkele minuten duren.",
+                                                    confirmLabel: "Ja, opnieuw laden",
+                                                    type: "danger",
+                                                });
+                                                if (confirmed) triggerSync(selected.id, 'FULL');
+                                            }}
+                                            disabled={syncing[selected.id]}
+                                            style={actionBtnStyle("#ef4444", "rgba(239, 68, 68, 0.06)")}
+                                        >
+                                            <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1 }}>
+                                                <RotateCcw size={18} />
+                                                <div style={{ textAlign: "left" }}>
+                                                    <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>Volledig opnieuw laden</div>
+                                                    <div style={{ fontSize: "0.72rem", opacity: 0.7, fontWeight: 400 }}>Verwijder bestaande data en haal alles opnieuw op</div>
+                                                </div>
+                                            </div>
+                                        </button>
+                                        {/* Backfill — collapsed behind click */}
+                                        <div style={{
+                                            padding: "12px 14px", borderRadius: "10px",
+                                            background: "rgba(245, 158, 11, 0.05)", border: "1px solid rgba(245, 158, 11, 0.12)",
+                                        }}>
+                                            <button
+                                                onClick={() => { setBackfillExpanded(!backfillExpanded); setBackfillFrom(""); }}
+                                                style={{
+                                                    display: "flex", alignItems: "center", gap: "8px", width: "100%",
+                                                    background: "none", border: "none", cursor: "pointer", padding: 0,
+                                                    color: "inherit",
+                                                }}
+                                            >
+                                                <Calendar size={16} style={{ color: "#f59e0b" }} />
+                                                <span style={{ fontWeight: 600, fontSize: "0.85rem", color: "#f59e0b" }}>Backfill</span>
+                                                <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", flex: 1, textAlign: "left" }}>— Historische data aanvullen</span>
+                                                <ChevronDown size={14} style={{
+                                                    color: "var(--color-text-muted)",
+                                                    transform: backfillExpanded ? "rotate(180deg)" : "rotate(0deg)",
+                                                    transition: "transform 0.2s",
+                                                }} />
+                                            </button>
+                                            {backfillExpanded && (
+                                                <div style={{ display: "flex", gap: "8px", alignItems: "flex-end", marginTop: "12px" }}>
+                                                    <div style={{ flex: 1 }}>
+                                                        <label style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", display: "block", marginBottom: "4px" }}>Vanaf datum</label>
+                                                        <input
+                                                            type="date"
+                                                            value={backfillFrom}
+                                                            onChange={e => setBackfillFrom(e.target.value)}
+                                                            max={new Date().toISOString().split('T')[0]}
+                                                            style={dateInputStyle}
+                                                        />
+                                                    </div>
+                                                    <button
+                                                        onClick={() => triggerBackfill(selected.id)}
+                                                        disabled={!backfillFrom || syncing[selected.id]}
+                                                        style={{
+                                                            padding: "8px 14px", borderRadius: "6px",
+                                                            background: backfillFrom ? "#f59e0b" : "rgba(255,255,255,0.05)",
+                                                            color: backfillFrom ? "#000" : "var(--color-text-muted)",
+                                                            border: "none", fontWeight: 600, fontSize: "0.8rem",
+                                                            cursor: backfillFrom ? "pointer" : "not-allowed",
+                                                            display: "flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap",
+                                                        }}
+                                                    >
+                                                        {syncing[selected.id] ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <RotateCcw size={14} />}
+                                                        Starten
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ─── Settings ─── */}
+                            {!isWebSource(selected) && (
+                                <div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                                        <Settings size={16} style={{ color: "var(--color-brand)" }} />
+                                        <h3 style={{ fontWeight: 600, fontSize: "0.9rem" }}>Instellingen</h3>
+                                    </div>
+                                    <div style={{
+                                        padding: "14px 16px", borderRadius: "10px",
+                                        background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)",
+                                        display: "flex", flexDirection: "column", gap: "12px",
+                                    }}>
+                                        {/* Interval */}
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                            <div>
+                                                <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>Sync interval</div>
+                                                <div style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>Hoe vaak data automatisch wordt bijgewerkt</div>
+                                            </div>
+                                            <select
+                                                value={selected.syncInterval}
+                                                onChange={e => updateInterval(selected.id, Number(e.target.value))}
+                                                style={selectStyle}
+                                            >
+                                                {SCHEDULE_PRESETS.map(p => (
+                                                    <option key={p.value} value={p.value}>{p.label}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        {/* Pause / Resume */}
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "12px" }}>
+                                            <div>
+                                                <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>
+                                                    {selected.syncStatus === "PAUSED" ? "Sync hervatten" : "Sync pauzeren"}
+                                                </div>
+                                                <div style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
+                                                    {selected.syncStatus === "PAUSED" ? "Automatische synchronisatie is gepauzeerd" : "Automatische synchronisatie tijdelijk stoppen"}
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => togglePause(selected.id, selected.syncStatus)}
+                                                style={{
+                                                    padding: "6px 14px", borderRadius: "6px",
+                                                    background: selected.syncStatus === "PAUSED" ? "rgba(16, 185, 129, 0.1)" : "rgba(245, 158, 11, 0.1)",
+                                                    border: "1px solid " + (selected.syncStatus === "PAUSED" ? "rgba(16, 185, 129, 0.2)" : "rgba(245, 158, 11, 0.2)"),
+                                                    color: selected.syncStatus === "PAUSED" ? "#10b981" : "#f59e0b",
+                                                    fontSize: "0.8rem", fontWeight: 600, cursor: "pointer",
+                                                    display: "flex", alignItems: "center", gap: "6px",
+                                                }}
+                                            >
+                                                {selected.syncStatus === "PAUSED" ? <Play size={14} /> : <Pause size={14} />}
+                                                {selected.syncStatus === "PAUSED" ? "Hervatten" : "Pauzeren"}
                                             </button>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-
-                            {/* ─── Settings ─── */}
-                            <div>
-                                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
-                                    <Settings size={16} style={{ color: "var(--color-brand)" }} />
-                                    <h3 style={{ fontWeight: 600, fontSize: "0.9rem" }}>Instellingen</h3>
-                                </div>
-                                <div style={{
-                                    padding: "14px 16px", borderRadius: "10px",
-                                    background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)",
-                                    display: "flex", flexDirection: "column", gap: "12px",
-                                }}>
-                                    {/* Interval */}
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                        <div>
-                                            <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>Sync interval</div>
-                                            <div style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>Hoe vaak data automatisch wordt bijgewerkt</div>
-                                        </div>
-                                        <select
-                                            value={selected.syncInterval}
-                                            onChange={e => updateInterval(selected.id, Number(e.target.value))}
-                                            style={selectStyle}
-                                        >
-                                            {SCHEDULE_PRESETS.map(p => (
-                                                <option key={p.value} value={p.value}>{p.label}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    {/* Pause / Resume */}
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "12px" }}>
-                                        <div>
-                                            <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>
-                                                {selected.syncStatus === "PAUSED" ? "Sync hervatten" : "Sync pauzeren"}
-                                            </div>
-                                            <div style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
-                                                {selected.syncStatus === "PAUSED" ? "Automatische synchronisatie is gepauzeerd" : "Automatische synchronisatie tijdelijk stoppen"}
-                                            </div>
-                                        </div>
-                                        <button
-                                            onClick={() => togglePause(selected.id, selected.syncStatus)}
-                                            style={{
-                                                padding: "6px 14px", borderRadius: "6px",
-                                                background: selected.syncStatus === "PAUSED" ? "rgba(16, 185, 129, 0.1)" : "rgba(245, 158, 11, 0.1)",
-                                                border: "1px solid " + (selected.syncStatus === "PAUSED" ? "rgba(16, 185, 129, 0.2)" : "rgba(245, 158, 11, 0.2)"),
-                                                color: selected.syncStatus === "PAUSED" ? "#10b981" : "#f59e0b",
-                                                fontSize: "0.8rem", fontWeight: 600, cursor: "pointer",
-                                                display: "flex", alignItems: "center", gap: "6px",
-                                            }}
-                                        >
-                                            {selected.syncStatus === "PAUSED" ? <Play size={14} /> : <Pause size={14} />}
-                                            {selected.syncStatus === "PAUSED" ? "Hervatten" : "Pauzeren"}
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
+                            )}
 
                             {/* ─── Sync History ─── */}
                             <div>
@@ -771,7 +861,7 @@ export default function SyncClient() {
                         </div>
                     </div>
                 </>
-            )}
+                , document.body)}
 
             <style>{`
                 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

@@ -8,6 +8,7 @@ import { connectorRegistry } from './connector-registry';
 import { normalizationService } from './normalization-service';
 import { command } from '@/lib/clickhouse';
 import '@/lib/data-integration/connectors'; // Auto-registers all connectors
+import { decrypt } from '@/lib/encryption';
 import type { SyncJobStatus } from '@/types/data-integration';
 
 export type SyncMode = 'INCREMENTAL' | 'FULL' | 'DELTA';
@@ -165,13 +166,15 @@ export class SyncEngine {
                     await this.log(syncJob.id, 'INFO', `Fetching data for account: ${account.name || account.externalId}`);
 
                     try {
-                        let credentials = dataSource.token;
+                        // Decrypt the token (backward compatible with unencrypted tokens)
+                        const decryptedToken = decrypt(dataSource.token);
+                        let credentials = decryptedToken;
                         try {
                             JSON.parse(credentials);
                         } catch {
                             const configObj = (dataSource.config as Record<string, unknown>) || {};
                             credentials = JSON.stringify({
-                                refreshToken: dataSource.token,
+                                refreshToken: decryptedToken,
                                 loginCustomerId: configObj.loginCustomerId || undefined,
                             });
                         }

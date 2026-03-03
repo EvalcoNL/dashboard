@@ -13,7 +13,7 @@ export async function PATCH(
         }
 
         const { id: clientId } = await params;
-        const { userIds, slackWebhookUrl } = await req.json();
+        const { userIds, slackWebhookUrl, notificationMode } = await req.json();
 
         if (!Array.isArray(userIds)) {
             return NextResponse.json({ error: "Invalid userIds" }, { status: 400 });
@@ -24,6 +24,7 @@ export async function PATCH(
             where: { id: clientId },
             data: {
                 slackWebhookUrl: slackWebhookUrl || null,
+                ...(notificationMode && { notificationMode }),
                 notificationUsers: {
                     set: userIds.map((id: string) => ({ id }))
                 }
@@ -31,6 +32,7 @@ export async function PATCH(
             select: {
                 id: true,
                 slackWebhookUrl: true,
+                notificationMode: true,
                 notificationUsers: { select: { id: true, name: true, email: true } }
             }
         });

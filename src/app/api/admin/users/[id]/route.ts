@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { auth } from "@/lib/auth";
+import { requireAdmin } from "@/lib/api-guard";
 
 export async function PATCH(
     req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const session = await auth();
-        if (!session || session.user.email !== "admin@evalco.nl") {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        const [, authError] = await requireAdmin();
+        if (authError) return authError;
 
         const { id } = await params;
         const { name, email, role } = await req.json();
@@ -32,17 +30,14 @@ export async function DELETE(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const session = await auth();
-        if (!session || session.user.email !== "admin@evalco.nl") {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        const [session, authError] = await requireAdmin();
+        if (authError) return authError;
 
         const { id } = await params;
 
         // Prevent deleting yourself
-        const userToDelete = await prisma.user.findUnique({ where: { id } });
-        if (userToDelete?.email === "admin@evalco.nl") {
-            return NextResponse.json({ error: "Je kunt de super admin niet verwijderen" }, { status: 403 });
+        if (id === session.user.id) {
+            return NextResponse.json({ error: "Je kunt jezelf niet verwijderen" }, { status: 403 });
         }
 
         await prisma.user.delete({

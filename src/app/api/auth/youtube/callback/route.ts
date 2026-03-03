@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { encrypt } from "@/lib/encryption";
 
 export async function GET(req: NextRequest) {
     const session = await auth();
@@ -52,7 +53,7 @@ export async function GET(req: NextRequest) {
             data: {
                 clientId, type: "YOUTUBE", category: "APP",
                 externalId: channelId, name: channelName,
-                token: refreshToken, active: true,
+                token: encrypt(refreshToken), active: true,
             },
         });
 

@@ -27,34 +27,43 @@ export default function LoginPage() {
         setLoading(true);
 
         try {
-            console.log("Attempting sign in for:", email);
+            // Step 1: If 2FA form isn't shown yet, pre-check credentials and 2FA status
+            if (!show2FA) {
+                const checkRes = await fetch("/api/auth/check-2fa", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email, password }),
+                });
+                const checkData = await checkRes.json();
+
+                if (!checkData.valid) {
+                    setError("Ongeldig e-mailadres of wachtwoord.");
+                    setLoading(false);
+                    return;
+                }
+
+                if (checkData.twoFactorRequired) {
+                    setShow2FA(true);
+                    setLoading(false);
+                    return;
+                }
+            }
+
+            // Step 2: Sign in with NextAuth (with or without 2FA token)
             const result = await signIn("credentials", {
                 email,
                 password,
-                twoFactorToken: show2FA ? twoFactorToken : undefined,
+                twoFactorToken: show2FA ? twoFactorToken : "",
                 redirect: false,
             });
 
-            console.log("SignIn result:", result);
-
             if (result?.error) {
-                // Auth.js v5 returns the custom CredentialsSignin code in result.code,
-                // while result.error is always "CredentialsSignin" for credential errors.
-                const code = result.code?.toUpperCase() || "";
-                console.log("SignIn error code:", code, "error:", result.error);
-
-                if (code.includes("TWO_FACTOR_REQUIRED")) {
-                    setShow2FA(true);
-                    setError("");
-                } else if (code.includes("INVALID_2FA_TOKEN")) {
+                if (show2FA) {
                     setError("Ongeldige verificatiecode. Probeer het opnieuw.");
-                } else if (result.error === "Configuration") {
-                    setError("Serverconfiguratie fout. Neem contact op met de beheerder.");
                 } else {
                     setError("Ongeldig e-mailadres of wachtwoord.");
                 }
             } else if (result?.ok) {
-                console.log("Login successful, redirecting to /dashboard");
                 router.push("/dashboard");
                 router.refresh();
             } else {

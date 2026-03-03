@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { encrypt } from "@/lib/encryption";
 
 export async function GET(req: NextRequest) {
     const session = await auth();
@@ -58,7 +59,7 @@ export async function GET(req: NextRequest) {
                 data: {
                     clientId, type: "GOOGLE_TAG_MANAGER", category: "APP",
                     externalId: "PENDING", name: "Google Tag Manager (geen accounts gevonden)",
-                    token: refreshToken, active: false,
+                    token: encrypt(refreshToken), active: false,
                 },
             });
             return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/data/sources?error=NoGTMAccounts`);
@@ -74,7 +75,7 @@ export async function GET(req: NextRequest) {
                     clientId, type: "GOOGLE_TAG_MANAGER", category: "APP",
                     externalId: accounts[0].accountId,
                     name: containerName || accounts[0].name || "Google Tag Manager",
-                    token: refreshToken, active: true,
+                    token: encrypt(refreshToken), active: true,
                     config: { containers: containers.map((c: any) => ({ id: c.containerId, name: c.name })) },
                 },
             });
@@ -86,7 +87,7 @@ export async function GET(req: NextRequest) {
             data: {
                 clientId, type: "GOOGLE_TAG_MANAGER", category: "APP",
                 externalId: "PENDING", name: "Pending Google Tag Manager Link",
-                token: refreshToken, active: false,
+                token: encrypt(refreshToken), active: false,
                 config: { accounts: accounts.map((a: any) => ({ id: a.accountId, name: a.name, path: a.path })) },
             },
         });

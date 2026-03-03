@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { auth } from "@/lib/auth";
+import { requireDataSourceAccess } from "@/lib/api-guard";
 
 /**
  * GET /api/data-sources/[id]/monitored-pages
@@ -11,10 +11,9 @@ export async function GET(
     req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const session = await auth();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
     const { id } = await params;
+    const [, authError] = await requireDataSourceAccess(id);
+    if (authError) return authError;
 
     const pages = await (prisma as any).monitoredPage.findMany({
         where: { dataSourceId: id },
@@ -33,19 +32,19 @@ export async function POST(
     req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const session = await auth();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
     const { id } = await params;
+    const [, authError] = await requireDataSourceAccess(id);
+    if (authError) return authError;
+
     const body = await req.json();
 
     if (!body.url) {
         return NextResponse.json({ error: "URL is verplicht" }, { status: 400 });
     }
 
-    // Verify the data source exists and is a DOMAIN type
+    // Verify the data source is a DOMAIN or WEBSITE type
     const ds = await prisma.dataSource.findUnique({ where: { id } });
-    if (!ds || ds.type !== "DOMAIN") {
+    if (!ds || !['DOMAIN', 'WEBSITE'].includes(ds.type)) {
         return NextResponse.json({ error: "Data source niet gevonden of geen domein" }, { status: 404 });
     }
 
@@ -77,8 +76,9 @@ export async function DELETE(
     req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const session = await auth();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { id } = await params;
+    const [, authError] = await requireDataSourceAccess(id);
+    if (authError) return authError;
 
     const body = await req.json();
     if (!body.pageId) {

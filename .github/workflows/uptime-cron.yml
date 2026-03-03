@@ -1,0 +1,18 @@
+name: Trigger Web Monitoring Uptime Check
+on:
+  schedule:
+    # Run every 5 minutes
+    - cron: '*/5 * * * *'
+  # Allow manual triggering
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Uptime Route
+        uses: fjogeleit/http-request-action@v1.15.2
+        with:
+          url: 'https://dash.evalco.nl/api/cron/uptime'
+          method: 'GET'
+          timeout: 30000

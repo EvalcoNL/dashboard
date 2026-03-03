@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { googleAdsService } from "@/lib/integrations/google-ads";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { encrypt } from "@/lib/encryption";
 
 export async function GET(req: NextRequest) {
     const session = await auth();
@@ -44,7 +45,7 @@ export async function GET(req: NextRequest) {
                 type: "GOOGLE_ADS",
                 category: "APP",
                 externalId: "PENDING",
-                token: refreshToken,
+                token: encrypt(refreshToken),
                 active: false,
                 name: "Pending Google Ads Link"
             }
@@ -54,6 +55,6 @@ export async function GET(req: NextRequest) {
         return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/link?sourceId=${pendingSource.id}`);
     } catch (error: any) {
         console.error("OAuth Callback Error:", error);
-        return NextResponse.json({ error: error.message || "Failed to link Google Ads" }, { status: 500 });
+        return NextResponse.json({ error: "Failed to link Google Ads" }, { status: 500 });
     }
 }

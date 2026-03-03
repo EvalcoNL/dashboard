@@ -17,6 +17,7 @@ export default function SecuritySettings({ is2FAEnabled: initialEnabled }: Secur
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [showDisableConfirm, setShowDisableConfirm] = useState(false);
+    const [backupCodes, setBackupCodes] = useState<string[]>([]);
 
     const handleSetup = async () => {
         setLoading(true);
@@ -50,6 +51,10 @@ export default function SecuritySettings({ is2FAEnabled: initialEnabled }: Secur
 
             setIsEnabled(true);
             setStep("idle");
+            // Show backup codes if returned
+            if (data.backupCodes) {
+                setBackupCodes(data.backupCodes);
+            }
         } catch (err) {
             setError(err instanceof Error ? err.message : "Er is een fout opgetreden");
         } finally {
@@ -304,9 +309,64 @@ export default function SecuritySettings({ is2FAEnabled: initialEnabled }: Secur
                     </div>
                 )}
 
-                {isEnabled && (
+                {isEnabled && backupCodes.length === 0 && (
                     <div style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)", fontStyle: "italic", textAlign: "center", opacity: 0.7 }}>
                         2FA is geactiveerd. Bij je volgende login zal om een code worden gevraagd.
+                    </div>
+                )}
+
+                {backupCodes.length > 0 && (
+                    <div className="animate-fade-in" style={{
+                        padding: "24px",
+                        background: "rgba(245, 158, 11, 0.05)",
+                        border: "1px solid rgba(245, 158, 11, 0.3)",
+                        borderRadius: "12px",
+                    }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
+                            <AlertCircle size={20} color="#f59e0b" />
+                            <span style={{ fontWeight: 700, fontSize: "0.95rem", color: "#f59e0b" }}>
+                                Bewaar je herstelcodes!
+                            </span>
+                        </div>
+                        <p style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)", marginBottom: "16px" }}>
+                            Deze codes kun je gebruiken om in te loggen als je geen toegang meer hebt tot je authenticator app.
+                            <strong> Bewaar ze op een veilige plek.</strong> Ze worden slechts één keer getoond.
+                        </p>
+                        <div style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(2, 1fr)",
+                            gap: "8px",
+                            background: "var(--color-surface)",
+                            padding: "16px",
+                            borderRadius: "8px",
+                            border: "1px solid var(--color-border)",
+                            fontFamily: "monospace",
+                            fontSize: "0.95rem",
+                            letterSpacing: "1px"
+                        }}>
+                            {backupCodes.map((code, i) => (
+                                <div key={i} style={{ padding: "4px 8px", textAlign: "center" }}>
+                                    {code}
+                                </div>
+                            ))}
+                        </div>
+                        <button
+                            onClick={() => setBackupCodes([])}
+                            style={{
+                                marginTop: "16px",
+                                width: "100%",
+                                padding: "10px",
+                                background: "var(--color-brand)",
+                                color: "white",
+                                border: "none",
+                                borderRadius: "8px",
+                                fontWeight: 600,
+                                fontSize: "0.85rem",
+                                cursor: "pointer"
+                            }}
+                        >
+                            Ik heb de codes veilig opgeslagen
+                        </button>
                     </div>
                 )}
             </div>

@@ -15,9 +15,34 @@ export async function POST(req: Request) {
             );
         }
 
-        if (password.length < 6) {
+        // Validate name length
+        if (typeof name !== 'string' || name.length > 100) {
             return NextResponse.json(
-                { error: "Wachtwoord moet minimaal 6 karakters zijn." },
+                { error: "Naam mag maximaal 100 karakters zijn." },
+                { status: 400 }
+            );
+        }
+
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (typeof email !== 'string' || !emailRegex.test(email)) {
+            return NextResponse.json(
+                { error: "Ongeldig e-mailadres." },
+                { status: 400 }
+            );
+        }
+
+        // Validate password strength
+        if (typeof password !== 'string' || password.length < 8) {
+            return NextResponse.json(
+                { error: "Wachtwoord moet minimaal 8 karakters zijn." },
+                { status: 400 }
+            );
+        }
+
+        if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+            return NextResponse.json(
+                { error: "Wachtwoord moet minimaal één hoofdletter, één kleine letter en één cijfer bevatten." },
                 { status: 400 }
             );
         }

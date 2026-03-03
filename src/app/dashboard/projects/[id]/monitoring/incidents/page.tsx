@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import IncidentsClient from "./IncidentsClient";
+import { getGlobalNotificationSettings } from "@/lib/services/notification-resolver";
 
 export default async function IncidentsPage({
     params,
@@ -20,6 +21,7 @@ export default async function IncidentsPage({
             id: true,
             name: true,
             slackWebhookUrl: true,
+            notificationMode: true,
             notificationUsers: { select: { id: true, name: true, email: true } }
         },
     });
@@ -49,6 +51,13 @@ export default async function IncidentsPage({
         createdAt: inc.createdAt?.toISOString(),
     }));
 
+    // Check if global notification settings exist
+    const globalSettings = await getGlobalNotificationSettings();
+    const hasGlobalSettings = globalSettings.userIds.length > 0 || (globalSettings.slackWebhookUrl !== null && globalSettings.slackWebhookUrl !== "");
+
+    // Get current user email for auto-select (match by email, not ID, since session ID may be stale)
+    const currentUserEmail = (session.user as any)?.email || "";
+
     return (
         <IncidentsClient
             clientId={clientId}
@@ -57,6 +66,9 @@ export default async function IncidentsPage({
             allUsers={allUsers}
             notificationUsers={client.notificationUsers || []}
             initialSlackWebhookUrl={client.slackWebhookUrl || ""}
+            initialNotificationMode={client.notificationMode || "global"}
+            hasGlobalSettings={hasGlobalSettings}
+            currentUserEmail={currentUserEmail}
         />
     );
 }

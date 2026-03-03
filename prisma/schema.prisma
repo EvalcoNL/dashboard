@@ -15,6 +15,7 @@ model User {
   emailVerified       Boolean         @default(false) @map("email_verified")
   twoFactorEnabled    Boolean         @default(false) @map("two_factor_enabled")
   twoFactorSecret     String?         @map("two_factor_secret")
+  backupCodes         Json?           @map("backup_codes")
   createdAt           DateTime        @default(now()) @map("created_at")
   advisorActions      AdvisorReport[] @relation("reviewedBy")
   clients             Client[]        @relation("ClientAccess")
@@ -59,6 +60,7 @@ model Client {
   currency             String                 @default("EUR")
   createdAt            DateTime               @default(now()) @map("created_at")
   slackWebhookUrl      String?                @map("slack_webhook_url")
+  notificationMode     String                 @default("global") @map("notification_mode") // global, custom, disabled
   analystReports       AnalystReport[]
   clientInvites        ClientInvite[]
   dataSources          DataSource[]
@@ -538,4 +540,19 @@ model SyncLog {
 
   @@index([jobId, createdAt])
   @@map("sync_logs")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?  @map("user_id")
+  action    String   // LOGIN, LOGIN_FAILED, 2FA_ENABLED, 2FA_DISABLED, PASSWORD_CHANGED, ADMIN_ACTION, etc.
+  target    String?  // Target resource (e.g., user ID, project ID)
+  details   String?  // Additional context
+  ip        String?  // Client IP address
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+  @@map("audit_logs")
 }

@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { encrypt } from "@/lib/encryption";
 
 import { syncScheduler } from "@/lib/data-integration/sync-scheduler";
 
@@ -65,7 +66,7 @@ export async function GET(req: NextRequest) {
                 clientId, type: "META", category: "APP",
                 externalId: biz?.id || "default",
                 name: biz?.name || "Meta Business Suite",
-                token: accessToken, active: true,
+                token: encrypt(accessToken), active: true,
             },
         });
 
