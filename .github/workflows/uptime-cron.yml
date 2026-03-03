@@ -16,3 +16,4 @@ jobs:
           url: 'https://dash.evalco.nl/api/cron/uptime'
           method: 'GET'
           timeout: 30000
+          customHeaders: '{"Authorization": "Bearer ${{ secrets.CRON_SECRET }}"}'
