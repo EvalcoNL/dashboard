@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Shield, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Shield, Loader2, CheckCircle2, AlertCircle, LogOut } from "lucide-react";
+import { signOut } from "next-auth/react";
 import Image from "next/image";
 
 interface SecuritySettingsProps {
@@ -10,6 +11,7 @@ interface SecuritySettingsProps {
 
 export default function SecuritySettings({ is2FAEnabled: initialEnabled }: SecuritySettingsProps) {
     const [isEnabled, setIsEnabled] = useState(initialEnabled);
+    const [justEnabled, setJustEnabled] = useState(false);
     const [step, setStep] = useState<"idle" | "setup" | "verify">("idle");
     const [qrCode, setQrCode] = useState("");
     const [secret, setSecret] = useState("");
@@ -50,6 +52,7 @@ export default function SecuritySettings({ is2FAEnabled: initialEnabled }: Secur
             if (!res.ok) throw new Error(data.error || "Verification failed");
 
             setIsEnabled(true);
+            setJustEnabled(true);
             setStep("idle");
             // Show backup codes if returned
             if (data.backupCodes) {
@@ -309,9 +312,43 @@ export default function SecuritySettings({ is2FAEnabled: initialEnabled }: Secur
                     </div>
                 )}
 
-                {isEnabled && backupCodes.length === 0 && (
-                    <div style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)", fontStyle: "italic", textAlign: "center", opacity: 0.7 }}>
-                        2FA is geactiveerd. Bij je volgende login zal om een code worden gevraagd.
+                {isEnabled && backupCodes.length === 0 && justEnabled && (
+                    <div style={{ textAlign: "center", padding: "16px" }}>
+                        <div style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: "8px",
+                            color: "#10b981",
+                            fontSize: "0.9rem",
+                            fontWeight: 600,
+                            marginBottom: "16px"
+                        }}>
+                            <CheckCircle2 size={18} />
+                            2FA is succesvol geactiveerd!
+                        </div>
+                        <p style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)", marginBottom: "16px" }}>
+                            Log opnieuw in om je sessie te vernieuwen.
+                        </p>
+                        <button
+                            onClick={() => signOut({ callbackUrl: "/login" })}
+                            style={{
+                                padding: "12px 32px",
+                                background: "var(--color-brand)",
+                                color: "white",
+                                border: "none",
+                                borderRadius: "10px",
+                                fontSize: "0.95rem",
+                                fontWeight: 600,
+                                cursor: "pointer",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "8px"
+                            }}
+                        >
+                            <LogOut size={16} />
+                            Opnieuw inloggen
+                        </button>
                     </div>
                 )}
 
