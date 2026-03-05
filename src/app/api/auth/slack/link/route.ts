@@ -8,9 +8,11 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const clientId = searchParams.get("clientId");
+    const scope = searchParams.get("scope");
 
-    if (!clientId) {
-        return NextResponse.json({ error: "Missing clientId parameter" }, { status: 400 });
+    // Either clientId or scope=global must be provided
+    if (!clientId && scope !== "global") {
+        return NextResponse.json({ error: "Missing clientId or scope=global parameter" }, { status: 400 });
     }
 
     const slackClientId = process.env.SLACK_CLIENT_ID;
@@ -28,8 +30,8 @@ export async function GET(req: NextRequest) {
     authUrl.searchParams.set("client_id", slackClientId);
     authUrl.searchParams.set("scope", scopes.join(","));
     authUrl.searchParams.set("redirect_uri", redirectUri);
-    // Use state to pass the clientId so we know which project to update in the callback
-    authUrl.searchParams.set("state", clientId);
+    // Use state to pass context: "__global__" for global settings, or the clientId for project-level
+    authUrl.searchParams.set("state", scope === "global" ? "__global__" : clientId!);
 
     return NextResponse.redirect(authUrl.toString());
 }

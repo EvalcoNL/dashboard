@@ -230,7 +230,7 @@ export default function Sidebar() {
                     </nav>
                     <div style={{ marginTop: "auto", paddingBottom: "8px", display: "flex", justifyContent: "center" }}>
                         <Link
-                            href={`/dashboard/projects/${clientId}/settings`}
+                            href={clientId ? `/dashboard/projects/${clientId}/settings` : `/dashboard/settings`}
                             title={t("navigation", "settings")}
                             onClick={() => setOpenMenuLabel(null)}
                             style={{
@@ -240,14 +240,14 @@ export default function Sidebar() {
                                 width: "42px",
                                 height: "42px",
                                 borderRadius: "10px",
-                                color: isActive(`/dashboard/projects/${clientId}/settings`) ? "var(--color-text-primary)" : "var(--color-text-secondary)",
-                                background: isActive(`/dashboard/projects/${clientId}/settings`) ? "rgba(99, 102, 241, 0.15)" : "transparent",
+                                color: isActive(clientId ? `/dashboard/projects/${clientId}/settings` : `/dashboard/settings`) ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+                                background: isActive(clientId ? `/dashboard/projects/${clientId}/settings` : `/dashboard/settings`) ? "rgba(99, 102, 241, 0.15)" : "transparent",
                                 transition: "all 0.2s ease",
                                 position: "relative"
                             }}
                             className="nav-link"
                         >
-                            {isActive(`/dashboard/projects/${clientId}/settings`) && <div className="active-indicator" />}
+                            {isActive(clientId ? `/dashboard/projects/${clientId}/settings` : `/dashboard/settings`) && <div className="active-indicator" />}
                             <Settings size={20} />
                         </Link>
                     </div>

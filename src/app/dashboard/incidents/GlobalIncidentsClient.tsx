@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, Search, ShieldAlert, Shield, ShieldCheck, Settings, Bell, Mail, MessageSquare, Save, Globe, ToggleLeft, ToggleRight } from "lucide-react";
 import { useState } from "react";
 import { useNotification } from "@/components/NotificationProvider";
@@ -94,9 +94,12 @@ export default function GlobalIncidentsClient({
     clients: ClientInfo[];
 }) {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const slackError = searchParams.get("error");
+    const initialTab = searchParams.get("tab");
     const { showToast, confirm } = useNotification();
     const [search, setSearch] = useState("");
-    const [activeTab, setActiveTab] = useState<"overview" | "settings">("overview");
+    const [activeTab, setActiveTab] = useState<"overview" | "settings">(initialTab === "settings" ? "settings" : "overview");
 
     // Settings state
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>(globalNotificationUserIds);
@@ -438,12 +441,7 @@ export default function GlobalIncidentsClient({
                                         <div>
                                             <button
                                                 onClick={() => {
-                                                    const url = prompt("Voer de Slack Webhook URL in:", "https://hooks.slack.com/services/...");
-                                                    if (url && url.startsWith("https://hooks.slack.com/")) {
-                                                        setSlackUrl(url);
-                                                    } else if (url) {
-                                                        showToast("error", "Ongeldige Slack Webhook URL. Gebruik een URL die begint met https://hooks.slack.com/");
-                                                    }
+                                                    router.push("/api/auth/slack/link?scope=global");
                                                 }}
                                                 style={{
                                                     display: "inline-flex", alignItems: "center", gap: "8px",
@@ -455,6 +453,11 @@ export default function GlobalIncidentsClient({
                                             >
                                                 Slack Koppelen
                                             </button>
+                                            {slackError && (
+                                                <div style={{ marginTop: "8px", fontSize: "0.75rem", color: "#ef4444", fontWeight: 500 }}>
+                                                    Kan Slack niet koppelen. Waarschuwing: {slackError.replace(/_/g, " ")}.
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>

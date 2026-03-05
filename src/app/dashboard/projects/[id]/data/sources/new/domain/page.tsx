@@ -40,7 +40,7 @@ export default function NewDomainSourcePage({
             // Prepend https:// if missing to parse via URL
             const urlString = normalizedDomain.startsWith('http') ? normalizedDomain : `https://${normalizedDomain}`;
             const url = new URL(urlString);
-            normalizedDomain = url.hostname;
+            normalizedDomain = url.hostname.replace(/^www\./, '');
         } catch (error: any) {
             setError("Voer een geldige domeinnaam in (bijv. voorbeeld.nl).");
             return;

@@ -29,25 +29,31 @@ export async function POST(
             return NextResponse.json({ error: "Name and domain (externalId) are required." }, { status: 400 });
         }
 
+        // Normalize domain: strip www. and lowercase
+        const normalizedDomain = body.externalId.toLowerCase().replace(/^www\./, '');
+
         // Check if domain already exists for this client
-        const existingSource = await prisma.dataSource.findFirst({
+        const existingSources = await prisma.dataSource.findMany({
             where: {
                 clientId: id,
                 type: "DOMAIN",
-                externalId: body.externalId
             }
         });
 
-        if (existingSource) {
-            return NextResponse.json({ error: "Dit domein is al toegevoegd voor deze project." }, { status: 400 });
+        const duplicate = existingSources.find(
+            s => s.externalId.toLowerCase().replace(/^www\./, '') === normalizedDomain
+        );
+
+        if (duplicate) {
+            return NextResponse.json({ error: "Dit domein is al toegevoegd aan dit project." }, { status: 409 });
         }
 
         const newSource = await prisma.dataSource.create({
             data: {
                 clientId: id,
                 type: "DOMAIN",
-                name: body.name,
-                externalId: body.externalId,
+                name: normalizedDomain,
+                externalId: normalizedDomain,
                 config: body.config || {},
                 token: "", // No oauth token for a basic domain 
                 active: true,

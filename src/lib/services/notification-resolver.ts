@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { decrypt } from "@/lib/encryption";
+import { decrypt, encrypt } from "@/lib/encryption";
 
 interface NotificationConfig {
     recipients: string[];
@@ -99,8 +99,8 @@ export async function saveGlobalNotificationSettings(opts: {
         ...(opts.slackWebhookUrl !== undefined ? [
             (prisma as any).globalSetting.upsert({
                 where: { key: "incident_slack_webhook" },
-                update: { value: opts.slackWebhookUrl || "" },
-                create: { key: "incident_slack_webhook", value: opts.slackWebhookUrl || "" }
+                update: { value: opts.slackWebhookUrl ? encrypt(opts.slackWebhookUrl) : "" },
+                create: { key: "incident_slack_webhook", value: opts.slackWebhookUrl ? encrypt(opts.slackWebhookUrl) : "" }
             })
         ] : [])
     ]);

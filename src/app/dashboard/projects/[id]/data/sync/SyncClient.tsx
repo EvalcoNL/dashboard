@@ -105,13 +105,27 @@ export default function SyncClient() {
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
-    // Auto-refresh while any sync is running
-    const hasRunningJobs = sources.some(s => s.recentJobs?.some(j => j.status === "RUNNING"));
+    // Auto-refresh while any sync is running or queued
+    const hasPendingWork = sources.some(s => s.recentJobs?.some(j => j.status === "RUNNING" || j.status === "PENDING"))
+        || Object.values(syncing).some(Boolean);
     useEffect(() => {
-        if (!hasRunningJobs) return;
+        if (!hasPendingWork) return;
         const interval = setInterval(fetchData, 3000);
         return () => clearInterval(interval);
-    }, [hasRunningJobs, fetchData]);
+    }, [hasPendingWork, fetchData]);
+
+    // Auto-clear syncing state when the source shows a newly completed/failed job
+    useEffect(() => {
+        for (const [sourceId, isSyncing] of Object.entries(syncing)) {
+            if (!isSyncing) continue;
+            const source = sources.find(s => s.id === sourceId);
+            if (!source) continue;
+            const latestJob = source.recentJobs?.[0];
+            if (latestJob && (latestJob.status === 'COMPLETED' || latestJob.status === 'COMPLETED_WITH_ERRORS' || latestJob.status === 'FAILED')) {
+                setSyncing(prev => ({ ...prev, [sourceId]: false }));
+            }
+        }
+    }, [sources, syncing]);
 
     const triggerSync = async (sourceId: string, mode: string = 'INCREMENTAL') => {
         setSyncing(prev => ({ ...prev, [sourceId]: true }));
@@ -122,16 +136,24 @@ export default function SyncClient() {
                 body: JSON.stringify({ connectionId: sourceId, mode }),
             });
             const data = await res.json();
-            if (data.errors && data.errors.length > 0) {
+            if (data.queued) {
+                // Job was placed in the queue — worker will process it
+                showToast('info', 'Sync gestart — wordt op de achtergrond verwerkt');
+                // Keep syncing[sourceId] = true; auto-refresh will poll and auto-clear effect will handle it
+            } else if (data.errors && data.errors.length > 0) {
                 showToast('warning', `Sync voltooid met ${data.errors.length} fout(en)`);
+                setSyncing(prev => ({ ...prev, [sourceId]: false }));
             } else if (data.success) {
                 showToast('success', 'Sync succesvol voltooid');
+                setSyncing(prev => ({ ...prev, [sourceId]: false }));
+            } else {
+                setSyncing(prev => ({ ...prev, [sourceId]: false }));
             }
         } catch (err) {
             console.error("Sync failed:", err);
             showToast('error', 'Sync mislukt: onbekende fout');
+            setSyncing(prev => ({ ...prev, [sourceId]: false }));
         }
-        setSyncing(prev => ({ ...prev, [sourceId]: false }));
         fetchData();
     };
 
@@ -155,13 +177,23 @@ export default function SyncClient() {
 
     const triggerSyncAll = async () => {
         setSyncingAll(true);
-        await Promise.all(activeSources.map(source =>
+        const results = await Promise.all(activeSources.map(source =>
             fetch("/api/data-integration/sync", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ connectionId: source.id }),
-            }).catch(() => { })
+            }).then(r => r.json()).catch(() => ({ success: false }))
         ));
+        const anyQueued = results.some(r => r?.queued);
+        if (anyQueued) {
+            showToast('info', 'Syncs gestart — worden op de achtergrond verwerkt');
+            // Mark all active sources as syncing for auto-refresh
+            const newSyncing: Record<string, boolean> = {};
+            activeSources.forEach(s => { newSyncing[s.id] = true; });
+            setSyncing(prev => ({ ...prev, ...newSyncing }));
+        } else {
+            showToast('success', 'Alle syncs voltooid');
+        }
         setSyncingAll(false);
         fetchData();
     };

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { encrypt } from "@/lib/encryption";
+import { saveGlobalNotificationSettings, getGlobalNotificationSettings } from "@/lib/services/notification-resolver";
 
 export async function GET(req: NextRequest) {
     const session = await auth();
@@ -10,17 +11,19 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const code = searchParams.get("code");
-    const state = searchParams.get("state"); // This represents the clientId
+    const state = searchParams.get("state"); // "__global__" or clientId
     const error = searchParams.get("error");
 
-    const clientId = state;
+    const isGlobal = state === "__global__";
+    const clientId = isGlobal ? null : state;
+    const redirectBase = isGlobal ? "/dashboard/incidents" : `/dashboard/projects/${clientId}/monitoring/incidents`;
 
     if (error) {
         console.error("[Slack OAuth] User denied permission or error occurred:", error);
-        return NextResponse.redirect(new URL(`/dashboard/projects/${clientId}/monitoring/incidents?error=slack_denied`, req.url));
+        return NextResponse.redirect(new URL(`${redirectBase}?error=slack_denied&tab=settings`, req.url));
     }
 
-    if (!code || !clientId) {
+    if (!code || (!clientId && !isGlobal)) {
         return NextResponse.redirect(new URL("/dashboard", req.url));
     }
 
@@ -29,7 +32,7 @@ export async function GET(req: NextRequest) {
 
     if (!slackClientId || !slackClientSecret) {
         console.error("Slack OAuth credentials missing");
-        return NextResponse.redirect(new URL(`/dashboard/projects/${clientId}/monitoring/incidents?error=slack_config_missing`, req.url));
+        return NextResponse.redirect(new URL(`${redirectBase}?error=slack_config_missing&tab=settings`, req.url));
     }
 
     const origin = process.env.NEXTAUTH_URL || new URL(req.url).origin;
@@ -54,21 +57,35 @@ export async function GET(req: NextRequest) {
 
         if (!data.ok) {
             console.error("[Slack OAuth] Error trading code:", data.error);
-            return NextResponse.redirect(new URL(`/dashboard/projects/${clientId}/monitoring/incidents?error=slack_auth_failed`, req.url));
+            return NextResponse.redirect(new URL(`${redirectBase}?error=slack_auth_failed&tab=settings`, req.url));
         }
 
         // Validate that we got an incoming webhook
         if (!data.incoming_webhook || !data.incoming_webhook.url) {
             console.error("[Slack OAuth] Missing incoming_webhook in response:", data);
-            return NextResponse.redirect(new URL(`/dashboard/projects/${clientId}/monitoring/incidents?error=slack_webhook_missing`, req.url));
+            return NextResponse.redirect(new URL(`${redirectBase}?error=slack_webhook_missing&tab=settings`, req.url));
         }
 
         const webhookUrl = data.incoming_webhook.url;
 
+        if (isGlobal) {
+            // ─── Global Settings ───
+            // Save the webhook to GlobalSetting (encrypted)
+            const globalSettings = await getGlobalNotificationSettings();
+            await saveGlobalNotificationSettings({
+                userIds: globalSettings.userIds,
+                slackWebhookUrl: webhookUrl,
+            });
+
+            return NextResponse.redirect(new URL(`/dashboard/incidents?tab=settings`, req.url));
+        }
+
+        // ─── Project-level Settings ───
+
         // Verify User has access to this Client
         const projectAccess = await prisma.client.findFirst({
             where: {
-                id: clientId,
+                id: clientId!,
                 users: { some: { id: session.user.id } }
             }
         });
@@ -79,14 +96,14 @@ export async function GET(req: NextRequest) {
 
         // Save the webhook URL to the Client record
         await prisma.client.update({
-            where: { id: clientId },
+            where: { id: clientId! },
             data: { slackWebhookUrl: encrypt(webhookUrl) },
         });
 
         // Also save as a formal DataSource so it shows up in "Connected Apps"
         const existingSlackSource = await prisma.dataSource.findFirst({
             where: {
-                clientId: clientId,
+                clientId: clientId!,
                 type: "SLACK",
                 externalId: "SLACK"
             }
@@ -103,7 +120,7 @@ export async function GET(req: NextRequest) {
         } else {
             await prisma.dataSource.create({
                 data: {
-                    clientId: clientId,
+                    clientId: clientId!,
                     externalId: "SLACK",
                     type: "SLACK",
                     name: "Slack Notifications",
@@ -120,6 +137,6 @@ export async function GET(req: NextRequest) {
 
     } catch (e) {
         console.error("[Slack OAuth] Caught error:", e);
-        return NextResponse.redirect(new URL(`/dashboard/projects/${clientId}/monitoring/incidents?error=slack_server_error`, req.url));
+        return NextResponse.redirect(new URL(`${redirectBase}?error=slack_server_error&tab=settings`, req.url));
     }
 }

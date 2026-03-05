@@ -28,9 +28,10 @@ docker compose -f docker-compose.prod.yml build --no-cache app worker
 echo "[3/4] Restarting services..."
 docker compose -f docker-compose.prod.yml up -d
 
-# Cleanup old images
+# Cleanup old images and build cache
 echo "[4/4] Cleaning up..."
 docker image prune -f
+docker builder prune -f
 
 echo ""
 echo "════════════════════════════════════════════"
