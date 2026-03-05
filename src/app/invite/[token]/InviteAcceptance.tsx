@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Activity, ShieldCheck, Mail, ArrowRight, UserPlus, LogIn } from "lucide-react";
+import { Activity, ShieldCheck, Mail, ArrowRight, UserPlus, LogIn, KeyRound } from "lucide-react";
 
 export default function InviteAcceptance({
     token,
@@ -19,6 +19,8 @@ export default function InviteAcceptance({
     const router = useRouter();
     const [name, setName] = useState("");
     const [password, setPassword] = useState("");
+    const [twoFactorToken, setTwoFactorToken] = useState("");
+    const [needs2FA, setNeeds2FA] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [step, setStep] = useState<"form" | "success">("form");
@@ -46,6 +48,7 @@ export default function InviteAcceptance({
             const signInResult = await signIn("credentials", {
                 email,
                 password,
+                twoFactorToken: twoFactorToken || undefined,
                 redirect: false,
             });
 
@@ -73,18 +76,47 @@ export default function InviteAcceptance({
         setLoading(true);
 
         try {
+            // Step 1: If 2FA form isn't shown yet, pre-check credentials and 2FA status
+            if (!needs2FA) {
+                const checkRes = await fetch("/api/auth/check-2fa", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email, password }),
+                });
+                const checkData = await checkRes.json();
+
+                if (!checkData.valid) {
+                    setError("Ongeldig wachtwoord.");
+                    setLoading(false);
+                    return;
+                }
+
+                if (checkData.twoFactorRequired) {
+                    setNeeds2FA(true);
+                    setLoading(false);
+                    return;
+                }
+            }
+
+            // Step 2: Sign in with NextAuth (with or without 2FA token)
             const signInResult = await signIn("credentials", {
                 email,
                 password,
+                twoFactorToken: needs2FA ? twoFactorToken : "",
                 redirect: false,
             });
 
             if (signInResult?.error) {
-                throw new Error("Ongeldig wachtwoord.");
+                if (needs2FA) {
+                    setError("Ongeldige verificatiecode. Probeer opnieuw.");
+                } else {
+                    setError("Ongeldig wachtwoord.");
+                }
+                setLoading(false);
+                return;
             }
 
-            // Once logged in, the user has to accept the token, but the NextJS server component
-            // used to do this automatically if session exists. Since we changed it, lets hit the register endpoint with empty name
+            // Once logged in, accept the invite
             const res = await fetch("/api/auth/register-invite", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -190,6 +222,33 @@ export default function InviteAcceptance({
                                         <span className="input-hint">Minimaal 6 karakters vereist</span>
                                     )}
                                 </div>
+
+                                {needs2FA && userExists && (
+                                    <div className="input-group">
+                                        <div className="label-row">
+                                            <label htmlFor="twoFactorToken">Verificatiecode (2FA)</label>
+                                        </div>
+                                        <div style={{ position: "relative" }}>
+                                            <div style={{ position: "absolute", left: "16px", top: "50%", transform: "translateY(-50%)", color: "#64748b" }}>
+                                                <KeyRound size={16} />
+                                            </div>
+                                            <input
+                                                id="twoFactorToken"
+                                                type="text"
+                                                inputMode="numeric"
+                                                autoComplete="one-time-code"
+                                                placeholder="123456"
+                                                value={twoFactorToken}
+                                                onChange={(e) => setTwoFactorToken(e.target.value)}
+                                                required
+                                                maxLength={8}
+                                                style={{ paddingLeft: "44px", letterSpacing: "0.15em", fontWeight: 600 }}
+                                                autoFocus
+                                            />
+                                        </div>
+                                        <span className="input-hint">Voer de code uit je authenticator app in</span>
+                                    </div>
+                                )}
 
                                 {error && (
                                     <div className="error-message">
