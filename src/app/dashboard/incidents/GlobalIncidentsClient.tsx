@@ -85,13 +85,15 @@ export default function GlobalIncidentsClient({
     allUsers,
     globalNotificationUserIds,
     globalSlackWebhookUrl,
-    clients
+    clients,
+    isAdmin = false
 }: {
     incidents: Incident[];
     allUsers: User[];
     globalNotificationUserIds: string[];
     globalSlackWebhookUrl: string;
     clients: ClientInfo[];
+    isAdmin?: boolean;
 }) {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -175,18 +177,20 @@ export default function GlobalIncidentsClient({
                 >
                     <ShieldAlert size={16} /> Overzicht
                 </button>
-                <button
-                    onClick={() => setActiveTab("settings")}
-                    style={{
-                        background: "none", border: "none", outline: "none", cursor: "pointer",
-                        padding: "0 4px 12px 4px", fontSize: "0.9rem", fontWeight: 600,
-                        color: activeTab === "settings" ? "var(--color-brand)" : "var(--color-text-muted)",
-                        borderBottom: activeTab === "settings" ? "2px solid var(--color-brand)" : "2px solid transparent",
-                        transition: "all 0.15s", display: "flex", alignItems: "center", gap: "8px"
-                    }}
-                >
-                    <Settings size={16} /> Instellingen
-                </button>
+                {isAdmin && (
+                    <button
+                        onClick={() => setActiveTab("settings")}
+                        style={{
+                            background: "none", border: "none", outline: "none", cursor: "pointer",
+                            padding: "0 4px 12px 4px", fontSize: "0.9rem", fontWeight: 600,
+                            color: activeTab === "settings" ? "var(--color-brand)" : "var(--color-text-muted)",
+                            borderBottom: activeTab === "settings" ? "2px solid var(--color-brand)" : "2px solid transparent",
+                            transition: "all 0.15s", display: "flex", alignItems: "center", gap: "8px"
+                        }}
+                    >
+                        <Settings size={16} /> Instellingen
+                    </button>
+                )}
             </div>
 
             {activeTab === "overview" ? (

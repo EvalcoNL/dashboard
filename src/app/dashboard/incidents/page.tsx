@@ -9,7 +9,21 @@ export default async function GlobalIncidentsPage() {
     const session = await auth();
     if (!session) redirect("/login");
 
+    const isAdmin = session.user.role === "ADMIN";
+
+    // For non-admin users, only show data for their linked clients
+    let clientFilter: any = {};
+    if (!isAdmin) {
+        const userWithClients = await prisma.user.findUnique({
+            where: { id: session.user.id },
+            select: { clients: { select: { id: true } } }
+        });
+        const accessibleClientIds = userWithClients?.clients.map((c: any) => c.id) || [];
+        clientFilter = { clientId: { in: accessibleClientIds } };
+    }
+
     const incidents = await (prisma as any).incident.findMany({
+        where: clientFilter,
         orderBy: { startedAt: "desc" },
         take: 100,
         include: {
@@ -27,17 +41,22 @@ export default async function GlobalIncidentsPage() {
         createdAt: inc.createdAt?.toISOString(),
     }));
 
-    // Get all users for the user picker
-    const allUsers = await (prisma as any).user.findMany({
-        select: { id: true, name: true, email: true },
-        orderBy: { name: "asc" }
-    });
+    // Get all users for the user picker (admin only for global settings)
+    const allUsers = isAdmin
+        ? await (prisma as any).user.findMany({
+            select: { id: true, name: true, email: true },
+            orderBy: { name: "asc" }
+        })
+        : [];
 
-    // Get global notification settings
-    const globalSettings = await getGlobalNotificationSettings();
+    // Get global notification settings (admin only)
+    const globalSettings = isAdmin
+        ? await getGlobalNotificationSettings()
+        : { userIds: [], slackWebhookUrl: null };
 
-    // Get clients with their notification mode
+    // Get clients with their notification mode (filtered for non-admin)
     const clients = await (prisma as any).client.findMany({
+        where: !isAdmin ? { users: { some: { id: session.user.id } } } : {},
         select: {
             id: true,
             name: true,
@@ -53,6 +72,8 @@ export default async function GlobalIncidentsPage() {
             globalNotificationUserIds={globalSettings.userIds}
             globalSlackWebhookUrl={globalSettings.slackWebhookUrl || ""}
             clients={clients}
+            isAdmin={isAdmin}
         />
     );
 }
+
