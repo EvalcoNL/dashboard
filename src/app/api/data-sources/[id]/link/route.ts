@@ -4,6 +4,28 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { syncScheduler } from "@/lib/data-integration/sync-scheduler";
 
+// Map DataSource type to connector definition
+const CONNECTOR_DEFS: Record<string, { slug: string; name: string; category: string }> = {
+    GOOGLE_ADS: { slug: "google-ads", name: "Google Ads", category: "PAID_SEARCH" },
+    GOOGLE_ANALYTICS: { slug: "ga4", name: "Google Analytics 4", category: "WEB_ANALYTICS" },
+    META: { slug: "meta-ads", name: "Meta Ads", category: "PAID_SOCIAL" },
+    LINKEDIN: { slug: "linkedin-ads", name: "LinkedIn Ads", category: "PAID_SOCIAL" },
+    MICROSOFT_ADS: { slug: "microsoft-ads", name: "Microsoft Ads", category: "PAID_SEARCH" },
+    TIKTOK: { slug: "tiktok-ads", name: "TikTok Ads", category: "PAID_SOCIAL" },
+};
+
+async function resolveConnectorId(type: string): Promise<string | null> {
+    const def = CONNECTOR_DEFS[type];
+    if (!def) return null;
+    // Auto-create the ConnectorDefinition if it doesn't exist
+    const connector = await prisma.connectorDefinition.upsert({
+        where: { slug: def.slug },
+        update: {},
+        create: { slug: def.slug, name: def.name, category: def.category, authType: "oauth2", isActive: true },
+    });
+    return connector.id;
+}
+
 export async function PATCH(
     req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
@@ -30,6 +52,9 @@ export async function PATCH(
             return NextResponse.json({ error: "Source not found" }, { status: 404 });
         }
 
+        // Auto-link the correct ConnectorDefinition
+        const connectorId = await resolveConnectorId(pendingSource.type);
+
         // Check if another source with the same externalId+type already exists for this client
         const existingSource = await prisma.dataSource.findFirst({
             where: {
@@ -49,11 +74,21 @@ export async function PATCH(
                     active: true,
                     name: name || existingSource.name,
                     config: loginCustomerId ? { loginCustomerId } : (existingSource.config as object) || undefined,
+                    ...(connectorId ? { connectorId } : {}),
                 },
             });
 
             // Delete the pending source (no longer needed)
             await prisma.dataSource.delete({ where: { id: sourceId } });
+
+            // Ensure a sync account exists
+            if (connectorId) {
+                await prisma.dataSourceAccount.upsert({
+                    where: { dataSourceId_externalId: { dataSourceId: existingSource.id, externalId } },
+                    create: { dataSourceId: existingSource.id, externalId, name: name || existingSource.name || externalId, isActive: true },
+                    update: { isActive: true },
+                });
+            }
 
             // Auto-trigger first sync in background
             syncScheduler.scheduleNow(existingSource.id).catch(err =>
@@ -71,8 +106,18 @@ export async function PATCH(
                 name: name || `Google Ads (${externalId})`,
                 active: true,
                 config: loginCustomerId ? { loginCustomerId } : undefined,
+                ...(connectorId ? { connectorId } : {}),
             },
         });
+
+        // Create a sync account for the selected account
+        if (connectorId) {
+            await prisma.dataSourceAccount.upsert({
+                where: { dataSourceId_externalId: { dataSourceId: source.id, externalId } },
+                create: { dataSourceId: source.id, externalId, name: name || `Google Ads (${externalId})`, isActive: true },
+                update: { isActive: true },
+            });
+        }
 
         // Auto-trigger first sync in background
         syncScheduler.scheduleNow(source.id).catch(err =>
