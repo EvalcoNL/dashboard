@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { User, Mail, Shield, Calendar, Edit2, Trash2, X, Check, AlertTriangle } from "lucide-react";
+import { User, Mail, Shield, Calendar, Edit2, Trash2, X, Check, AlertTriangle, UserPlus, Eye, EyeOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 interface Client {
@@ -27,6 +27,9 @@ export default function UserManagementTable({ initialUsers, roles }: Props) {
     const [users, setUsers] = useState<UserData[]>(initialUsers);
     const [editingUser, setEditingUser] = useState<UserData | null>(null);
     const [deletingUser, setDeletingUser] = useState<UserData | null>(null);
+    const [creatingUser, setCreatingUser] = useState(false);
+    const [newUser, setNewUser] = useState({ name: "", email: "", password: "", role: "USER" });
+    const [showPassword, setShowPassword] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const router = useRouter();
@@ -91,8 +94,54 @@ export default function UserManagementTable({ initialUsers, roles }: Props) {
         }
     };
 
+    const handleCreate = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSaving(true);
+        setError(null);
+
+        try {
+            const res = await fetch("/api/admin/users", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(newUser),
+            });
+
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || "Fout bij aanmaken");
+            }
+
+            const created = await res.json();
+            setUsers([created, ...users]);
+            setCreatingUser(false);
+            setNewUser({ name: "", email: "", password: "", role: "USER" });
+            setShowPassword(false);
+            router.refresh();
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     return (
         <div style={{ position: "relative" }}>
+            {/* Add User Button */}
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "16px" }}>
+                <button
+                    onClick={() => { setCreatingUser(true); setError(null); }}
+                    style={{
+                        display: "inline-flex", alignItems: "center", gap: "8px",
+                        padding: "10px 20px", borderRadius: "10px",
+                        background: "var(--color-brand)", color: "#fff",
+                        border: "none", fontSize: "0.875rem", fontWeight: 600,
+                        cursor: "pointer", transition: "all 0.2s"
+                    }}
+                >
+                    <UserPlus size={16} /> Gebruiker Toevoegen
+                </button>
+            </div>
+
             <div style={{
                 background: "var(--color-surface-elevated)",
                 border: "1px solid var(--color-border)",
@@ -278,6 +327,99 @@ export default function UserManagementTable({ initialUsers, roles }: Props) {
                                 </button>
                             </div>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Create User Modal */}
+            {creatingUser && (
+                <div style={overlayStyle}>
+                    <div style={modalStyle}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+                            <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--color-text-primary)" }}>Gebruiker Toevoegen</h3>
+                            <button onClick={() => { setCreatingUser(false); setError(null); }} style={closeButtonStyle}><X size={20} /></button>
+                        </div>
+
+                        <form onSubmit={handleCreate} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                            <div style={inputGroupStyle}>
+                                <label style={labelStyle}>Naam</label>
+                                <input
+                                    type="text"
+                                    value={newUser.name}
+                                    onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                                    style={inputStyle}
+                                    placeholder="Volledige naam"
+                                    required
+                                />
+                            </div>
+                            <div style={inputGroupStyle}>
+                                <label style={labelStyle}>E-mail</label>
+                                <input
+                                    type="email"
+                                    value={newUser.email}
+                                    onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                                    style={inputStyle}
+                                    placeholder="naam@voorbeeld.nl"
+                                    required
+                                />
+                            </div>
+                            <div style={inputGroupStyle}>
+                                <label style={labelStyle}>Wachtwoord</label>
+                                <div style={{ position: "relative" }}>
+                                    <input
+                                        type={showPassword ? "text" : "password"}
+                                        value={newUser.password}
+                                        onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                                        style={{ ...inputStyle, paddingRight: "44px" }}
+                                        placeholder="Minimaal 8 tekens"
+                                        minLength={8}
+                                        required
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        style={{
+                                            position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)",
+                                            background: "none", border: "none", color: "var(--color-text-muted)",
+                                            cursor: "pointer", padding: "4px"
+                                        }}
+                                    >
+                                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </button>
+                                </div>
+                            </div>
+                            <div style={inputGroupStyle}>
+                                <label style={labelStyle}>Rol</label>
+                                <select
+                                    value={newUser.role}
+                                    onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+                                    style={inputStyle}
+                                >
+                                    {roles.map(role => (
+                                        <option key={role.name} value={role.name}>{role.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {error && <div style={{ color: "#f87171", fontSize: "0.875rem", marginTop: "8px" }}>{error}</div>}
+
+                            <div style={{ display: "flex", gap: "12px", marginTop: "12px" }}>
+                                <button
+                                    type="submit"
+                                    disabled={isSaving}
+                                    style={primaryButtonStyle}
+                                >
+                                    {isSaving ? "Aanmaken..." : "Gebruiker Aanmaken"}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => { setCreatingUser(false); setError(null); }}
+                                    style={secondaryButtonStyle}
+                                >
+                                    Annuleren
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}
