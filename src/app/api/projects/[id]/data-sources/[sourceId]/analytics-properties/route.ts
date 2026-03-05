@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { decrypt } from "@/lib/encryption";
 
 export async function GET(
     req: NextRequest,
@@ -26,7 +27,7 @@ export async function GET(
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: new URLSearchParams({
-                refresh_token: source.token,
+                refresh_token: decrypt(source.token),
                 client_id: process.env.GOOGLE_OAUTH_CLIENT_ID || "",
                 client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET || "",
                 grant_type: "refresh_token",
