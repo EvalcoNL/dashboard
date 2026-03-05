@@ -24,6 +24,7 @@ interface Props {
 }
 
 export default function UserManagementTable({ initialUsers, roles }: Props) {
+    const availableRoles = roles.length > 0 ? roles : [{ name: "ADMIN" }, { name: "USER" }];
     const [users, setUsers] = useState<UserData[]>(initialUsers);
     const [editingUser, setEditingUser] = useState<UserData | null>(null);
     const [deletingUser, setDeletingUser] = useState<UserData | null>(null);
@@ -267,7 +268,7 @@ export default function UserManagementTable({ initialUsers, roles }: Props) {
                                     onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value })}
                                     style={inputStyle}
                                 >
-                                    {roles.map(role => (
+                                    {availableRoles.map(role => (
                                         <option key={role.name} value={role.name}>{role.name}</option>
                                     ))}
                                 </select>
@@ -395,7 +396,7 @@ export default function UserManagementTable({ initialUsers, roles }: Props) {
                                     onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
                                     style={inputStyle}
                                 >
-                                    {roles.map(role => (
+                                    {availableRoles.map(role => (
                                         <option key={role.name} value={role.name}>{role.name}</option>
                                     ))}
                                 </select>
