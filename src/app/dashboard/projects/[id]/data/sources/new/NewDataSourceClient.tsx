@@ -12,7 +12,7 @@ import { PlatformIcon, PLATFORMS, getPlatformMeta } from "@/lib/config/platform-
 // ─── Field configs per API-key platform ──────────────────────────────
 const API_KEY_FIELDS: Record<string, { key: string; label: string; placeholder: string; required?: boolean; type?: string }[]> = {
     SHOPIFY: [
-        { key: "storeUrl", label: "Shopify Store URL", placeholder: "jouw-winkel.myshopify.com", required: true },
+        { key: "storeUrl", label: "Shopify Store URL", placeholder: "https://jouw-winkel.myshopify.com", required: true },
         { key: "apiKey", label: "Admin API Access Token", placeholder: "shpat_...", required: true, type: "password" },
     ],
     WORDPRESS: [

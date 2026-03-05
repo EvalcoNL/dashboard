@@ -749,29 +749,13 @@ function StepWebsite({
                 <label className="label" htmlFor="w-domain">
                     Domein
                 </label>
-                <div style={{ position: "relative" }}>
-                    <span
-                        style={{
-                            position: "absolute",
-                            left: "14px",
-                            top: "50%",
-                            transform: "translateY(-50%)",
-                            color: "var(--color-text-muted)",
-                            fontSize: "0.85rem",
-                            pointerEvents: "none",
-                        }}
-                    >
-                        https://
-                    </span>
-                    <input
-                        id="w-domain"
-                        className="input"
-                        value={data.domain}
-                        onChange={(e) => update({ domain: e.target.value })}
-                        placeholder="www.voorbeeld.nl"
-                        style={{ paddingLeft: "72px" }}
-                    />
-                </div>
+                <input
+                    id="w-domain"
+                    className="input"
+                    value={data.domain}
+                    onChange={(e) => update({ domain: e.target.value })}
+                    placeholder="https://www.voorbeeld.nl"
+                />
                 <p
                     style={{
                         fontSize: "0.7rem",
@@ -877,7 +861,7 @@ function StepBevestiging({ data }: { data: WizardData }) {
                     {data.domain ? (
                         <SummaryRow
                             label="Domein"
-                            value={`https://${data.domain}`}
+                            value={data.domain.startsWith('http') ? data.domain : `https://${data.domain}`}
                         />
                     ) : (
                         <p

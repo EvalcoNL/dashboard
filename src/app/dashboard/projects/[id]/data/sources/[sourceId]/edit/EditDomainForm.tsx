@@ -150,7 +150,7 @@ export default function EditDomainForm({
                             type="text"
                             value={domain}
                             onChange={(e) => setDomain(e.target.value)}
-                            placeholder="website.nl"
+                            placeholder="https://website.nl"
                             style={{
                                 width: "100%",
                                 padding: "12px 16px 12px 48px",

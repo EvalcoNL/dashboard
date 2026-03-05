@@ -41,20 +41,23 @@ export async function POST(req: NextRequest) {
             },
         });
 
-        // If a domain was provided, create a WEBSITE DataSource for monitoring
+        // If a domain was provided, create a DOMAIN DataSource for monitoring
         if (domain && domain.trim()) {
-            const cleanDomain = domain.trim().replace(/^https?:\/\//, "");
-            const fullUrl = `https://${cleanDomain}`;
+            const cleanDomain = domain.trim().replace(/^https?:\/\//, "").replace(/\/$/, "");
 
             await prisma.dataSource.create({
                 data: {
                     clientId: client.id,
-                    type: "WEBSITE",
+                    type: "DOMAIN",
                     name: cleanDomain,
-                    category: "MONITOR",
-                    externalId: fullUrl,
+                    externalId: cleanDomain,
                     token: "", // not needed for website monitoring
                     active: true,
+                    config: {
+                        uptime: true,
+                        ssl: true,
+                        uptimeInterval: 5,
+                    },
                 },
             });
         }

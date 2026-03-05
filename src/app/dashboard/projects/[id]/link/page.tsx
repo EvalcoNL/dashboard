@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { redirect, notFound } from "next/navigation";
 import { googleAdsService } from "@/lib/integrations/google-ads";
+import { decrypt } from "@/lib/encryption";
 import { AlertCircle } from "lucide-react";
 import LinkSelectionClient from "./LinkSelectionClient";
 
@@ -37,7 +38,7 @@ export default async function LinkPage({
 
     let accounts = [];
     try {
-        accounts = await googleAdsService.listAccessibleCustomers(pendingSource.token);
+        accounts = await googleAdsService.listAccessibleCustomers(decrypt(pendingSource.token));
     } catch (error: any) {
         return (
             <div className="glass-card" style={{ padding: "40px", textAlign: "center", maxWidth: "500px", margin: "100px auto" }}>
