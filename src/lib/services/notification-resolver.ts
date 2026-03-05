@@ -34,20 +34,28 @@ export async function resolveNotificationConfig(clientId: string): Promise<Notif
         return { recipients: [], slackWebhookUrl: null, enabled: false, mode: "disabled" };
     }
 
+    // Get self-opted-in users for this client
+    const optedIn = await (prisma as any).userNotificationPreference.findMany({
+        where: { clientId, enabled: true },
+        include: { user: { select: { email: true } } }
+    });
+    const optInEmails: string[] = optedIn.map((p: any) => p.user.email);
+
     if (mode === "custom") {
+        const adminEmails = client.notificationUsers.map((u: any) => u.email);
         return {
-            recipients: client.notificationUsers.map((u: any) => u.email),
+            recipients: [...new Set([...adminEmails, ...optInEmails])],
             slackWebhookUrl: client.slackWebhookUrl ? decrypt(client.slackWebhookUrl) : null,
             enabled: true,
             mode: "custom"
         };
     }
 
-    // mode === "global" → fetch global settings
+    // mode === "global" → fetch global settings + merge opt-in users
     const globalConfig = await getGlobalNotificationSettings();
 
     return {
-        recipients: globalConfig.recipients,
+        recipients: [...new Set([...globalConfig.recipients, ...optInEmails])],
         slackWebhookUrl: globalConfig.slackWebhookUrl,
         enabled: true,
         mode: "global"

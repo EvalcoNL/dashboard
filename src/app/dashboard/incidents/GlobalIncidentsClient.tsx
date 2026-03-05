@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CheckCircle2, Search, ShieldAlert, Shield, ShieldCheck, Settings, Bell, Mail, MessageSquare, Save, Globe, ToggleLeft, ToggleRight } from "lucide-react";
+import { CheckCircle2, Search, ShieldAlert, Shield, ShieldCheck, Settings, Bell, Mail, MessageSquare, Save, Globe, ToggleLeft, ToggleRight, BellRing } from "lucide-react";
 import { useState } from "react";
 import { useNotification } from "@/components/NotificationProvider";
 
@@ -86,7 +86,8 @@ export default function GlobalIncidentsClient({
     globalNotificationUserIds,
     globalSlackWebhookUrl,
     clients,
-    isAdmin = false
+    isAdmin = false,
+    userPreferences = {}
 }: {
     incidents: Incident[];
     allUsers: User[];
@@ -94,6 +95,7 @@ export default function GlobalIncidentsClient({
     globalSlackWebhookUrl: string;
     clients: ClientInfo[];
     isAdmin?: boolean;
+    userPreferences?: Record<string, boolean>;
 }) {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -101,7 +103,11 @@ export default function GlobalIncidentsClient({
     const initialTab = searchParams.get("tab");
     const { showToast, confirm } = useNotification();
     const [search, setSearch] = useState("");
-    const [activeTab, setActiveTab] = useState<"overview" | "settings">(initialTab === "settings" ? "settings" : "overview");
+    const [activeTab, setActiveTab] = useState<"overview" | "settings" | "my-notifications">(
+        initialTab === "settings" ? "settings" : "overview"
+    );
+    const [prefs, setPrefs] = useState<Record<string, boolean>>(userPreferences);
+    const [togglingClient, setTogglingClient] = useState<string | null>(null);
 
     // Settings state
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>(globalNotificationUserIds);
@@ -110,6 +116,26 @@ export default function GlobalIncidentsClient({
 
     const emailEnabled = selectedUserIds.length > 0;
     const slackEnabled = slackUrl.trim().length > 0;
+
+    const handleTogglePreference = async (clientId: string) => {
+        const currentlyEnabled = prefs[clientId] || false;
+        const newEnabled = !currentlyEnabled;
+        setTogglingClient(clientId);
+        try {
+            const res = await fetch("/api/user/notification-preferences", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ clientId, enabled: newEnabled })
+            });
+            if (!res.ok) throw new Error("Failed");
+            setPrefs({ ...prefs, [clientId]: newEnabled });
+            showToast("success", newEnabled ? "Meldingen ingeschakeld" : "Meldingen uitgeschakeld");
+        } catch {
+            showToast("error", "Kon voorkeur niet opslaan.");
+        } finally {
+            setTogglingClient(null);
+        }
+    };
 
     const handleUserToggle = (userId: string) => {
         if (selectedUserIds.includes(userId)) {
@@ -191,6 +217,18 @@ export default function GlobalIncidentsClient({
                         <Settings size={16} /> Instellingen
                     </button>
                 )}
+                <button
+                    onClick={() => setActiveTab("my-notifications")}
+                    style={{
+                        background: "none", border: "none", outline: "none", cursor: "pointer",
+                        padding: "0 4px 12px 4px", fontSize: "0.9rem", fontWeight: 600,
+                        color: activeTab === "my-notifications" ? "var(--color-brand)" : "var(--color-text-muted)",
+                        borderBottom: activeTab === "my-notifications" ? "2px solid var(--color-brand)" : "2px solid transparent",
+                        transition: "all 0.15s", display: "flex", alignItems: "center", gap: "8px"
+                    }}
+                >
+                    <BellRing size={16} /> Mijn Meldingen
+                </button>
             </div>
 
             {activeTab === "overview" ? (
@@ -313,7 +351,7 @@ export default function GlobalIncidentsClient({
                         </div>
                     )}
                 </>
-            ) : (
+            ) : activeTab === "settings" ? (
                 /* ── Settings Tab ── */
                 <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
                     {/* Global Notification Settings */}
@@ -553,7 +591,87 @@ export default function GlobalIncidentsClient({
                         </div>
                     </div>
                 </div>
-            )}
+            ) : activeTab === "my-notifications" ? (
+                /* User opt-in notifications tab */
+                <div style={{
+                    background: "var(--color-surface-elevated)",
+                    borderRadius: "10px",
+                    border: "1px solid var(--color-border)",
+                    padding: "32px"
+                }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
+                        <div style={{
+                            width: "40px", height: "40px", borderRadius: "10px",
+                            background: "rgba(99, 102, 241, 0.1)",
+                            display: "flex", alignItems: "center", justifyContent: "center"
+                        }}>
+                            <BellRing size={20} color="var(--color-brand)" />
+                        </div>
+                        <div>
+                            <h3 style={{ fontSize: "1rem", fontWeight: 600, margin: 0, color: "var(--color-text-primary)" }}>
+                                Mijn Meldingen
+                            </h3>
+                            <p style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", margin: "2px 0 0 0" }}>
+                                Kies voor welke projecten je e-mailmeldingen wilt ontvangen bij incidenten.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "16px", marginBottom: "20px", marginTop: "16px" }}>
+                        <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#10b981" }} />
+                            {Object.values(prefs).filter(Boolean).length} actief
+                        </div>
+                        <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#9ca3af" }} />
+                            {clients.length - Object.values(prefs).filter(Boolean).length} inactief
+                        </div>
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        {clients.map(client => {
+                            const isEnabled = prefs[client.id] || false;
+                            const isToggling = togglingClient === client.id;
+                            return (
+                                <div key={client.id} style={{
+                                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                                    padding: "14px 16px", borderRadius: "8px",
+                                    background: "rgba(0,0,0,0.1)", transition: "background 0.15s"
+                                }} className="client-row">
+                                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                        <div style={{
+                                            width: "8px", height: "8px", borderRadius: "50%",
+                                            background: isEnabled ? "#10b981" : "#9ca3af",
+                                            transition: "background 0.2s"
+                                        }} />
+                                        <span style={{ fontSize: "0.9rem", fontWeight: 500, color: "var(--color-text-primary)" }}>
+                                            {client.name}
+                                        </span>
+                                    </div>
+                                    <button
+                                        onClick={() => handleTogglePreference(client.id)}
+                                        disabled={isToggling}
+                                        style={{
+                                            display: "flex", alignItems: "center", gap: "6px",
+                                            padding: "6px 14px", borderRadius: "6px",
+                                            background: isEnabled ? "rgba(16, 185, 129, 0.1)" : "var(--color-surface-hover)",
+                                            border: `1px solid ${isEnabled ? "rgba(16, 185, 129, 0.3)" : "var(--color-border)"}`,
+                                            color: isEnabled ? "#10b981" : "var(--color-text-muted)",
+                                            fontSize: "0.8rem", fontWeight: 600,
+                                            cursor: isToggling ? "not-allowed" : "pointer",
+                                            opacity: isToggling ? 0.6 : 1,
+                                            transition: "all 0.2s"
+                                        }}
+                                    >
+                                        {isEnabled ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+                                        {isToggling ? "..." : isEnabled ? "Aan" : "Uit"}
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            ) : null}
 
             <style jsx>{`
                 .incident-row:hover { background: var(--color-surface-hover) !important; }

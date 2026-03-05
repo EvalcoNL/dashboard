@@ -20,6 +20,7 @@ model User {
   advisorActions      AdvisorReport[] @relation("reviewedBy")
   clients             Client[]        @relation("ClientAccess")
   notificationClients Client[]        @relation("NotificationUsers")
+  notificationPreferences UserNotificationPreference[]
 
   @@map("users")
 }
@@ -69,6 +70,7 @@ model Client {
   notifications        Notification[]
   users                User[]                 @relation("ClientAccess")
   notificationUsers    User[]                 @relation("NotificationUsers")
+  notificationPreferences UserNotificationPreference[]
   datasets             Dataset[]
   dashboards           Dashboard[]
 
@@ -555,4 +557,18 @@ model AuditLog {
   @@index([userId, createdAt])
   @@index([action, createdAt])
   @@map("audit_logs")
+}
+
+model UserNotificationPreference {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  clientId  String   @map("client_id")
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientId])
+  @@map("user_notification_preferences")
 }

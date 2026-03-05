@@ -65,6 +65,16 @@ export default async function GlobalIncidentsPage() {
         orderBy: { name: "asc" }
     });
 
+    // Get user's own notification preferences (for opt-in toggles)
+    const userPrefs = await (prisma as any).userNotificationPreference.findMany({
+        where: { userId: session.user.id },
+        select: { clientId: true, enabled: true }
+    });
+    const userPreferences: Record<string, boolean> = {};
+    for (const p of userPrefs) {
+        userPreferences[p.clientId] = p.enabled;
+    }
+
     return (
         <GlobalIncidentsClient
             incidents={serialized}
@@ -73,6 +83,7 @@ export default async function GlobalIncidentsPage() {
             globalSlackWebhookUrl={globalSettings.slackWebhookUrl || ""}
             clients={clients}
             isAdmin={isAdmin}
+            userPreferences={userPreferences}
         />
     );
 }
