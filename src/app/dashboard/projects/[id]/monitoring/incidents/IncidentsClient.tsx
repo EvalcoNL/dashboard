@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CheckCircle2, Search, ShieldAlert, Shield, ShieldCheck, Settings, Bell, Mail, MessageSquare, Save, X, ExternalLink } from "lucide-react";
+import { Search, ShieldAlert, Shield, ShieldCheck, MessageSquare, Mail, ToggleLeft, ToggleRight, BellRing } from "lucide-react";
 import { useState } from "react";
 import { useNotification } from "@/components/NotificationProvider";
 
@@ -15,12 +15,6 @@ interface Incident {
     startedAt: string;
     acknowledgedAt: string | null;
     resolvedAt: string | null;
-}
-
-interface User {
-    id: string;
-    name: string;
-    email: string;
 }
 
 function timeAgo(dateStr: string) {
@@ -57,22 +51,16 @@ export default function IncidentsClient({
     clientId,
     clientName,
     incidents,
-    allUsers,
-    notificationUsers,
     initialSlackWebhookUrl,
-    initialNotificationMode,
-    hasGlobalSettings,
-    currentUserEmail
+    isAdmin = false,
+    userOptedIn = false
 }: {
     clientId: string;
     clientName: string;
     incidents: Incident[];
-    allUsers: User[];
-    notificationUsers: User[];
     initialSlackWebhookUrl: string;
-    initialNotificationMode: string;
-    hasGlobalSettings: boolean;
-    currentUserEmail: string;
+    isAdmin?: boolean;
+    userOptedIn?: boolean;
 }) {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -82,46 +70,44 @@ export default function IncidentsClient({
     const [search, setSearch] = useState("");
     const [activeTab, setActiveTab] = useState<"overview" | "settings">("overview");
 
-    // Auto-select current user if no notification users are configured
-    const currentUser = allUsers.find(u => u.email === currentUserEmail);
-    const initialUserIds = notificationUsers.length > 0
-        ? notificationUsers.map(u => u.id)
-        : currentUser ? [currentUser.id] : [];
-
-    const [selectedUserIds, setSelectedUserIds] = useState<string[]>(initialUserIds);
+    // Notification state
+    const [optedIn, setOptedIn] = useState(userOptedIn);
+    const [togglingOptIn, setTogglingOptIn] = useState(false);
     const [slackUrl, setSlackUrl] = useState(initialSlackWebhookUrl);
-    // If no global settings exist, force mode to "custom" instead of "global"
-    const effectiveInitialMode = (!hasGlobalSettings && initialNotificationMode === "global") ? "custom" : initialNotificationMode;
-    const [notificationMode, setNotificationMode] = useState(effectiveInitialMode);
     const [saving, setSaving] = useState(false);
 
-    const isCustomMode = notificationMode === "custom";
-    const emailEnabled = selectedUserIds.length > 0;
     const slackEnabled = slackUrl.trim().length > 0;
 
-    const handleUserToggle = (userId: string) => {
-        if (selectedUserIds.includes(userId)) {
-            setSelectedUserIds(selectedUserIds.filter(id => id !== userId));
-        } else {
-            setSelectedUserIds([...selectedUserIds, userId]);
+    const handleToggleOptIn = async () => {
+        const newValue = !optedIn;
+        setTogglingOptIn(true);
+        try {
+            const res = await fetch("/api/user/notification-preferences", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ clientId, enabled: newValue })
+            });
+            if (!res.ok) throw new Error("Failed");
+            setOptedIn(newValue);
+            showToast("success", newValue ? "Je ontvangt nu meldingen voor dit project" : "Meldingen uitgeschakeld voor dit project");
+        } catch {
+            showToast("error", "Kon voorkeur niet opslaan.");
+        } finally {
+            setTogglingOptIn(false);
         }
     };
 
-    const handleSaveSettings = async () => {
+    const handleSaveSlack = async () => {
         setSaving(true);
         try {
             const res = await fetch(`/api/projects/${clientId}/notifications`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    userIds: selectedUserIds,
-                    slackWebhookUrl: slackUrl,
-                    notificationMode: notificationMode
-                }),
+                body: JSON.stringify({ slackWebhookUrl: slackUrl }),
             });
             if (!res.ok) throw new Error("Failed to save settings");
             router.refresh();
-            showToast("success", "Instellingen opgeslagen!");
+            showToast("success", "Slack instellingen opgeslagen!");
         } catch (error) {
             console.error(error);
             showToast("error", "Er ging iets mis met opslaan.");
@@ -130,51 +116,40 @@ export default function IncidentsClient({
         }
     };
 
-    const [testingNotifs, setTestingNotifs] = useState(false);
+    // Filter incidents
+    const filtered = incidents.filter(inc => {
+        const q = search.toLowerCase();
+        return (
+            inc.title.toLowerCase().includes(q) ||
+            inc.cause.toLowerCase().includes(q) ||
+            inc.status.toLowerCase().includes(q)
+        );
+    });
 
-    const handleTestNotifications = async () => {
-        if (!emailEnabled && !slackEnabled) {
-            showToast("warning", "Er zijn geen e-mail of Slack notificaties ingesteld om te testen. Vink een kanaal aan en sla de instellingen eerst op.");
-            return;
-        }
-
-        setTestingNotifs(true);
-        try {
-            const res = await fetch(`/api/projects/${clientId}/notifications/test`, {
-                method: "POST",
-            });
-            const data = await res.json();
-
-            if (res.ok) {
-                showToast("success", `Testbericht succesvol verstuurd! (Email: ${data.channels?.email ? '✅' : '❌'}, Slack: ${data.channels?.slack ? '✅' : '❌'})`);
-            } else {
-                let errorMsg = data.error || "Failed to trigger test";
-                if (data.details) errorMsg += `\nDetails: ${data.details}`;
-                throw new Error(errorMsg);
-            }
-        } catch (error: any) {
-            console.error("Test notification error:", error);
-            showToast("error", `Fout bij het versturen van testbericht: ${error.message}`);
-        } finally {
-            setTestingNotifs(false);
-        }
-    };
-
-    const filtered = incidents.filter(inc =>
-        inc.title.toLowerCase().includes(search.toLowerCase()) ||
-        inc.cause.toLowerCase().includes(search.toLowerCase())
-    );
+    const ongoingCount = incidents.filter(i => i.status === "ONGOING").length;
 
     return (
         <div style={{ padding: "32px", maxWidth: "1100px", margin: "0 auto" }}>
             {/* Header */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "28px" }}>
                 <div>
-                    <h1 style={{ fontSize: "1.8rem", fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>
+                    <h1 style={{ fontSize: "1.8rem", fontWeight: 700, color: "var(--color-text-primary)", margin: 0, marginBottom: "4px" }}>
                         Incidents
                     </h1>
-                    <p style={{ color: "var(--color-text-muted)", fontSize: "0.85rem", margin: "4px 0 0 0" }}>{clientName}</p>
+                    <p style={{ fontSize: "0.85rem", color: "var(--color-text-muted)", margin: 0 }}>
+                        {clientName}
+                    </p>
                 </div>
+                {ongoingCount > 0 && (
+                    <div style={{
+                        display: "flex", alignItems: "center", gap: "8px",
+                        padding: "6px 14px", borderRadius: "99px",
+                        background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.2)"
+                    }}>
+                        <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#ef4444", animation: "pulse 2s infinite" }} />
+                        <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#ef4444" }}>{ongoingCount} actief</span>
+                    </div>
+                )}
             </div>
 
             {/* Tabs */}
@@ -204,109 +179,73 @@ export default function IncidentsClient({
                         transition: "all 0.15s", display: "flex", alignItems: "center", gap: "8px"
                     }}
                 >
-                    <Settings size={16} /> Instellingen
+                    <BellRing size={16} /> Meldingen
                 </button>
             </div>
 
-            {/* Content Context */}
             {activeTab === "overview" ? (
                 <>
-                    {/* Header Controls */}
+                    {/* Search */}
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", marginBottom: "16px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                            <div style={{
-                                display: "flex", alignItems: "center", gap: "8px", padding: "8px 14px",
-                                borderRadius: "8px", border: "1px solid var(--color-border)",
-                                background: "var(--color-surface-elevated)", minWidth: "220px",
-                            }}>
-                                <Search size={15} color="var(--color-text-muted)" />
-                                <input
-                                    value={search}
-                                    onChange={e => setSearch(e.target.value)}
-                                    placeholder="Search"
-                                    style={{
-                                        background: "transparent", border: "none", outline: "none",
-                                        color: "var(--color-text-primary)", fontSize: "0.85rem", width: "100%",
-                                    }}
-                                />
-                                <kbd style={{
-                                    fontSize: "0.65rem", padding: "2px 6px", borderRadius: "4px",
-                                    background: "rgba(99,102,241,0.2)", color: "var(--color-brand)",
-                                    fontWeight: 600, fontFamily: "monospace",
-                                }}>/</kbd>
-                            </div>
+                        <div style={{
+                            display: "flex", alignItems: "center", gap: "8px", padding: "8px 14px",
+                            borderRadius: "8px", border: "1px solid var(--color-border)",
+                            background: "var(--color-surface-elevated)", width: "280px"
+                        }}>
+                            <Search size={14} color="var(--color-text-muted)" />
+                            <input
+                                type="text"
+                                placeholder="Zoeken..."
+                                value={search}
+                                onChange={e => setSearch(e.target.value)}
+                                style={{
+                                    border: "none", outline: "none", background: "transparent",
+                                    color: "var(--color-text-primary)", fontSize: "0.85rem", width: "100%"
+                                }}
+                            />
                         </div>
                     </div>
 
-                    {/* Table */}
+                    {/* Incidents */}
                     {filtered.length === 0 ? (
                         <div style={{
-                            textAlign: "center", padding: "60px", color: "var(--color-text-muted)",
-                            background: "var(--color-surface)", borderRadius: "10px",
-                            border: "1px solid var(--color-border)",
+                            background: "var(--color-surface-elevated)", borderRadius: "10px",
+                            border: "1px solid var(--color-border)", padding: "48px 32px", textAlign: "center"
                         }}>
-                            <CheckCircle2 size={36} style={{ marginBottom: "12px", opacity: 0.3 }} />
-                            <div style={{ fontSize: "1rem", fontWeight: 600, color: "var(--color-text-primary)", marginBottom: "6px" }}>
+                            <ShieldCheck size={40} color="var(--color-text-muted)" style={{ marginBottom: "16px", opacity: 0.5 }} />
+                            <div style={{ fontSize: "1rem", color: "var(--color-text-primary)", fontWeight: 600, marginBottom: "8px" }}>
                                 Geen incidenten gevonden
                             </div>
-                            <div style={{ fontSize: "0.85rem" }}>Alles draait soepel — er zijn geen recente incidenten.</div>
+                            <p style={{ fontSize: "0.85rem", color: "var(--color-text-muted)" }}>
+                                {search ? "Geen resultaten voor deze zoekterm." : "Er zijn nog geen incidenten voor dit project."}
+                            </p>
                         </div>
                     ) : (
-                        <div style={{ borderRadius: "10px", overflow: "hidden", border: "1px solid var(--color-border)" }}>
-                            {/* Table header */}
-                            <div style={{
-                                display: "grid",
-                                gridTemplateColumns: "1fr 200px 180px",
-                                padding: "10px 20px",
-                                background: "rgba(255,255,255,0.02)",
-                                borderBottom: "1px solid var(--color-border)",
-                                fontSize: "0.7rem", fontWeight: 600, color: "var(--color-text-muted)",
-                                textTransform: "uppercase", letterSpacing: "0.04em",
-                            }}>
-                                <div>Incident</div>
-                                <div>Started at</div>
-                                <div>Length</div>
-                            </div>
-
-                            {/* Rows */}
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                             {filtered.map(inc => {
-                                const { icon: SIcon, color: sColor } = getStatusIcon(inc.status);
-
+                                const { icon: StatusIcon, color: statusColor } = getStatusIcon(inc.status);
                                 return (
                                     <Link key={inc.id} href={`/dashboard/projects/${clientId}/monitoring/incidents/${inc.id}`} style={{ textDecoration: "none" }}>
                                         <div style={{
-                                            display: "grid",
-                                            gridTemplateColumns: "1fr 200px 180px",
-                                            padding: "16px 20px",
-                                            borderBottom: "1px solid rgba(255,255,255,0.03)",
-                                            background: "var(--color-surface)",
-                                            alignItems: "center",
-                                            transition: "background 0.15s",
-                                            cursor: "pointer",
+                                            display: "flex", alignItems: "center", gap: "16px",
+                                            padding: "14px 20px", borderRadius: "8px",
+                                            background: "var(--color-surface-elevated)",
+                                            border: "1px solid var(--color-border)",
+                                            transition: "background 0.15s", cursor: "pointer"
                                         }} className="incident-row">
-                                            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                                                <div style={{
-                                                    width: "32px", height: "32px", borderRadius: "8px",
-                                                    background: `${sColor}15`,
-                                                    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                                                }}>
-                                                    <SIcon size={16} color={sColor} />
+                                            <StatusIcon size={18} style={{ color: statusColor, flexShrink: 0 }} />
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--color-text-primary)", marginBottom: "2px" }}>
+                                                    {inc.title}
                                                 </div>
-                                                <div>
-                                                    <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--color-text-primary)", marginBottom: "2px" }}>
-                                                        {inc.title}
-                                                    </div>
-                                                    <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-                                                        {inc.cause}
-                                                    </div>
+                                                <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                    {inc.cause}
                                                 </div>
                                             </div>
-
-                                            <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
-                                                {timeAgo(inc.startedAt)}
-                                            </div>
-
-                                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                            <div style={{ display: "flex", alignItems: "center", gap: "16px", flexShrink: 0 }}>
+                                                <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", textAlign: "right" }}>
+                                                    {timeAgo(inc.startedAt)}
+                                                </div>
                                                 {inc.status === "ONGOING" && (
                                                     <>
                                                         <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#ef4444" }} />
@@ -333,128 +272,91 @@ export default function IncidentsClient({
                     )}
                 </>
             ) : (
-                <div style={{
-                    background: "var(--color-surface-elevated)",
-                    borderRadius: "10px",
-                    border: "1px solid var(--color-border)",
-                    padding: "32px"
-                }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "24px" }}>
-                        <Bell size={24} color="var(--color-brand)" />
-                        <div>
-                            <h2 style={{ fontSize: "1.2rem", fontWeight: 600, margin: 0, color: "var(--color-text-primary)" }}>
-                                Notificaties
-                            </h2>
-                            <p style={{ fontSize: "0.85rem", color: "var(--color-text-muted)", margin: "4px 0 0 0" }}>
-                                Bepaal hoe en of je op de hoogte wil worden gehouden van incidenten.
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* Notification Mode Selector */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+                    {/* Personal opt-in toggle */}
                     <div style={{
-                        display: "flex", gap: "8px", marginBottom: "24px",
-                        padding: "4px", background: "rgba(0,0,0,0.2)", borderRadius: "10px",
-                        border: "1px solid rgba(255,255,255,0.05)"
+                        background: "var(--color-surface-elevated)",
+                        borderRadius: "10px",
+                        border: "1px solid var(--color-border)",
+                        padding: "32px"
                     }}>
-                        {[
-                            ...(hasGlobalSettings ? [{ value: "global", label: "Globale instellingen", desc: "Erft standaard notificaties" }] : []),
-                            { value: "custom", label: "Eigen instellingen", desc: "Aangepaste configuratie" },
-                            { value: "disabled", label: "Uitgeschakeld", desc: "Geen notificaties" },
-                        ].map(opt => (
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "24px" }}>
+                            <BellRing size={24} color="var(--color-brand)" />
+                            <div>
+                                <h2 style={{ fontSize: "1.2rem", fontWeight: 600, margin: 0, color: "var(--color-text-primary)" }}>
+                                    Mijn Meldingen
+                                </h2>
+                                <p style={{ fontSize: "0.85rem", color: "var(--color-text-muted)", margin: "4px 0 0 0" }}>
+                                    Ontvang e-mailmeldingen bij incidenten voor dit project.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div style={{
+                            display: "flex", alignItems: "center", justifyContent: "space-between",
+                            padding: "20px", background: "rgba(0,0,0,0.1)", borderRadius: "8px",
+                            border: `1px solid ${optedIn ? "rgba(16, 185, 129, 0.2)" : "rgba(255,255,255,0.05)"}`
+                        }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                                <div style={{
+                                    width: "40px", height: "40px", borderRadius: "8px",
+                                    background: optedIn ? "rgba(16, 185, 129, 0.1)" : "rgba(99,102,241,0.1)",
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                    color: optedIn ? "#10b981" : "var(--color-text-muted)",
+                                    transition: "all 0.2s"
+                                }}>
+                                    <Mail size={18} />
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
+                                        E-mail Meldingen
+                                    </div>
+                                    <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", marginTop: "2px" }}>
+                                        {optedIn
+                                            ? "Je ontvangt een e-mail bij elk nieuw incident."
+                                            : "Je ontvangt momenteel geen meldingen voor dit project."
+                                        }
+                                    </div>
+                                </div>
+                            </div>
                             <button
-                                key={opt.value}
-                                onClick={() => setNotificationMode(opt.value)}
+                                onClick={handleToggleOptIn}
+                                disabled={togglingOptIn}
                                 style={{
-                                    flex: 1, padding: "12px 16px", borderRadius: "8px",
-                                    border: "none", cursor: "pointer",
-                                    background: notificationMode === opt.value ? "var(--color-surface-elevated)" : "transparent",
-                                    boxShadow: notificationMode === opt.value ? "0 2px 8px rgba(0,0,0,0.2)" : "none",
+                                    display: "flex", alignItems: "center", gap: "8px",
+                                    padding: "10px 20px", borderRadius: "8px",
+                                    background: optedIn ? "rgba(16, 185, 129, 0.1)" : "var(--color-surface-hover)",
+                                    border: `1px solid ${optedIn ? "rgba(16, 185, 129, 0.3)" : "var(--color-border)"}`,
+                                    color: optedIn ? "#10b981" : "var(--color-text-muted)",
+                                    fontSize: "0.85rem", fontWeight: 600,
+                                    cursor: togglingOptIn ? "not-allowed" : "pointer",
+                                    opacity: togglingOptIn ? 0.6 : 1,
                                     transition: "all 0.2s"
                                 }}
                             >
-                                <div style={{
-                                    fontSize: "0.85rem", fontWeight: 600,
-                                    color: notificationMode === opt.value ? "var(--color-brand)" : "var(--color-text-muted)"
-                                }}>{opt.label}</div>
-                                <div style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", marginTop: "2px" }}>{opt.desc}</div>
+                                {optedIn ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
+                                {togglingOptIn ? "..." : optedIn ? "Ingeschakeld" : "Uitgeschakeld"}
                             </button>
-                        ))}
+                        </div>
                     </div>
 
-                    <div style={{
-                        display: "flex", flexDirection: "column", gap: "20px",
-                        opacity: isCustomMode ? 1 : 0.4,
-                        pointerEvents: isCustomMode ? "auto" : "none",
-                        transition: "opacity 0.2s"
-                    }}>
-                        {/* Email Settings */}
+                    {/* Slack Settings — admin only */}
+                    {isAdmin && (
                         <div style={{
-                            display: "flex", flexDirection: "column",
-                            padding: "20px", background: "rgba(0,0,0,0.1)", borderRadius: "8px",
-                            border: "1px solid rgba(255,255,255,0.05)"
+                            background: "var(--color-surface-elevated)",
+                            borderRadius: "10px",
+                            border: "1px solid var(--color-border)",
+                            padding: "32px"
                         }}>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
-                                <div style={{ display: "flex", gap: "16px" }}>
-                                    <div style={{ width: "40px", height: "40px", borderRadius: "8px", background: "rgba(99,102,241,0.1)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-brand)" }}>
-                                        <Mail size={18} />
-                                    </div>
-                                    <div>
-                                        <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--color-text-primary)" }}>E-mail Notificaties</div>
-                                        <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", marginTop: "4px" }}>
-                                            Selecteer de gebruikers die een mail ontvangen bij een nieuw incident.
-                                        </div>
-                                    </div>
-                                </div>
-                                <div style={{ fontSize: "0.8rem", color: emailEnabled ? "var(--color-brand)" : "var(--color-text-muted)", fontWeight: 600 }}>
-                                    {emailEnabled ? "Ingeschakeld" : "Uitgeschakeld"}
-                                </div>
-                            </div>
-
-                            <div style={{
-                                display: "grid", gap: "8px", paddingLeft: "56px",
-                                borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: "16px"
-                            }}>
-                                {allUsers.map(user => (
-                                    <label key={user.id} style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedUserIds.includes(user.id)}
-                                            onChange={() => handleUserToggle(user.id)}
-                                            style={{ cursor: "pointer", width: "16px", height: "16px", accentColor: "var(--color-brand)" }}
-                                        />
-                                        <div>
-                                            <div style={{ fontSize: "0.85rem", color: "var(--color-text-primary)", fontWeight: 500 }}>{user.name}</div>
-                                            <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>{user.email}</div>
-                                        </div>
-                                    </label>
-                                ))}
-                                {allUsers.length === 0 && (
-                                    <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>Geen systeemgebruikers gevonden.</div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Slack Settings */}
-                        <div style={{
-                            display: "flex", flexDirection: "column",
-                            padding: "20px", background: "rgba(0,0,0,0.1)", borderRadius: "8px",
-                            border: "1px solid rgba(255,255,255,0.05)"
-                        }}>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
-                                <div style={{ display: "flex", gap: "16px" }}>
-                                    <div style={{ width: "40px", height: "40px", borderRadius: "8px", background: "rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-secondary)" }}>
-                                        <MessageSquare size={18} />
-                                    </div>
-                                    <div>
-                                        <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--color-text-primary)" }}>Slack Waarschuwingen</div>
-                                        <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", marginTop: "4px" }}>
-                                            Koppel een Slack Webhook URL om updates in een kanaal te ontvangen.
-                                        </div>
-                                    </div>
-                                </div>
-                                <div style={{ fontSize: "0.8rem", color: slackEnabled ? "var(--color-brand)" : "var(--color-text-muted)", fontWeight: 600 }}>
-                                    {slackEnabled ? "Geconfigureerd" : "Niet geconfigureerd"}
+                            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "24px" }}>
+                                <MessageSquare size={24} color="var(--color-text-secondary)" />
+                                <div>
+                                    <h2 style={{ fontSize: "1.2rem", fontWeight: 600, margin: 0, color: "var(--color-text-primary)" }}>
+                                        Slack Integratie
+                                    </h2>
+                                    <p style={{ fontSize: "0.85rem", color: "var(--color-text-muted)", margin: "4px 0 0 0" }}>
+                                        Koppel een Slack Webhook URL om meldingen in een kanaal te ontvangen.
+                                    </p>
                                 </div>
                             </div>
 
@@ -475,7 +377,7 @@ export default function IncidentsClient({
                                             onClick={async () => {
                                                 const confirmed = await confirm({
                                                     title: "Slack ontkoppelen",
-                                                    message: "Weet je zeker dat je Slack wilt ontkoppelen? Je zult geen meldingen meer ontvangen in je Slack kanaal.",
+                                                    message: "Weet je zeker dat je Slack wilt ontkoppelen?",
                                                     confirmLabel: "Ja, ontkoppelen",
                                                     type: "danger"
                                                 });
@@ -518,45 +420,7 @@ export default function IncidentsClient({
                                 )}
                             </div>
                         </div>
-                    </div>
-
-                    {/* Save Actions — always clickable */}
-                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "12px" }}>
-                        {isCustomMode && (
-                            <button
-                                onClick={handleTestNotifications}
-                                disabled={testingNotifs}
-                                className="glass-card"
-                                style={{
-                                    display: "inline-flex", alignItems: "center", gap: "8px",
-                                    padding: "8px 16px", fontSize: "0.85rem", fontWeight: 600,
-                                    background: "transparent", color: "var(--color-text-primary)",
-                                    border: "1px solid var(--color-border)", borderRadius: "6px",
-                                    cursor: testingNotifs ? "not-allowed" : "pointer",
-                                    opacity: testingNotifs ? 0.7 : 1
-                                }}
-                            >
-                                <Bell size={16} />
-                                {testingNotifs ? "Testen..." : "Test Notificaties"}
-                            </button>
-                        )}
-                        <button
-                            onClick={handleSaveSettings}
-                            disabled={saving}
-                            className="glass-card"
-                            style={{
-                                display: "inline-flex", alignItems: "center", gap: "8px",
-                                padding: "8px 16px", fontSize: "0.85rem", fontWeight: 600,
-                                background: "var(--color-brand)", color: "#fff",
-                                border: "none", borderRadius: "6px",
-                                cursor: saving ? "not-allowed" : "pointer",
-                                opacity: saving ? 0.7 : 1
-                            }}
-                        >
-                            <Save size={16} />
-                            {saving ? "Opslaan..." : "Instellingen Opslaan"}
-                        </button>
-                    </div>
+                    )}
                 </div>
             )}
 
