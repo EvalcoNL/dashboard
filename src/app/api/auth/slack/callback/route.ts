@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { decodeOAuthState } from "@/lib/oauth-state";
 import { prisma } from "@/lib/db";
 import { encrypt } from "@/lib/encryption";
 import { saveGlobalNotificationSettings, getGlobalNotificationSettings } from "@/lib/services/notification-resolver";
@@ -11,20 +12,21 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const code = searchParams.get("code");
-    const state = searchParams.get("state"); // "__global__" or clientId
+    const rawState = searchParams.get("state") || "";
+    const decodedState = decodeOAuthState(rawState);
     const error = searchParams.get("error");
 
-    const isGlobal = state === "__global__";
-    const clientId = isGlobal ? null : state;
-    const redirectBase = isGlobal ? "/dashboard/incidents" : `/dashboard/projects/${clientId}/monitoring/incidents`;
+    const isGlobal = decodedState === "__global__";
+    const projectId = isGlobal ? null : decodedState;
+    const redirectBase = isGlobal ? "/incidents" : `/projects/${projectId}/monitoring/incidents`;
 
     if (error) {
         console.error("[Slack OAuth] User denied permission or error occurred:", error);
         return NextResponse.redirect(new URL(`${redirectBase}?error=slack_denied&tab=settings`, req.url));
     }
 
-    if (!code || (!clientId && !isGlobal)) {
-        return NextResponse.redirect(new URL("/dashboard", req.url));
+    if (!code || (!projectId && !isGlobal)) {
+        return NextResponse.redirect(new URL("/", req.url));
     }
 
     const slackClientId = process.env.SLACK_CLIENT_ID;
@@ -46,7 +48,7 @@ export async function GET(req: NextRequest) {
                 "Content-Type": "application/x-www-form-urlencoded",
             },
             body: new URLSearchParams({
-                client_id: slackClientId,
+                project_id: slackClientId,
                 client_secret: slackClientSecret,
                 code,
                 redirect_uri: redirectUri,
@@ -77,33 +79,33 @@ export async function GET(req: NextRequest) {
                 slackWebhookUrl: webhookUrl,
             });
 
-            return NextResponse.redirect(new URL(`/dashboard/incidents?tab=settings`, req.url));
+            return NextResponse.redirect(new URL(`/incidents?tab=settings`, req.url));
         }
 
         // ─── Project-level Settings ───
 
         // Verify User has access to this Client
-        const projectAccess = await prisma.client.findFirst({
+        const projectAccess = await prisma.project.findFirst({
             where: {
-                id: clientId!,
+                id: projectId!,
                 users: { some: { id: session.user.id } }
             }
         });
 
         if (!projectAccess && session.user.role !== "ADMIN") {
-            return NextResponse.redirect(new URL(`/dashboard/projects`, req.url));
+            return NextResponse.redirect(new URL(`/projects`, req.url));
         }
 
         // Save the webhook URL to the Client record
-        await prisma.client.update({
-            where: { id: clientId! },
+        await prisma.project.update({
+            where: { id: projectId! },
             data: { slackWebhookUrl: encrypt(webhookUrl) },
         });
 
         // Also save as a formal DataSource so it shows up in "Connected Apps"
         const existingSlackSource = await prisma.dataSource.findFirst({
             where: {
-                clientId: clientId!,
+                projectId: projectId!,
                 type: "SLACK",
                 externalId: "SLACK"
             }
@@ -120,7 +122,7 @@ export async function GET(req: NextRequest) {
         } else {
             await prisma.dataSource.create({
                 data: {
-                    clientId: clientId!,
+                    projectId: projectId!,
                     externalId: "SLACK",
                     type: "SLACK",
                     name: "Slack Notifications",
@@ -133,7 +135,7 @@ export async function GET(req: NextRequest) {
         }
 
         // Redirect back to incidents page
-        return NextResponse.redirect(new URL(`/dashboard/projects/${clientId}/monitoring/incidents`, req.url));
+        return NextResponse.redirect(new URL(`/projects/${projectId}/monitoring/incidents`, req.url));
 
     } catch (e) {
         console.error("[Slack OAuth] Caught error:", e);

@@ -12,7 +12,7 @@ export async function GET(
     const [session, authError] = await requireProjectAccess(id);
     if (authError) return authError;
 
-    const client = await prisma.client.findUnique({
+    const client = await prisma.project.findUnique({
         where: { id },
         include: {
             dataSources: true,
@@ -42,7 +42,7 @@ export async function PUT(
         const body = await req.json();
         const { name, industryType, targetType, targetValue, tolerancePct, evaluationWindowDays, profitMarginPct, currency } = body;
 
-        const client = await prisma.client.update({
+        const client = await prisma.project.update({
             where: { id },
             data: {
                 name,
@@ -73,7 +73,7 @@ export async function DELETE(
 
     try {
         const { id } = await params;
-        await prisma.client.delete({ where: { id } });
+        await prisma.project.delete({ where: { id } });
         return NextResponse.json({ success: true });
     } catch (error: any) {
         console.error("Error deleting client:", error);

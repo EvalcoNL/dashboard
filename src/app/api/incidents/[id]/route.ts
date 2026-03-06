@@ -18,7 +18,7 @@ export async function GET(
     const incident = await (prisma as any).incident.findUnique({
         where: { id },
         include: {
-            client: { select: { id: true, name: true } },
+            project: { select: { id: true, name: true } },
             dataSource: { select: { id: true, name: true, externalId: true } },
             events: { orderBy: { createdAt: "asc" } },
         },
@@ -81,7 +81,7 @@ export async function PATCH(
             },
         },
         include: {
-            client: {
+            project: {
                 select: {
                     id: true,
                     name: true,
@@ -95,9 +95,9 @@ export async function PATCH(
     });
 
     // If resolved, send notifications
-    if (action === "resolve" && updated.client && updated.dataSource) {
+    if (action === "resolve" && updated.project && updated.dataSource) {
         const config = updated.dataSource.config as any || {};
-        const client = updated.client;
+        const client = updated.project;
 
         // Use resolveNotificationConfig for global/custom/disabled mode
         const notifConfig = await resolveNotificationConfig(client.id);

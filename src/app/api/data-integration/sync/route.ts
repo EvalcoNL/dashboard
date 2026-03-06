@@ -9,6 +9,7 @@ import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/api-guard';
 import { syncScheduler } from '@/lib/data-integration/sync-scheduler';
 import { syncEngine } from '@/lib/data-integration/sync-engine';
+import { syncMerchantHealth } from '@/lib/services/merchant-center-sync';
 import { prisma } from '@/lib/db';
 
 /**
@@ -27,6 +28,21 @@ export async function POST(request: Request) {
 
         if (!connectionId) {
             return NextResponse.json({ error: 'connectionId is required' }, { status: 400 });
+        }
+
+        // Check if this is a Merchant Center source (uses its own sync service)
+        const source = await prisma.dataSource.findUnique({ where: { id: connectionId } });
+        if (source?.type === 'GOOGLE_MERCHANT') {
+            const result = await syncMerchantHealth(source);
+            return NextResponse.json({
+                success: !result.error,
+                type: 'merchant_center',
+                totalProducts: result.totalProducts,
+                disapprovedProducts: result.disapprovedProducts,
+                newDisapprovals: result.newDisapprovals,
+                incidentCreated: result.incidentCreated,
+                error: result.error,
+            });
         }
 
         // Validate mode if provided

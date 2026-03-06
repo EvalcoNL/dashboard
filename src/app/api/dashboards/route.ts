@@ -4,26 +4,26 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireClientAccess } from '@/lib/api-guard';
+import { requireProjectAccess } from '@/lib/api-guard';
 
 /**
- * GET /api/dashboards?clientId=X
+ * GET /api/dashboards?projectId=X
  * List all dashboards for a client.
  */
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
-        const clientId = searchParams.get('clientId');
+        const projectId = searchParams.get('projectId');
 
-        if (!clientId) {
-            return NextResponse.json({ success: false, error: 'clientId is required' }, { status: 400 });
+        if (!projectId) {
+            return NextResponse.json({ success: false, error: 'projectId is required' }, { status: 400 });
         }
 
-        const [, authError] = await requireClientAccess(clientId);
+        const [, authError] = await requireProjectAccess(projectId);
         if (authError) return authError;
 
         const dashboards = await prisma.dashboard.findMany({
-            where: { clientId },
+            where: { projectId },
             include: {
                 _count: { select: { widgets: true } },
             },
@@ -56,19 +56,19 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { clientId, name, description, templateId } = body;
+        const { projectId, name, description, templateId } = body;
 
-        if (!clientId || !name) {
-            return NextResponse.json({ success: false, error: 'clientId and name are required' }, { status: 400 });
+        if (!projectId || !name) {
+            return NextResponse.json({ success: false, error: 'projectId and name are required' }, { status: 400 });
         }
 
-        const [, authError] = await requireClientAccess(clientId);
+        const [, authError] = await requireProjectAccess(projectId);
         if (authError) return authError;
 
         // Create dashboard
         const dashboard = await prisma.dashboard.create({
             data: {
-                clientId,
+                projectId,
                 name,
                 description: description || null,
             },

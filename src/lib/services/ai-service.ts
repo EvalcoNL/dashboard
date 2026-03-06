@@ -9,7 +9,7 @@ const model = genAI.getGenerativeModel({
 });
 
 export class AIService {
-  async generateAnalystReport(clientId: string, data: Record<string, unknown>) {
+  async generateAnalystReport(projectId: string, data: Record<string, unknown>) {
     const prompt = `
 You are an expert Google Ads Analyst. Analyze the following campaign metrics and health data for a client.
 Identify the primary risk driver, top performance issues, action candidates, and any compliance flags.
@@ -38,7 +38,7 @@ Return a JSON object in this exact format:
     await prisma.promptLog.create({
       data: {
         type: "analyst",
-        clientId,
+        projectId,
         inputJson: data as Prisma.InputJsonValue,
         outputJson: output as Prisma.InputJsonValue,
         model: "gemini-3-flash-preview",
@@ -50,7 +50,7 @@ Return a JSON object in this exact format:
     return output;
   }
 
-  async generateAdvisorReport(clientId: string, analystData: Record<string, unknown>) {
+  async generateAdvisorReport(projectId: string, analystData: Record<string, unknown>) {
     const prompt = `
 You are a Senior Strategic Ads Advisor. Based on the following Analyst Report, create a prioritized action plan.
 Be specific, strategic, and practical.
@@ -83,7 +83,7 @@ Return a JSON object in this exact format:
     await prisma.promptLog.create({
       data: {
         type: "advisor",
-        clientId,
+        projectId,
         inputJson: analystData as Prisma.InputJsonValue,
         outputJson: output as Prisma.InputJsonValue,
         model: "gemini-3-flash-preview",

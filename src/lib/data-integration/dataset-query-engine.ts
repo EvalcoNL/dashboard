@@ -116,7 +116,7 @@ export class DatasetQueryEngine {
 
         const rawData = await chQuery<Record<string, string | number>>(`
             SELECT ${selectClause}
-            FROM metrics_data FINAL
+            FROM metrics_data
             WHERE data_source_id IN (${placeholders})
               AND date >= {dateFrom:Date}
               AND date <= {dateTo:Date}
@@ -183,9 +183,16 @@ export class DatasetQueryEngine {
             const lvlParams: Record<string, unknown> = {};
             blendLevels.forEach((lvl, i) => { lvlParams[`lvl${i}`] = lvl; });
 
+            // Build explicit SELECT for blend query
+            const blendDims = [...config.joinKeys, ...config.dimensions];
+            const blendSelectCols = new Set<string>(['date', 'connector_slug', 'data_source_id']);
+            for (const d of blendDims) blendSelectCols.add(getColumnName(d));
+            for (const m of config.metrics.filter(m => !isDerivedMetric(m))) blendSelectCols.add(getColumnName(m));
+            const blendSelectClause = Array.from(blendSelectCols).join(', ');
+
             const rawRows = await chQuery<Record<string, string | number>>(`
-                SELECT *
-                FROM metrics_data FINAL
+                SELECT ${blendSelectClause}
+                FROM metrics_data
                 WHERE data_source_id = {connId:String}
                   AND date >= {dateFrom:Date}
                   AND date <= {dateTo:Date}
@@ -280,7 +287,7 @@ export class DatasetQueryEngine {
     /**
      * Create pre-built system datasets for a client
      */
-    async createSystemDatasets(clientId: string): Promise<string[]> {
+    async createSystemDatasets(projectId: string): Promise<string[]> {
         const datasetDefs = [
             {
                 slug: 'paid-performance',
@@ -319,9 +326,9 @@ export class DatasetQueryEngine {
         for (const def of datasetDefs) {
             // Upsert the dataset
             const dataset = await prisma.dataset.upsert({
-                where: { clientId_slug: { clientId, slug: def.slug } },
+                where: { projectId_slug: { projectId, slug: def.slug } },
                 create: {
-                    clientId,
+                    projectId,
                     slug: def.slug,
                     name: def.name,
                     description: def.description,
@@ -337,11 +344,13 @@ export class DatasetQueryEngine {
             // Find matching connections and link them
             const dataSources = await prisma.dataSource.findMany({
                 where: {
-                    clientId,
+                    projectId,
                     syncStatus: 'ACTIVE',
                     connector: { category: { in: def.connectorCategories } },
                 },
             });
+
+            const defaultLevel = def.connectorCategories.includes('ECOMMERCE') ? 'order' : 'campaign';
 
             for (const source of dataSources) {
                 await prisma.datasetSource.upsert({
@@ -349,13 +358,13 @@ export class DatasetQueryEngine {
                         datasetId_dataSourceId_level: {
                             datasetId: dataset.id,
                             dataSourceId: source.id,
-                            level: 'campaign',
+                            level: defaultLevel,
                         },
                     },
                     create: {
                         datasetId: dataset.id,
                         dataSourceId: source.id,
-                        level: 'campaign',
+                        level: defaultLevel,
                     },
                     update: {},
                 });
@@ -609,8 +618,22 @@ export class DatasetQueryEngine {
         for (const [key, value] of sorted) {
             expr = expr.replace(new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), String(value));
         }
+
+        // Safe arithmetic evaluation — only allows numbers, +, -, *, /, parentheses, whitespace
+        // Rejects any alphabetic characters (prevents code injection)
+        const sanitized = expr.trim();
+        if (/[a-zA-Z_$]/.test(sanitized)) {
+            // Contains variable names that weren't replaced — formula is invalid
+            return 0;
+        }
+        if (!/^[\d\s+\-*/().]+$/.test(sanitized)) {
+            // Contains disallowed characters
+            return 0;
+        }
+
         try {
-            const fn = new Function(`return ${expr}`);
+            // Safe because we verified only arithmetic chars remain
+            const fn = new Function(`"use strict"; return (${sanitized})`);
             const result = fn();
             return typeof result === 'number' && isFinite(result)
                 ? Math.round(result * 100) / 100

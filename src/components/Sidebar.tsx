@@ -33,33 +33,33 @@ export default function Sidebar() {
     const [openSubmenu, setOpenSubmenu] = useState<{ title: string, items: SubItem[] } | null>(null);
 
     // Extract client ID from URL
-    const clientMatch = pathname.match(/\/dashboard\/clients\/([^\/]+)/);
-    const clientId = clientMatch ? clientMatch[1] : null;
+    const clientMatch = pathname.match(/\/clients\/([^\/]+)/);
+    const projectId = clientMatch ? clientMatch[1] : null;
 
     const isActive = (href: string) => {
-        if (href === "/dashboard" && !clientId) return pathname === "/dashboard";
-        return pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+        if (href === "/" && !projectId) return pathname === "/";
+        return pathname === href || (href !== "/" && pathname.startsWith(href));
     };
 
     const adminNavItems: NavItem[] = [
-        { href: "/dashboard", label: t("navigation", "home"), icon: LayoutDashboard },
-        { href: "/dashboard/projects", label: t("navigation", "accounts"), icon: Users },
+        { href: "/", label: t("navigation", "home"), icon: LayoutDashboard },
+        { href: "/projects", label: t("navigation", "accounts"), icon: Users },
     ];
 
     const clientNavItems: NavItem[] = [
-        { href: `/dashboard/projects/${clientId}`, label: t("navigation", "home"), icon: LayoutDashboard },
+        { href: `/projects/${projectId}`, label: t("navigation", "home"), icon: LayoutDashboard },
         {
             label: t("navigation", "data"),
             icon: Database,
             submenu: [
-                { href: `/dashboard/projects/${clientId}/data/sources`, label: t("navigation", "dataSources") }
+                { href: `/projects/${projectId}/data/sources`, label: t("navigation", "dataSources") }
             ]
         },
-        { href: `/dashboard/projects/${clientId}/report`, label: t("navigation", "report"), icon: FileText },
-        { href: `/dashboard/projects/${clientId}/settings`, label: t("navigation", "settings"), icon: Settings },
+        { href: `/projects/${projectId}/report`, label: t("navigation", "report"), icon: FileText },
+        { href: `/projects/${projectId}/settings`, label: t("navigation", "settings"), icon: Settings },
     ];
 
-    const currentNavItems: NavItem[] = clientId ? clientNavItems : adminNavItems;
+    const currentNavItems: NavItem[] = projectId ? clientNavItems : adminNavItems;
 
     return (
         <div

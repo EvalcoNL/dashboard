@@ -16,7 +16,7 @@ import {
 import { formatCurrency, formatNumber } from "@/lib/services/kpi-engine";
 
 interface ProjectHubClientProps {
-    client: any;
+    project: any;
     monitoringData: any[];
     performanceSummary: any;
     ongoingIncidents: number;
@@ -25,7 +25,7 @@ interface ProjectHubClientProps {
 }
 
 export default function ProjectHubClient({
-    client,
+    project,
     monitoringData,
     performanceSummary,
     ongoingIncidents,
@@ -49,7 +49,7 @@ export default function ProjectHubClient({
             {/* Header */}
             <div style={{ marginBottom: "40px" }}>
                 <h1 style={{ fontSize: "2.2rem", fontWeight: 800, color: "var(--color-text-primary)", margin: 0 }}>
-                    {client.name}
+                    {project.name}
                 </h1>
                 <p style={{ color: "var(--color-text-muted)", fontSize: "1rem", marginTop: "8px" }}>
                     Project Overzicht & Status
@@ -108,7 +108,7 @@ export default function ProjectHubClient({
                     </div>
 
                     <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                        <Link href={`/dashboard/projects/${client.id}/reports/dashboards`} style={{ textDecoration: "none" }}>
+                        <Link href={`/projects/${project.id}/reports/dashboards`} style={{ textDecoration: "none" }}>
                             <button style={{
                                 width: "100%", padding: "14px", borderRadius: "12px",
                                 background: "var(--color-brand)", color: "white",
@@ -118,7 +118,7 @@ export default function ProjectHubClient({
                                 <BarChart3 size={18} /> Dashboards <ChevronRight size={18} />
                             </button>
                         </Link>
-                        <Link href={`/dashboard/projects/${client.id}/reports/ai`} style={{ textDecoration: "none" }}>
+                        <Link href={`/projects/${project.id}/reports/ai`} style={{ textDecoration: "none" }}>
                             <button style={{
                                 width: "100%", padding: "14px", borderRadius: "12px",
                                 background: "var(--color-surface-elevated)", color: "var(--color-text-primary)",
@@ -184,7 +184,7 @@ export default function ProjectHubClient({
                         </div>
                     </div>
 
-                    <Link href={`/dashboard/projects/${client.id}/monitoring/web`} style={{ textDecoration: "none" }}>
+                    <Link href={`/projects/${project.id}/monitoring/web`} style={{ textDecoration: "none" }}>
                         <button style={{
                             width: "100%", padding: "14px", borderRadius: "12px",
                             background: "var(--color-surface-elevated)", color: "var(--color-text-primary)",
@@ -200,8 +200,8 @@ export default function ProjectHubClient({
 
             {/* Quick Stats Grid */}
             <div style={{ marginTop: "32px", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px" }}>
-                <QuickStat icon={<ShieldCheck size={18} />} label="Data Sources" value={client.dataSources?.length || 0} />
-                <QuickStat icon={<Target size={18} />} label="KPI Type" value={client.targetType} />
+                <QuickStat icon={<ShieldCheck size={18} />} label="Data Sources" value={project.dataSources?.length || 0} />
+                <QuickStat icon={<Target size={18} />} label="KPI Type" value={project.targetType} />
                 <QuickStat icon={<BarChart3 size={18} />} label="Reports" value="7" />
                 <QuickStat icon={<Activity size={18} />} label="Active Checks" value={activeDomains} />
             </div>

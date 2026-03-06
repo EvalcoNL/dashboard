@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Users, Plus, ExternalLink, Trash2, Edit2, Target } from "lucide-react";
 import { useNotification } from "@/components/NotificationProvider";
 
-interface ClientItem {
+interface ProjectItem {
     id: string;
     name: string;
     industryType: string;
@@ -18,17 +18,17 @@ interface ClientItem {
 }
 
 export default function ProjectList({
-    clients,
+    projects,
     userRole,
 }: {
-    clients: ClientItem[];
+    projects: ProjectItem[];
     userRole: string;
 }) {
     const router = useRouter();
     const { showToast, confirm } = useNotification();
     const isAdmin = userRole === "ADMIN";
 
-    const handleDelete = async (clientId: string, clientName: string) => {
+    const handleDelete = async (projectId: string, clientName: string) => {
         const confirmed = await confirm({
             title: "Project verwijderen",
             message: `Weet je zeker dat je "${clientName}" wilt verwijderen? Dit kan niet ongedaan worden gemaakt en alle bijbehorende data wordt verwijderd.`,
@@ -39,7 +39,7 @@ export default function ProjectList({
         if (!confirmed) return;
 
         try {
-            const res = await fetch(`/api/projects/${clientId}`, { method: "DELETE" });
+            const res = await fetch(`/api/projects/${projectId}`, { method: "DELETE" });
             if (res.ok) {
                 showToast("success", "Project succesvol verwijderd");
                 router.refresh();
@@ -68,7 +68,7 @@ export default function ProjectList({
                 )}
             </div>
 
-            {clients.length === 0 ? (
+            {projects.length === 0 ? (
                 <div className="glass-card" style={{ padding: "48px", textAlign: "center", color: "var(--color-text-muted)" }}>
                     <Users size={48} style={{ marginBottom: "16px", opacity: 0.5 }} />
                     <p>Nog geen projecten. Voeg je eerste project toe om te beginnen.</p>
@@ -88,11 +88,11 @@ export default function ProjectList({
                             </tr>
                         </thead>
                         <tbody>
-                            {clients.map((client) => (
+                            {projects.map((client) => (
                                 <tr key={client.id}>
                                     <td>
                                         <Link
-                                            href={`/dashboard/projects/${client.id}`}
+                                            href={`/projects/${client.id}`}
                                             style={{
                                                 color: "var(--color-text-primary)",
                                                 textDecoration: "none",
@@ -150,7 +150,7 @@ export default function ProjectList({
                                         <td style={{ textAlign: "right" }}>
                                             <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
                                                 <Link
-                                                    href={`/dashboard/projects/${client.id}/edit`}
+                                                    href={`/projects/${client.id}/edit`}
                                                     className="btn btn-secondary btn-sm"
                                                     style={{ textDecoration: "none" }}
                                                 >

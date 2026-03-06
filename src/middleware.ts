@@ -28,12 +28,12 @@ export default middleware((req) => {
     // The JWT callback in auth.config.ts refreshes twoFactorEnabled from DB
     // to prevent stale JWT issues after enabling 2FA
     const twoFactorEnabled = (session.user as any)?.twoFactorEnabled;
-    const is2FASetupPage = pathname.startsWith("/dashboard/security/2fa-setup");
-    const isSettingsPage = pathname.startsWith("/dashboard/settings");
+    const is2FASetupPage = pathname.startsWith("/security/2fa-setup");
+    const isSettingsPage = pathname.startsWith("/settings");
     const isApiRoute = pathname.startsWith("/api/");
 
-    if (!twoFactorEnabled && !is2FASetupPage && !isSettingsPage && !isApiRoute && pathname.startsWith("/dashboard")) {
-        return NextResponse.redirect(new URL("/dashboard/security/2fa-setup", req.url));
+    if (!twoFactorEnabled && !is2FASetupPage && !isSettingsPage && !isApiRoute) {
+        return NextResponse.redirect(new URL("/security/2fa-setup", req.url));
     }
 
     return NextResponse.next();

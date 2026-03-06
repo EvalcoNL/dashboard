@@ -50,9 +50,9 @@ export class MicrosoftAdsConnector extends BaseConnector {
     // ─── Authentication ───
 
     async getAuthUrl(redirectUri: string, state?: string): Promise<string> {
-        const clientId = process.env.MICROSOFT_ADS_CLIENT_ID || '';
+        const projectId = process.env.MICROSOFT_ADS_CLIENT_ID || '';
         const params = new URLSearchParams({
-            client_id: clientId,
+            client_id: projectId,
             response_type: 'code',
             redirect_uri: redirectUri,
             scope: 'https://ads.microsoft.com/msads.manage offline_access',
@@ -64,14 +64,14 @@ export class MicrosoftAdsConnector extends BaseConnector {
     async authenticate(params: Record<string, string>): Promise<AuthResult> {
         try {
             const { code, redirectUri } = params;
-            const clientId = process.env.MICROSOFT_ADS_CLIENT_ID || '';
+            const projectId = process.env.MICROSOFT_ADS_CLIENT_ID || '';
             const clientSecret = process.env.MICROSOFT_ADS_CLIENT_SECRET || '';
 
             const response = await fetch(`${MICROSOFT_AUTH_URL}/token`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: new URLSearchParams({
-                    client_id: clientId,
+                    client_id: projectId,
                     client_secret: clientSecret,
                     code,
                     redirect_uri: redirectUri,
@@ -253,20 +253,24 @@ export class MicrosoftAdsConnector extends BaseConnector {
             { platformField: 'Spend', canonicalField: 'cost' as CanonicalMetric },
             { platformField: 'Conversions', canonicalField: 'conversions' as CanonicalMetric },
             { platformField: 'Revenue', canonicalField: 'conversion_value' as CanonicalMetric },
+            { platformField: 'AllConversions', canonicalField: 'all_conversions' as CanonicalMetric },
+            { platformField: 'ViewThroughConversions', canonicalField: 'view_through_conversions' as CanonicalMetric },
+            { platformField: 'ImpressionSharePercent', canonicalField: 'impression_share' as CanonicalMetric },
+            { platformField: 'QualityScore', canonicalField: 'quality_score' as CanonicalMetric },
         ];
     }
 
     // ─── Private Helpers ───
 
     private async getAccessToken(creds: MicrosoftAdsCredentials): Promise<string> {
-        const clientId = process.env.MICROSOFT_ADS_CLIENT_ID || '';
+        const projectId = process.env.MICROSOFT_ADS_CLIENT_ID || '';
         const clientSecret = process.env.MICROSOFT_ADS_CLIENT_SECRET || '';
 
         const response = await fetch(`${MICROSOFT_AUTH_URL}/token`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({
-                client_id: clientId,
+                client_id: projectId,
                 client_secret: clientSecret,
                 refresh_token: creds.refreshToken,
                 grant_type: 'refresh_token',
@@ -311,40 +315,43 @@ export class MicrosoftAdsConnector extends BaseConnector {
     }
 
     private extractDimensions(row: Record<string, string>, level: string): Record<string, string | number | boolean> {
+        // Use PLATFORM field names here — mapDimensions() handles the canonical mapping
         const dims: Record<string, string | number | boolean> = {};
-        if (row.TimePeriod) dims.date = row.TimePeriod;
-        if (row.CampaignId) dims.campaign_id = row.CampaignId;
-        if (row.CampaignName) dims.campaign_name = row.CampaignName;
-        if (row.CampaignStatus) dims.campaign_status = row.CampaignStatus;
+        if (row.TimePeriod) dims.TimePeriod = row.TimePeriod;
+        if (row.CampaignId) dims.CampaignId = row.CampaignId;
+        if (row.CampaignName) dims.CampaignName = row.CampaignName;
+        if (row.CampaignStatus) dims.CampaignStatus = row.CampaignStatus;
         if ((level === 'ad_group' || level === 'ad' || level === 'keyword') && row.AdGroupId) {
-            dims.ad_group_id = row.AdGroupId;
-            if (row.AdGroupName) dims.ad_group_name = row.AdGroupName;
+            dims.AdGroupId = row.AdGroupId;
+            if (row.AdGroupName) dims.AdGroupName = row.AdGroupName;
+            if (row.AdGroupStatus) dims.AdGroupStatus = row.AdGroupStatus;
         }
         if (level === 'ad') {
-            if (row.AdId) dims.ad_id = row.AdId;
-            if (row.AdTitle) dims.ad_name = row.AdTitle;
+            if (row.AdId) dims.AdId = row.AdId;
+            if (row.AdTitle) dims.AdTitle = row.AdTitle;
         }
         if (level === 'keyword') {
-            if (row.Keyword) dims.keyword_text = row.Keyword;
-            if (row.BidMatchType) dims.keyword_match_type = row.BidMatchType;
+            if (row.Keyword) dims.Keyword = row.Keyword;
+            if (row.BidMatchType) dims.BidMatchType = row.BidMatchType;
         }
-        if (row.DeviceType) dims.device = row.DeviceType;
-        if (row.Country) dims.country = row.Country;
-        if (row.Network) dims.network = row.Network;
+        if (row.DeviceType) dims.DeviceType = row.DeviceType;
+        if (row.Country) dims.Country = row.Country;
+        if (row.Network) dims.Network = row.Network;
         return dims;
     }
 
     private extractMetrics(row: Record<string, string>): Record<string, number> {
+        // Use PLATFORM field names here — mapMetrics() handles the canonical mapping
         const mets: Record<string, number> = {};
-        if (row.Impressions) mets.impressions = Number(row.Impressions);
-        if (row.Clicks) mets.clicks = Number(row.Clicks);
-        if (row.Spend) mets.cost = Number(row.Spend);
-        if (row.Conversions) mets.conversions = Number(row.Conversions);
-        if (row.Revenue) mets.conversion_value = Number(row.Revenue);
-        if (row.AllConversions) mets.all_conversions = Number(row.AllConversions);
-        if (row.ViewThroughConversions) mets.view_through_conversions = Number(row.ViewThroughConversions);
-        if (row.ImpressionSharePercent) mets.impression_share = Number(row.ImpressionSharePercent) / 100;
-        if (row.QualityScore) mets.quality_score = Number(row.QualityScore);
+        if (row.Impressions) mets.Impressions = Number(row.Impressions);
+        if (row.Clicks) mets.Clicks = Number(row.Clicks);
+        if (row.Spend) mets.Spend = Number(row.Spend);
+        if (row.Conversions) mets.Conversions = Number(row.Conversions);
+        if (row.Revenue) mets.Revenue = Number(row.Revenue);
+        if (row.AllConversions) mets.AllConversions = Number(row.AllConversions);
+        if (row.ViewThroughConversions) mets.ViewThroughConversions = Number(row.ViewThroughConversions);
+        if (row.ImpressionSharePercent) mets.ImpressionSharePercent = Number(row.ImpressionSharePercent) / 100;
+        if (row.QualityScore) mets.QualityScore = Number(row.QualityScore);
         return mets;
     }
 

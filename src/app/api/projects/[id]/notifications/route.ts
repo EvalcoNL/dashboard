@@ -12,7 +12,7 @@ export async function PATCH(
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { id: clientId } = await params;
+        const { id: projectId } = await params;
         const { userIds, slackWebhookUrl, notificationMode } = await req.json();
 
         if (!Array.isArray(userIds)) {
@@ -20,8 +20,8 @@ export async function PATCH(
         }
 
         // Update the client with the new notification settings
-        const updatedClient = await (prisma as any).client.update({
-            where: { id: clientId },
+        const updatedClient = await (prisma as any).project.update({
+            where: { id: projectId },
             data: {
                 slackWebhookUrl: slackWebhookUrl || null,
                 ...(notificationMode && { notificationMode }),

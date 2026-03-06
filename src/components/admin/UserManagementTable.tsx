@@ -4,7 +4,7 @@ import { useState } from "react";
 import { User, Mail, Shield, Calendar, Edit2, Trash2, X, Check, AlertTriangle, UserPlus, Eye, EyeOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-interface Client {
+interface Project {
     id: string;
     name: string;
 }
@@ -15,7 +15,7 @@ interface UserData {
     email: string;
     role: string;
     createdAt: Date | string;
-    clients: Client[];
+    projects: Project[];
 }
 
 interface Props {
@@ -203,7 +203,7 @@ export default function UserManagementTable({ initialUsers, roles }: Props) {
                                     </td>
                                     <td style={tdStyle}>
                                         <div style={{ color: "var(--color-text-muted)", fontSize: "0.8125rem" }}>
-                                            {user.clients.length} accounts
+                                            {user.projects.length} accounts
                                         </div>
                                     </td>
                                     <td style={tdStyle}>

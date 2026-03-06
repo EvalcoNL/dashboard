@@ -138,7 +138,7 @@ async function main() {
                 outputType: metric.outputType,
                 description: metric.description,
                 connectorId: null,
-                clientId: null,
+                projectId: null,
             },
             update: {
                 name: metric.name,

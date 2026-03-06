@@ -97,7 +97,7 @@ export async function sendIncidentAlertEmail({
                 
                 <p>Log in op het Evalco dashboard voor meer details en om dit incident af te handelen.</p>
                 
-                <a href="${process.env.NEXTAUTH_URL || "http://localhost:3000"}/dashboard" class="button">Open Dashboard</a>
+                <a href="${process.env.NEXTAUTH_URL || "http://localhost:3000"}/" class="button">Open Dashboard</a>
             `
         );
 
@@ -145,7 +145,7 @@ export async function sendIncidentResolvedEmail({
 
                 <p>De monitoring blijft actief om de stabiliteit te waarborgen.</p>
                 
-                <a href="${process.env.NEXTAUTH_URL || "http://localhost:3000"}/dashboard" class="button">Bekijk Rapportages</a>
+                <a href="${process.env.NEXTAUTH_URL || "http://localhost:3000"}/" class="button">Bekijk Rapportages</a>
             `
         );
 
@@ -203,7 +203,7 @@ export async function sendSlackResolvedAlert(webhookUrl: string, payload: Incide
     }
 }
 
-export async function sendClientInviteEmail(email: string, clientName: string, token: string, userExists: boolean = false) {
+export async function sendProjectInviteEmail(email: string, clientName: string, token: string, userExists: boolean = false) {
     const inviteLink = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/invite/${token}`;
 
     const subjectText = userExists

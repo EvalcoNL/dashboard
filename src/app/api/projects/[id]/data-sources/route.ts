@@ -16,7 +16,7 @@ export async function POST(
         const body = await req.json();
 
         // Validate client exists
-        const client = await prisma.client.findUnique({ where: { id } });
+        const client = await prisma.project.findUnique({ where: { id } });
         if (!client) {
             return NextResponse.json({ error: "Client not found" }, { status: 404 });
         }
@@ -35,7 +35,7 @@ export async function POST(
         // Check if domain already exists for this client
         const existingSources = await prisma.dataSource.findMany({
             where: {
-                clientId: id,
+                projectId: id,
                 type: "DOMAIN",
             }
         });
@@ -50,7 +50,7 @@ export async function POST(
 
         const newSource = await prisma.dataSource.create({
             data: {
-                clientId: id,
+                projectId: id,
                 type: "DOMAIN",
                 name: normalizedDomain,
                 externalId: normalizedDomain,

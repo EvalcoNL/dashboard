@@ -112,7 +112,7 @@ export default function ProjectOnboardingWizard() {
             }
 
             const project = await res.json();
-            router.push(`/dashboard/projects/${project.id}?onboarding=complete`);
+            router.push(`/projects/${project.id}?onboarding=complete`);
             router.refresh();
         } catch (err) {
             setError(

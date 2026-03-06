@@ -19,7 +19,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         const monitor = await prisma.dataSource.findUnique({
             where: { id: monitorId },
             include: {
-                client: {
+                project: {
                     include: {
                         notificationUsers: { select: { email: true } }
                     }
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             return NextResponse.json({ error: "Monitor niet gevonden" }, { status: 404 });
         }
 
-        const client = monitor.client;
+        const client = monitor.project;
         const config = monitor.config as any || {};
 
         const notifyEmail = config.notifyEmail !== false;

@@ -10,7 +10,7 @@ import UserRolesTab from "./UserRolesTab";
 import InvitePanel from "./InvitePanel";
 
 interface AccessManagementProps {
-    clientId: string;
+    projectId: string;
     people: Person[];
     filterSourceName?: string;
     availableApps?: AppInfo[];
@@ -18,7 +18,7 @@ interface AccessManagementProps {
 
 
 
-export default function AccessManagement({ clientId, people, filterSourceName, availableApps = [] }: AccessManagementProps) {
+export default function AccessManagement({ projectId, people, filterSourceName, availableApps = [] }: AccessManagementProps) {
     const router = useRouter();
     const [activeTab, setActiveTab] = useState<"users" | "groups">("users");
     const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
@@ -60,6 +60,16 @@ export default function AccessManagement({ clientId, people, filterSourceName, a
 
     // Sync state
     const [syncing, setSyncing] = useState(false);
+    const [syncTokenErrors, setSyncTokenErrors] = useState<string[]>([]);
+
+    // Link email / merge state
+    const [linkEmail, setLinkEmail] = useState("");
+    const [linking, setLinking] = useState(false);
+    const [showMerge, setShowMerge] = useState(false);
+    const [mergeSearch, setMergeSearch] = useState("");
+    const [mergeTarget, setMergeTarget] = useState<Person | null>(null);
+    const [merging, setMerging] = useState(false);
+    const [aliases, setAliases] = useState<Array<{ id: string; primaryEmail: string; alias: string }>>([]);
 
     const showToast = (type: "success" | "error", message: string) => {
         setToast({ type, message });
@@ -98,29 +108,37 @@ export default function AccessManagement({ clientId, people, filterSourceName, a
     }, [localPeople, searchQuery, appFilter]);
 
     // Split people into email users and MCC/manager accounts
+    // Users = people with at least one USER-kind access
+    // MCC = only partner agencies / business accounts (all accesses are MANAGER kind)
     const emailUsers = useMemo(() => {
-        return filteredPeople.filter(p => p.accesses.every(a => (a.accountKind || "USER") === "USER"));
+        return filteredPeople.filter(p => p.accesses.some(a => (a.accountKind || "USER") === "USER"));
     }, [filteredPeople]);
 
     const managerAccounts = useMemo(() => {
-        return filteredPeople.filter(p => p.accesses.some(a => a.accountKind === "MANAGER"));
+        return filteredPeople.filter(p => p.accesses.every(a => a.accountKind === "MANAGER"));
     }, [filteredPeople]);
 
     // Sync handler
     const handleSync = async () => {
         setSyncing(true);
+        setSyncTokenErrors([]);
         try {
             const res = await fetch("/api/data-sources/sync-access", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ clientId }),
+                body: JSON.stringify({ projectId }),
             });
             const data = await res.json();
             if (res.ok && data.success) {
                 const msg = data.message || "Sync voltooid";
-                if (data.errors && data.errors.length > 0) {
-                    showToast("error", `${msg}. Fouten: ${data.errors.join("; ")}`);
-                } else {
+                // Show token errors as persistent warning
+                if (data.tokenErrors && data.tokenErrors.length > 0) {
+                    setSyncTokenErrors(data.tokenErrors);
+                }
+                // Show other errors as toast
+                if (data.otherErrors && data.otherErrors.length > 0) {
+                    showToast("error", `${msg}. Fouten: ${data.otherErrors.join("; ")}`);
+                } else if (!data.tokenErrors || data.tokenErrors.length === 0) {
                     showToast("success", msg);
                 }
                 router.refresh();
@@ -319,10 +337,26 @@ export default function AccessManagement({ clientId, people, filterSourceName, a
         setLocalPeople(people);
     }, [people]);
 
-    const openPanel = (person: Person) => {
+    const openPanel = async (person: Person) => {
         setSelectedPerson(person);
         setSelectedApps(new Set());
+        setMergeTarget(null);
+        setShowMerge(false);
+        setMergeSearch("");
         setPanelOpen(true);
+        // Load aliases for this person
+        try {
+            const res = await fetch(`/api/person-aliases?projectId=${projectId}`);
+            if (res.ok) {
+                const all = await res.json();
+                // Show aliases where this person is the primary or is an alias
+                const relevant = all.filter((a: any) =>
+                    a.primaryEmail.toLowerCase() === person.email.toLowerCase() ||
+                    a.alias.toLowerCase() === person.email.toLowerCase()
+                );
+                setAliases(relevant);
+            }
+        } catch { setAliases([]); }
     };
 
     const closePanel = () => {
@@ -330,6 +364,10 @@ export default function AccessManagement({ clientId, people, filterSourceName, a
         setTimeout(() => {
             setSelectedPerson(null);
             setSelectedApps(new Set());
+            setMergeTarget(null);
+            setShowMerge(false);
+            setMergeSearch("");
+            setAliases([]);
         }, 300);
     };
 
@@ -394,7 +432,7 @@ export default function AccessManagement({ clientId, people, filterSourceName, a
         <div style={{ padding: "32px", maxWidth: "1200px", margin: "0 auto", position: "relative" }}>
             {/* Back link */}
             <Link
-                href={`/dashboard/projects/${clientId}`}
+                href={`/projects/${projectId}`}
                 style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -433,7 +471,7 @@ export default function AccessManagement({ clientId, people, filterSourceName, a
                         <AppWindow size={14} />
                         Gefilterd op: {filterSourceName}
                         <Link
-                            href={`/dashboard/projects/${clientId}/data/access`}
+                            href={`/projects/${projectId}/data/access`}
                             style={{
                                 color: "var(--color-text-muted)",
                                 marginLeft: "4px",
@@ -728,6 +766,49 @@ export default function AccessManagement({ clientId, people, filterSourceName, a
                     >
                         <RefreshCw size={16} style={syncing ? { animation: "spin 1s linear infinite" } : undefined} />
                         {syncing ? "Synchroniseren..." : "Sync"}
+                    </button>
+                </div>
+            )}
+
+            {/* Token error warning banner */}
+            {syncTokenErrors.length > 0 && (
+                <div style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: "12px",
+                    padding: "14px 18px",
+                    marginBottom: "20px",
+                    background: "rgba(245, 158, 11, 0.08)",
+                    border: "1px solid rgba(245, 158, 11, 0.25)",
+                    borderRadius: "10px",
+                    animation: "fadeIn 0.3s ease-out",
+                }}>
+                    <AlertTriangle size={18} style={{ color: "#f59e0b", flexShrink: 0, marginTop: "2px" }} />
+                    <div style={{ flex: 1 }}>
+                        <p style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--color-text-primary)", marginBottom: "6px" }}>
+                            Koppelingen opnieuw verbinden
+                        </p>
+                        <ul style={{ margin: 0, padding: "0 0 0 16px", fontSize: "0.8rem", color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
+                            {syncTokenErrors.map((err, i) => (
+                                <li key={i}>{err}</li>
+                            ))}
+                        </ul>
+                        <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginTop: "8px" }}>
+                            Ga naar de instellingen van dit project om de betreffende koppelingen opnieuw te autoriseren.
+                        </p>
+                    </div>
+                    <button
+                        onClick={() => setSyncTokenErrors([])}
+                        style={{
+                            background: "none",
+                            border: "none",
+                            color: "var(--color-text-muted)",
+                            cursor: "pointer",
+                            padding: "2px",
+                            flexShrink: 0,
+                        }}
+                    >
+                        <X size={16} />
                     </button>
                 </div>
             )}
@@ -1229,6 +1310,355 @@ export default function AccessManagement({ clientId, people, filterSourceName, a
                                 padding: "24px",
                             }}
                         >
+                            {/* Email Linking — show for name-only users (no @ in email) */}
+                            {selectedPerson && !selectedPerson.email.includes("@") && (
+                                <div
+                                    style={{
+                                        marginBottom: "20px",
+                                        padding: "16px",
+                                        borderRadius: "10px",
+                                        background: "rgba(245, 158, 11, 0.08)",
+                                        border: "1px solid rgba(245, 158, 11, 0.25)",
+                                    }}
+                                >
+                                    <div style={{ fontSize: "0.8rem", color: "#f59e0b", fontWeight: 600, marginBottom: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
+                                        ⚠️ Geen e-mailadres bekend
+                                    </div>
+                                    <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: "10px" }}>
+                                        Koppel een e-mailadres om deze persoon samen te voegen met andere accounts.
+                                    </p>
+                                    <div style={{ display: "flex", gap: "8px" }}>
+                                        <input
+                                            type="email"
+                                            placeholder="naam@voorbeeld.nl"
+                                            value={linkEmail}
+                                            onChange={(e) => setLinkEmail(e.target.value)}
+                                            style={{
+                                                flex: 1,
+                                                padding: "8px 12px",
+                                                borderRadius: "8px",
+                                                border: "1px solid var(--color-border)",
+                                                background: "var(--color-surface)",
+                                                color: "var(--color-text-primary)",
+                                                fontSize: "0.8rem",
+                                                outline: "none",
+                                            }}
+                                            onKeyDown={async (e) => {
+                                                if (e.key === "Enter" && linkEmail.includes("@")) {
+                                                    setLinking(true);
+                                                    try {
+                                                        const res = await fetch("/api/person-aliases", {
+                                                            method: "POST",
+                                                            headers: { "Content-Type": "application/json" },
+                                                            body: JSON.stringify({
+                                                                projectId,
+                                                                primaryEmail: linkEmail.toLowerCase(),
+                                                                alias: selectedPerson!.email,
+                                                            }),
+                                                        });
+                                                        if (res.ok) {
+                                                            showToast("success", `E-mail gekoppeld: ${linkEmail}`);
+                                                            setLinkEmail("");
+                                                            closePanel();
+                                                            router.refresh();
+                                                        } else {
+                                                            const data = await res.json();
+                                                            showToast("error", data.error || "Koppelen mislukt");
+                                                        }
+                                                    } catch { showToast("error", "Netwerkfout"); }
+                                                    setLinking(false);
+                                                }
+                                            }}
+                                        />
+                                        <button
+                                            disabled={!linkEmail.includes("@") || linking}
+                                            onClick={async () => {
+                                                setLinking(true);
+                                                try {
+                                                    const res = await fetch("/api/person-aliases", {
+                                                        method: "POST",
+                                                        headers: { "Content-Type": "application/json" },
+                                                        body: JSON.stringify({
+                                                            projectId,
+                                                            primaryEmail: linkEmail.toLowerCase(),
+                                                            alias: selectedPerson!.email,
+                                                        }),
+                                                    });
+                                                    if (res.ok) {
+                                                        showToast("success", `E-mail gekoppeld: ${linkEmail}`);
+                                                        setLinkEmail("");
+                                                        closePanel();
+                                                        router.refresh();
+                                                    } else {
+                                                        const data = await res.json();
+                                                        showToast("error", data.error || "Koppelen mislukt");
+                                                    }
+                                                } catch { showToast("error", "Netwerkfout"); }
+                                                setLinking(false);
+                                            }}
+                                            style={{
+                                                padding: "8px 16px",
+                                                borderRadius: "8px",
+                                                border: "none",
+                                                background: linking ? "var(--color-surface-hover)" : "#f59e0b",
+                                                color: "white",
+                                                fontSize: "0.8rem",
+                                                fontWeight: 600,
+                                                cursor: linkEmail.includes("@") && !linking ? "pointer" : "not-allowed",
+                                                opacity: linkEmail.includes("@") && !linking ? 1 : 0.5,
+                                            }}
+                                        >
+                                            {linking ? "Bezig..." : "Koppelen"}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Merge Users — two-step: select then confirm */}
+                            {selectedPerson && (
+                                <div style={{ marginBottom: "20px" }}>
+                                    {!showMerge ? (
+                                        <button
+                                            onClick={() => setShowMerge(true)}
+                                            style={{
+                                                width: "100%",
+                                                padding: "10px 14px",
+                                                borderRadius: "8px",
+                                                border: "1px dashed var(--color-border)",
+                                                background: "transparent",
+                                                color: "var(--color-text-secondary)",
+                                                fontSize: "0.8rem",
+                                                cursor: "pointer",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: "6px",
+                                                justifyContent: "center",
+                                            }}
+                                        >
+                                            ⊕ Samenvoegen met andere persoon
+                                        </button>
+                                    ) : (
+                                        <div
+                                            style={{
+                                                padding: "14px",
+                                                borderRadius: "10px",
+                                                border: "1px solid var(--color-border)",
+                                                background: "var(--color-surface)",
+                                            }}
+                                        >
+                                            {!mergeTarget ? (
+                                                <>
+                                                    <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-muted)", marginBottom: "8px" }}>
+                                                        Selecteer persoon om mee samen te voegen:
+                                                    </div>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Zoek persoon..."
+                                                        value={mergeSearch}
+                                                        onChange={(e) => setMergeSearch(e.target.value)}
+                                                        autoFocus
+                                                        style={{
+                                                            width: "100%",
+                                                            padding: "8px 12px",
+                                                            borderRadius: "8px",
+                                                            border: "1px solid var(--color-border)",
+                                                            background: "var(--color-surface-elevated)",
+                                                            color: "var(--color-text-primary)",
+                                                            fontSize: "0.8rem",
+                                                            marginBottom: "8px",
+                                                            outline: "none",
+                                                            boxSizing: "border-box",
+                                                        }}
+                                                    />
+                                                    <div style={{ maxHeight: "150px", overflow: "auto" }}>
+                                                        {localPeople
+                                                            .filter(p => p.email !== selectedPerson.email)
+                                                            .filter(p =>
+                                                                mergeSearch === "" ||
+                                                                p.name.toLowerCase().includes(mergeSearch.toLowerCase()) ||
+                                                                p.email.toLowerCase().includes(mergeSearch.toLowerCase())
+                                                            )
+                                                            .slice(0, 8)
+                                                            .map(p => (
+                                                                <div
+                                                                    key={p.email}
+                                                                    onClick={() => setMergeTarget(p)}
+                                                                    style={{
+                                                                        padding: "8px 10px",
+                                                                        borderRadius: "6px",
+                                                                        cursor: "pointer",
+                                                                        fontSize: "0.8rem",
+                                                                        color: "var(--color-text-primary)",
+                                                                        transition: "background 0.1s ease",
+                                                                    }}
+                                                                    className="app-card"
+                                                                >
+                                                                    <div style={{ fontWeight: 500 }}>{p.name}</div>
+                                                                    <div style={{ fontSize: "0.7rem", color: "var(--color-text-muted)" }}>{p.email}</div>
+                                                                </div>
+                                                            ))}
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-muted)", marginBottom: "10px" }}>
+                                                        Bevestig samenvoegen
+                                                    </div>
+                                                    <div style={{
+                                                        padding: "10px 12px",
+                                                        borderRadius: "8px",
+                                                        background: "var(--color-surface-elevated)",
+                                                        marginBottom: "12px",
+                                                        fontSize: "0.8rem",
+                                                    }}>
+                                                        <span style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>{selectedPerson.name}</span>
+                                                        <span style={{ color: "var(--color-text-muted)", margin: "0 6px" }}>→</span>
+                                                        <span style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>{mergeTarget.name}</span>
+                                                        <div style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", marginTop: "4px" }}>
+                                                            Alle toegangen worden samengevoegd onder één persoon.
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ display: "flex", gap: "8px" }}>
+                                                        <button
+                                                            disabled={merging}
+                                                            onClick={async () => {
+                                                                setMerging(true);
+                                                                const primaryEmail = selectedPerson.email.includes("@") ? selectedPerson.email : mergeTarget.email;
+                                                                const alias = selectedPerson.email.includes("@") ? mergeTarget.email : selectedPerson.email;
+                                                                try {
+                                                                    const res = await fetch("/api/person-aliases", {
+                                                                        method: "POST",
+                                                                        headers: { "Content-Type": "application/json" },
+                                                                        body: JSON.stringify({ projectId, primaryEmail, alias }),
+                                                                    });
+                                                                    if (res.ok) {
+                                                                        showToast("success", `${selectedPerson.name} samengevoegd met ${mergeTarget.name}`);
+                                                                        setShowMerge(false);
+                                                                        setMergeSearch("");
+                                                                        setMergeTarget(null);
+                                                                        closePanel();
+                                                                        router.refresh();
+                                                                    } else {
+                                                                        const data = await res.json();
+                                                                        showToast("error", data.error || "Samenvoegen mislukt");
+                                                                    }
+                                                                } catch { showToast("error", "Netwerkfout"); }
+                                                                setMerging(false);
+                                                            }}
+                                                            style={{
+                                                                flex: 1,
+                                                                padding: "10px 16px",
+                                                                borderRadius: "8px",
+                                                                border: "none",
+                                                                background: merging ? "var(--color-surface-hover)" : "var(--color-brand)",
+                                                                color: "white",
+                                                                fontSize: "0.8rem",
+                                                                fontWeight: 600,
+                                                                cursor: merging ? "not-allowed" : "pointer",
+                                                            }}
+                                                        >
+                                                            {merging ? "Bezig..." : "Bevestigen"}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setMergeTarget(null)}
+                                                            style={{
+                                                                padding: "10px 16px",
+                                                                borderRadius: "8px",
+                                                                border: "1px solid var(--color-border)",
+                                                                background: "transparent",
+                                                                color: "var(--color-text-muted)",
+                                                                fontSize: "0.8rem",
+                                                                cursor: "pointer",
+                                                            }}
+                                                        >
+                                                            Terug
+                                                        </button>
+                                                    </div>
+                                                </>
+                                            )}
+                                            {!mergeTarget && (
+                                                <button
+                                                    onClick={() => { setShowMerge(false); setMergeSearch(""); }}
+                                                    style={{
+                                                        marginTop: "8px",
+                                                        padding: "6px 12px",
+                                                        borderRadius: "6px",
+                                                        border: "1px solid var(--color-border)",
+                                                        background: "transparent",
+                                                        color: "var(--color-text-muted)",
+                                                        fontSize: "0.75rem",
+                                                        cursor: "pointer",
+                                                    }}
+                                                >
+                                                    Annuleren
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Linked aliases (unlink capability) */}
+                            {aliases.length > 0 && (
+                                <div style={{ marginBottom: "20px" }}>
+                                    <div style={{
+                                        fontSize: "0.75rem",
+                                        fontWeight: 700,
+                                        textTransform: "uppercase",
+                                        letterSpacing: "0.05em",
+                                        color: "var(--color-text-muted)",
+                                        marginBottom: "10px",
+                                    }}>
+                                        🔗 Gekoppelde identiteiten
+                                    </div>
+                                    {aliases.map(a => (
+                                        <div
+                                            key={a.id}
+                                            style={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "space-between",
+                                                padding: "8px 12px",
+                                                borderRadius: "8px",
+                                                border: "1px solid var(--color-border)",
+                                                marginBottom: "6px",
+                                                fontSize: "0.8rem",
+                                            }}
+                                        >
+                                            <div>
+                                                <span style={{ color: "var(--color-text-primary)" }}>{a.alias}</span>
+                                                <span style={{ color: "var(--color-text-muted)", margin: "0 6px" }}>→</span>
+                                                <span style={{ color: "var(--color-text-primary)" }}>{a.primaryEmail}</span>
+                                            </div>
+                                            <button
+                                                onClick={async () => {
+                                                    try {
+                                                        const res = await fetch(`/api/person-aliases?id=${a.id}`, { method: "DELETE" });
+                                                        if (res.ok) {
+                                                            setAliases(prev => prev.filter(x => x.id !== a.id));
+                                                            showToast("success", "Koppeling verwijderd");
+                                                            router.refresh();
+                                                        } else {
+                                                            showToast("error", "Ontkoppelen mislukt");
+                                                        }
+                                                    } catch { showToast("error", "Netwerkfout"); }
+                                                }}
+                                                style={{
+                                                    padding: "4px 10px",
+                                                    borderRadius: "6px",
+                                                    border: "1px solid rgba(239, 68, 68, 0.3)",
+                                                    background: "rgba(239, 68, 68, 0.08)",
+                                                    color: "#ef4444",
+                                                    fontSize: "0.7rem",
+                                                    cursor: "pointer",
+                                                }}
+                                            >
+                                                Ontkoppelen
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                             <div
                                 style={{
                                     fontSize: "0.75rem",

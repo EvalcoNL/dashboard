@@ -2,16 +2,17 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { googleAdsService } from "@/lib/integrations/google-ads";
 import { auth } from "@/lib/auth";
+import { encodeOAuthState } from "@/lib/oauth-state";
 
 export async function GET(req: NextRequest) {
     const session = await auth();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { searchParams } = new URL(req.url);
-    const clientId = searchParams.get("clientId");
+    const projectId = searchParams.get("projectId");
 
-    if (!clientId) {
-        return NextResponse.json({ error: "Missing clientId parameter" }, { status: 400 });
+    if (!projectId) {
+        return NextResponse.json({ error: "Missing projectId parameter" }, { status: 400 });
     }
 
     if (!process.env.GOOGLE_ADS_CLIENT_ID || !process.env.GOOGLE_ADS_CLIENT_SECRET) {
@@ -28,9 +29,9 @@ export async function GET(req: NextRequest) {
 
     const authUrl = await googleAdsService.getAuthUrl(redirectUri);
 
-    // Append state to the authUrl
+    // Append CSRF-protected state to the authUrl
     const urlWithState = new URL(authUrl);
-    urlWithState.searchParams.set("state", clientId);
+    urlWithState.searchParams.set("state", encodeOAuthState(projectId));
 
     return NextResponse.redirect(urlWithState.toString());
 }

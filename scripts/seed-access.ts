@@ -4,7 +4,7 @@ async function main() {
   console.log('Seeding mock access data...')
 
   // Find a client
-  const client = await prisma.client.findFirst()
+  const client = await prisma.project.findFirst()
   if (!client) {
       console.log('No client found. Create a client first.')
       return;
@@ -13,7 +13,7 @@ async function main() {
   // Create Apps
   const zendesk = await prisma.dataSource.create({
       data: {
-          clientId: client.id,
+          projectId: client.id,
           type: 'ZENDESK',
           name: 'Zendesk Support',
           category: 'APP',
@@ -25,7 +25,7 @@ async function main() {
 
   const slack = await prisma.dataSource.create({
       data: {
-          clientId: client.id,
+          projectId: client.id,
           type: 'SLACK',
           name: 'Company Slack',
           category: 'APP',

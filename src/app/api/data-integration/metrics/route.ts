@@ -42,10 +42,13 @@ const BUILTIN_METRICS = [
  * Returns metrics in three groups: imported, custom, builtin.
  * Auto-discovers from ClickHouse data.
  */
-export async function GET() {
+export async function GET(request: Request) {
     try {
         const [, authError] = await requireAuth();
         if (authError) return authError;
+
+        const { searchParams } = new URL(request.url);
+        const projectId = searchParams.get('projectId');
 
         // 1. Fetch DB-defined metrics
         const [dbBaseMetrics, dbDerivedMetrics] = await Promise.all([
@@ -69,11 +72,22 @@ export async function GET() {
             const existingColumns = new Set(tableColumns.map(c => c.name));
             const columnTypes = new Map(tableColumns.map(c => [c.name, c.type]));
 
+            // Build WHERE clause for client-scoped queries
+            let clientFilter = '';
+            if (projectId) {
+                const clientSources = await prisma.dataSource.findMany({
+                    where: { projectId, active: true, connectorId: { not: null } },
+                    select: { id: true },
+                });
+                const sourceIds = clientSources.map(s => `'${s.id}'`).join(',');
+                clientFilter = sourceIds ? ` WHERE data_source_id IN (${sourceIds})` : ' WHERE 1=0';
+            }
+
             // Find the primary connector (most rows)
             let primaryConnector = '';
             try {
                 const connResult = await chQuery<{ connector_slug: string }>(`
-                    SELECT connector_slug FROM metrics_data FINAL LIMIT 1
+                    SELECT connector_slug FROM metrics_data${clientFilter} LIMIT 1
                 `);
                 if (connResult.length > 0) primaryConnector = connResult[0].connector_slug;
             } catch { /* ignore */ }
@@ -93,7 +107,7 @@ export async function GET() {
                 try {
                     const result = await chQuery<Record<string, number | boolean>>(`
                         SELECT ${selectParts.join(',\n                               ')}
-                        FROM metrics_data FINAL
+                        FROM metrics_data${clientFilter}
                     `);
 
                     if (result.length > 0) {
@@ -202,7 +216,7 @@ export async function GET() {
         // Merge all derived into one custom list
         const allDerivedCustom = [...templateDerived, ...userDerived];
 
-        return NextResponse.json({
+        const response = NextResponse.json({
             success: true,
             imported: importedMetrics,
             custom: customMetrics,
@@ -214,6 +228,9 @@ export async function GET() {
                 builtin: builtinMetrics.length,
             },
         });
+        // Semi-static data — cache for 5 minutes, serve stale for 10
+        response.headers.set('Cache-Control', 'private, s-maxage=300, stale-while-revalidate=600');
+        return response;
     } catch (error) {
         return NextResponse.json({ success: false, error: String(error) }, { status: 500 });
     }

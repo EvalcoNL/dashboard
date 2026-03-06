@@ -8,7 +8,7 @@ import { prisma } from '@/lib/db';
 import { query as chQuery } from '@/lib/clickhouse';
 
 /**
- * GET /api/data-integration/connections?clientId=xxx
+ * GET /api/data-integration/connections?projectId=xxx
  * List all data sources with sync capabilities and connector metadata.
  */
 export async function GET(request: Request) {
@@ -17,11 +17,11 @@ export async function GET(request: Request) {
         if (authError) return authError;
 
         const { searchParams } = new URL(request.url);
-        const clientId = searchParams.get('clientId');
-        if (!clientId) return NextResponse.json({ error: 'clientId required' }, { status: 400 });
+        const projectId = searchParams.get('projectId');
+        if (!projectId) return NextResponse.json({ error: 'projectId required' }, { status: 400 });
 
         const sources = await prisma.dataSource.findMany({
-            where: { clientId },
+            where: { projectId },
             include: {
                 connector: {
                     select: {
@@ -38,17 +38,40 @@ export async function GET(request: Request) {
         });
 
         const enriched = await Promise.all(sources.map(async (source) => {
-            // Count records from ClickHouse
+            // Count records — different strategy for Merchant Center vs other sources
             let recordCount = 0;
-            try {
-                const result = await chQuery<{ cnt: string }>(
-                    `SELECT count() AS cnt FROM metrics_data FINAL WHERE data_source_id = {dsId:String}`,
-                    { dsId: source.id }
-                );
-                recordCount = Number(result[0]?.cnt || 0);
-            } catch {
-                // ClickHouse might not be available yet
-                recordCount = 0;
+            let merchantHealth: any = null;
+
+            if (source.type === 'GOOGLE_MERCHANT') {
+                // MC data lives in merchant_center_health, not ClickHouse
+                // Show product count from latest snapshot, not number of snapshots
+                try {
+                    merchantHealth = await (prisma as any).merchantCenterHealth.findFirst({
+                        where: { dataSourceId: source.id },
+                        orderBy: { date: 'desc' },
+                        select: {
+                            date: true,
+                            totalItems: true,
+                            disapprovedItems: true,
+                            disapprovedPct: true,
+                            topReasons: true,
+                        },
+                    });
+                    recordCount = merchantHealth?.totalItems || 0;
+                } catch {
+                    recordCount = 0;
+                }
+            } else {
+                // Standard sources: count from ClickHouse
+                try {
+                    const result = await chQuery<{ cnt: string }>(
+                        `SELECT count() AS cnt FROM metrics_data FINAL WHERE data_source_id = {dsId:String}`,
+                        { dsId: source.id }
+                    );
+                    recordCount = Number(result[0]?.cnt || 0);
+                } catch {
+                    recordCount = 0;
+                }
             }
 
             const recentJobs = await prisma.syncJob.findMany({
@@ -81,6 +104,7 @@ export async function GET(request: Request) {
             return {
                 ...source,
                 recordCount,
+                merchantHealth,
                 recentJobs,
                 nextSyncAt: nextSyncAt?.toISOString() || null,
                 // Backwards compatibility

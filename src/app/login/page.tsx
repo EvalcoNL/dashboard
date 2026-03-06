@@ -64,7 +64,7 @@ export default function LoginPage() {
                     setError("Ongeldig e-mailadres of wachtwoord.");
                 }
             } else if (result?.ok) {
-                router.push("/dashboard");
+                router.push("/");
                 router.refresh();
             } else {
                 setError("Er is een onbekende fout opgetreden.");

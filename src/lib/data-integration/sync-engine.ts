@@ -6,6 +6,7 @@
 import { prisma } from '@/lib/db';
 import { connectorRegistry } from './connector-registry';
 import { normalizationService } from './normalization-service';
+import { ecomNormalizationService } from './ecommerce-normalization-service';
 import { command } from '@/lib/clickhouse';
 import '@/lib/data-integration/connectors'; // Auto-registers all connectors
 import { decrypt } from '@/lib/encryption';
@@ -65,6 +66,7 @@ export class SyncEngine {
         if (!dataSource.connector) throw new Error(`DataSource ${options.dataSourceId} has no connector linked`);
 
         const connector = connectorRegistry.getOrThrow(dataSource.connector.slug);
+        const isEcommerce = connector.category === 'ECOMMERCE';
         const supportedLevels = connector.getSupportedLevels();
 
         const levelsToSync = options.level
@@ -130,9 +132,10 @@ export class SyncEngine {
         try {
             // ─── FULL mode: delete all existing data first ───
             if (mode === 'FULL') {
-                await this.log(syncJob.id, 'INFO', `FULL RESYNC: Deleting all data for data source ${dataSource.id}`);
+                const targetTable = isEcommerce ? 'order_data' : 'metrics_data';
+                await this.log(syncJob.id, 'INFO', `FULL RESYNC: Deleting all data in ${targetTable} for data source ${dataSource.id}`);
                 await command(`
-                    ALTER TABLE metrics_data DELETE
+                    ALTER TABLE ${targetTable} DELETE
                     WHERE data_source_id = '${dataSource.id}'
                 `);
                 // Wait for mutation to complete
@@ -190,43 +193,69 @@ export class SyncEngine {
 
                         totalFetched += response.totalRows;
 
-                        // Group rows by date
-                        const rowsByDate = new Map<string, typeof response.rows>();
-                        for (const row of response.rows) {
-                            const rawDate = String(row.dimensions?.date || row.dimensions?.Date || '');
-                            const dateKey = rawDate.length === 8
-                                ? `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`
-                                : rawDate;
-                            if (!rowsByDate.has(dateKey)) rowsByDate.set(dateKey, []);
-                            rowsByDate.get(dateKey)!.push(row);
-                        }
+                        if (isEcommerce) {
+                            // ─── E-commerce flow: store directly via ecomNormalizationService ───
+                            // Convert FetchResponse rows → EcomRawOrder[]
+                            const orders = response.rows.map(row => ({
+                                recordType: (String(row.dimensions?._record_type || 'order') as 'order' | 'line_item'),
+                                dimensions: row.dimensions || {},
+                                metrics: row.metrics || {},
+                            }));
 
-                        // Store each day's rows
-                        const sortedDates = [...rowsByDate.entries()].sort(([a], [b]) => b.localeCompare(a));
-
-                        for (const [dateKey, dayRows] of sortedDates) {
-                            const date = dateKey ? new Date(dateKey + 'T00:00:00Z') : dateFrom;
-                            if (dayRows.length === 0) continue;
-
-                            const result = await normalizationService.normalizeAndStore({
+                            const result = await ecomNormalizationService.normalizeAndStore({
                                 dataSourceId: dataSource.id,
-                                accountId: account.id,
-                                clientId: dataSource.clientId,
+                                projectId: dataSource.projectId,
                                 connectorSlug: dataSource.connector!.slug,
-                                level: level.slug,
-                                date,
-                                response: { rows: dayRows, totalRows: dayRows.length },
-                                // Delta mode enables checksum comparison
-                                enableChecksumComparison: mode === 'DELTA',
-                                // Full mode skips hash comparison (insert all)
-                                skipHashComparison: mode === 'FULL',
+                                piiEnabled: (dataSource as any).piiEnabled || false,
+                                orders,
                             });
 
                             totalStored += result.storedCount;
-                            totalNew += result.newRows || 0;
-                            totalUpdated += result.updatedRows || 0;
-                            totalDeleted += result.deletedRows || 0;
-                            totalSkipped += result.skippedRows || 0;
+                            totalNew += result.storedCount;
+                        } else {
+                            // ─── Ads/analytics flow: group by date, store via normalizationService ───
+                            const rowsByDate = new Map<string, typeof response.rows>();
+                            for (const row of response.rows) {
+                                const d = row.dimensions;
+                                const rawDate = String(
+                                    d?.date || d?.Date ||                    // canonical / Google Ads
+                                    d?.date_start ||                         // Meta
+                                    d?.TimePeriod ||                         // Microsoft Ads
+                                    d?.['dateRange.start'] ||                // LinkedIn
+                                    d?.created_at || d?.orderDateTime ||     // E-commerce fallback
+                                    ''
+                                );
+                                const dateKey = rawDate.length === 8
+                                    ? `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`
+                                    : rawDate.slice(0, 10);
+                                if (!rowsByDate.has(dateKey)) rowsByDate.set(dateKey, []);
+                                rowsByDate.get(dateKey)!.push(row);
+                            }
+
+                            const sortedDates = [...rowsByDate.entries()].sort(([a], [b]) => b.localeCompare(a));
+
+                            for (const [dateKey, dayRows] of sortedDates) {
+                                const date = dateKey ? new Date(dateKey + 'T00:00:00Z') : dateFrom;
+                                if (dayRows.length === 0) continue;
+
+                                const result = await normalizationService.normalizeAndStore({
+                                    dataSourceId: dataSource.id,
+                                    accountId: account.id,
+                                    projectId: dataSource.projectId,
+                                    connectorSlug: dataSource.connector!.slug,
+                                    level: level.slug,
+                                    date,
+                                    response: { rows: dayRows, totalRows: dayRows.length },
+                                    enableChecksumComparison: mode === 'DELTA',
+                                    skipHashComparison: mode === 'FULL',
+                                });
+
+                                totalStored += result.storedCount;
+                                totalNew += result.newRows || 0;
+                                totalUpdated += result.updatedRows || 0;
+                                totalDeleted += result.deletedRows || 0;
+                                totalSkipped += result.skippedRows || 0;
+                            }
                         }
 
                         await this.log(syncJob.id, 'INFO',
@@ -303,7 +332,15 @@ export class SyncEngine {
                 errors: levelErrors,
             };
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Unknown error';
+            let message = 'Unknown error';
+            if (error instanceof Error) {
+                message = error.message || error.toString();
+                if ((error as any).cause) message += ` (cause: ${(error as any).cause})`;
+            } else if (error && typeof error === 'object') {
+                message = JSON.stringify(error).substring(0, 500);
+            } else if (error) {
+                message = String(error);
+            }
 
             await prisma.syncJob.update({
                 where: { id: syncJob.id },

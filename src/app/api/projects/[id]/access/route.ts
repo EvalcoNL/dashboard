@@ -12,7 +12,7 @@ export async function PATCH(
             return NextResponse.json({ error: "Unauthorized. Only admins can modify access." }, { status: 403 });
         }
 
-        const { id: clientId } = await params;
+        const { id: projectId } = await params;
         const { userIds } = await req.json();
 
         if (!Array.isArray(userIds)) {
@@ -26,8 +26,8 @@ export async function PATCH(
         });
 
         // Update the client's assigned users
-        const updatedClient = await (prisma as any).client.update({
-            where: { id: clientId },
+        const updatedClient = await (prisma as any).project.update({
+            where: { id: projectId },
             data: {
                 users: {
                     set: validUsers.map(u => ({ id: u.id }))

@@ -6,7 +6,7 @@ import { X, Key, Loader2, ExternalLink } from "lucide-react";
 interface ApiKeyLinkModalProps {
     open: boolean;
     onClose: () => void;
-    clientId: string;
+    projectId: string;
     platformType: string;
     platformName: string;
     platformColor: string;
@@ -20,7 +20,7 @@ const DEFAULT_FIELDS = [
 export default function ApiKeyLinkModal({
     open,
     onClose,
-    clientId,
+    projectId,
     platformType,
     platformName,
     platformColor,
@@ -44,7 +44,7 @@ export default function ApiKeyLinkModal({
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    clientId,
+                    projectId,
                     platformType,
                     name: name || platformName,
                     config: values,

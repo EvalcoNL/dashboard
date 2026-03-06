@@ -17,7 +17,7 @@ import type {
 interface NormalizeConfig {
     dataSourceId: string;
     accountId?: string;
-    clientId?: string;
+    projectId?: string;
     connectorSlug: string;
     level: string;
     date: Date;
@@ -48,7 +48,8 @@ interface NormalizationResult {
     skippedRows?: number;
 }
 
-// Simple static currency rates — in production, fetch from an API
+// TODO: Replace with live exchange rate API (e.g. ECB or Open Exchange Rates)
+// Static rates are approximate and will drift over time
 const CURRENCY_RATES: Record<string, number> = {
     EUR: 1.0,
     USD: 0.92,
@@ -96,14 +97,14 @@ export class NormalizationService {
         const dimensionMappings = connector.getDimensionMappings();
         const metricMappings = connector.getMetricMappings();
 
-        // Resolve clientId if not provided
-        let clientId = config.clientId;
-        if (!clientId) {
+        // Resolve projectId if not provided
+        let projectId = config.projectId;
+        if (!projectId) {
             const ds = await prisma.dataSource.findUnique({
                 where: { id: config.dataSourceId },
-                select: { clientId: true },
+                select: { projectId: true },
             });
-            clientId = ds?.clientId || '';
+            projectId = ds?.projectId || '';
         }
 
         const warnings: string[] = [];
@@ -149,7 +150,7 @@ export class NormalizationService {
                 canonicalHash,
                 dataSourceId: config.dataSourceId,
                 accountId: config.accountId || null,
-                clientId,
+                projectId,
                 connectorSlug: config.connectorSlug,
                 date: config.date,
                 level: config.level,
@@ -190,9 +191,9 @@ export class NormalizationService {
                     // 1. Fetch existing rows for this source + date
                     const existingQuery = config.enableChecksumComparison
                         ? `SELECT canonical_hash, sipHash64(*) as data_checksum FROM metrics_data FINAL
-                           WHERE data_source_id = '${config.dataSourceId}' AND date = '${dateStr}'`
+                           WHERE data_source_id = '${config.dataSourceId}' AND date = '${dateStr}' AND level = '${config.level}'`
                         : `SELECT canonical_hash FROM metrics_data FINAL
-                           WHERE data_source_id = '${config.dataSourceId}' AND date = '${dateStr}'`;
+                           WHERE data_source_id = '${config.dataSourceId}' AND date = '${dateStr}' AND level = '${config.level}'`;
 
                     const existingRows = await query<{ canonical_hash: string; data_checksum?: string }>(existingQuery);
                     const existingHashes = new Set(existingRows.map(r => r.canonical_hash));
@@ -249,6 +250,7 @@ export class NormalizationService {
                             ALTER TABLE metrics_data DELETE
                             WHERE data_source_id = '${config.dataSourceId}'
                               AND date = '${dateStr}'
+                              AND level = '${config.level}'
                               AND canonical_hash IN (${hashList})
                         `);
                         await this.waitForMutations();
@@ -327,7 +329,7 @@ export class NormalizationService {
         const { query: chQuery, queryOne: chQueryOne } = await import('@/lib/clickhouse');
 
         const countResult = await chQueryOne<{ cnt: string }>(
-            `SELECT count() AS cnt FROM metrics_data FINAL WHERE data_source_id = {dsId:String}`,
+            `SELECT count() AS cnt FROM metrics_data WHERE data_source_id = {dsId:String}`,
             { dsId: dataSourceId }
         );
         const totalRecords = Number(countResult?.cnt || 0);
@@ -342,41 +344,55 @@ export class NormalizationService {
             };
         }
 
-        const rangeResult = await chQueryOne<{ earliest: string; latest: string }>(
-            `SELECT toString(min(date)) AS earliest, toString(max(date)) AS latest FROM metrics_data FINAL WHERE data_source_id = {dsId:String}`,
-            { dsId: dataSourceId }
-        );
-
-        const levelRows = await chQuery<{ level: string }>(
-            `SELECT DISTINCT level FROM metrics_data FINAL WHERE data_source_id = {dsId:String}`,
-            { dsId: dataSourceId }
-        );
-
-        // Get dimension coverage (which dimension columns have non-null data)
-        const dimCoverage: Record<string, number> = {};
-        for (const dim of KNOWN_DIMENSIONS) {
-            const result = await chQueryOne<{ cnt: string }>(
-                `SELECT count() AS cnt FROM metrics_data FINAL WHERE data_source_id = {dsId:String} AND ${dim} IS NOT NULL AND ${dim} != ''`,
+        // Batch: run range + levels + coverage in parallel instead of sequentially
+        const [rangeResult, levelRows, dimCoverageResult, metCoverageResult] = await Promise.all([
+            chQueryOne<{ earliest: string; latest: string }>(
+                `SELECT toString(min(date)) AS earliest, toString(max(date)) AS latest FROM metrics_data WHERE data_source_id = {dsId:String}`,
                 { dsId: dataSourceId }
-            );
-            const cnt = Number(result?.cnt || 0);
-            if (cnt > 0) {
-                dimCoverage[dim] = Math.round((cnt / totalRecords) * 100);
-            }
-        }
-
-        // Get metric coverage (which metric columns have non-zero data)
-        const metCoverage: Record<string, number> = {};
-        for (const met of KNOWN_METRICS) {
-            const result = await chQueryOne<{ cnt: string }>(
-                `SELECT count() AS cnt FROM metrics_data FINAL WHERE data_source_id = {dsId:String} AND ${met} > 0`,
+            ),
+            chQuery<{ level: string }>(
+                `SELECT DISTINCT level FROM metrics_data WHERE data_source_id = {dsId:String}`,
                 { dsId: dataSourceId }
-            );
-            const cnt = Number(result?.cnt || 0);
-            if (cnt > 0) {
-                metCoverage[met] = Math.round((cnt / totalRecords) * 100);
-            }
-        }
+            ),
+            // Batch dimension coverage — single query instead of N individual queries
+            (async () => {
+                const dimParts = [...KNOWN_DIMENSIONS].map((dim: string) =>
+                    `countIf(${dim} IS NOT NULL AND ${dim} != '') AS dim_${dim}`
+                );
+                if (dimParts.length === 0) return {};
+                const result = await chQueryOne<Record<string, string>>(
+                    `SELECT ${dimParts.join(', ')} FROM metrics_data WHERE data_source_id = {dsId:String}`,
+                    { dsId: dataSourceId }
+                );
+                const coverage: Record<string, number> = {};
+                if (result) {
+                    for (const dim of KNOWN_DIMENSIONS) {
+                        const cnt = Number(result[`dim_${dim}`] || 0);
+                        if (cnt > 0) coverage[dim] = Math.round((cnt / totalRecords) * 100);
+                    }
+                }
+                return coverage;
+            })(),
+            // Batch metric coverage — single query instead of N individual queries
+            (async () => {
+                const metParts = [...KNOWN_METRICS].map((met: string) =>
+                    `countIf(${met} > 0) AS met_${met}`
+                );
+                if (metParts.length === 0) return {};
+                const result = await chQueryOne<Record<string, string>>(
+                    `SELECT ${metParts.join(', ')} FROM metrics_data WHERE data_source_id = {dsId:String}`,
+                    { dsId: dataSourceId }
+                );
+                const coverage: Record<string, number> = {};
+                if (result) {
+                    for (const met of KNOWN_METRICS) {
+                        const cnt = Number(result[`met_${met}`] || 0);
+                        if (cnt > 0) coverage[met] = Math.round((cnt / totalRecords) * 100);
+                    }
+                }
+                return coverage;
+            })(),
+        ]);
 
         return {
             totalRecords,
@@ -385,8 +401,8 @@ export class NormalizationService {
                 latest: rangeResult ? new Date(rangeResult.latest) : null,
             },
             levelsWithData: levelRows.map(r => r.level),
-            dimensionCoverage: dimCoverage,
-            metricCoverage: metCoverage,
+            dimensionCoverage: dimCoverageResult,
+            metricCoverage: metCoverageResult,
         };
     }
 
@@ -602,7 +618,7 @@ export class NormalizationService {
         canonicalHash: string;
         dataSourceId: string;
         accountId: string | null;
-        clientId: string;
+        projectId: string;
         connectorSlug: string;
         date: Date;
         level: string;
@@ -613,7 +629,7 @@ export class NormalizationService {
             canonical_hash: record.canonicalHash,
             data_source_id: record.dataSourceId,
             account_id: record.accountId,
-            client_id: record.clientId,
+            client_id: record.projectId,
             connector_slug: record.connectorSlug,
             date: record.date.toISOString().split('T')[0],
             level: record.level,

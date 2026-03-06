@@ -26,7 +26,7 @@ export async function POST(
 
         // Generate Advice
         const advice = await aiService.generateAdvisorReport(
-            analystReport.clientId,
+            analystReport.projectId,
             analystReport.reportJson as Record<string, unknown>
         );
 

@@ -14,9 +14,9 @@ interface NotificationConfig {
  * - "custom" → use the client's own notificationUsers + slackWebhookUrl
  * - "disabled" → no notifications
  */
-export async function resolveNotificationConfig(clientId: string): Promise<NotificationConfig> {
-    const client = await (prisma as any).client.findUnique({
-        where: { id: clientId },
+export async function resolveNotificationConfig(projectId: string): Promise<NotificationConfig> {
+    const client = await (prisma as any).project.findUnique({
+        where: { id: projectId },
         select: {
             notificationMode: true,
             slackWebhookUrl: true,
@@ -36,7 +36,7 @@ export async function resolveNotificationConfig(clientId: string): Promise<Notif
 
     // Get self-opted-in users for this client
     const optedIn = await (prisma as any).userNotificationPreference.findMany({
-        where: { clientId, enabled: true },
+        where: { projectId, enabled: true },
         include: { user: { select: { email: true } } }
     });
     const optInEmails: string[] = optedIn.map((p: any) => p.user.email);

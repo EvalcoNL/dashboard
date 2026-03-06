@@ -37,7 +37,7 @@ const DATA_PRESENCE_CACHE = new Map<string, { data: Set<string>; expiry: number 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
- * GET /api/data-integration/explorer/fields?clientId=xxx
+ * GET /api/data-integration/explorer/fields?projectId=xxx
  *
  * Optimized: single DESCRIBE TABLE call, no dynamic imports,
  * all DB queries parallelized.
@@ -48,10 +48,10 @@ export async function GET(request: Request) {
         if (authError) return authError;
 
         const { searchParams } = new URL(request.url);
-        const clientId = searchParams.get('clientId');
+        const projectId = searchParams.get('projectId');
 
-        if (!clientId) {
-            return NextResponse.json({ error: 'clientId required' }, { status: 400 });
+        if (!projectId) {
+            return NextResponse.json({ error: 'projectId required' }, { status: 400 });
         }
 
         // ─── Run all queries in parallel ───
@@ -59,7 +59,7 @@ export async function GET(request: Request) {
         const [sources, dbDimensions, tableColumns] = await Promise.all([
             // 1. Active data sources
             prisma.dataSource.findMany({
-                where: { clientId, active: true },
+                where: { projectId, active: true },
                 select: {
                     id: true,
                     connector: { select: { slug: true, name: true } },

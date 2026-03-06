@@ -120,6 +120,12 @@ PARTITION BY toYYYYMM(date)
 ORDER BY (client_id, connector_slug, date, level, canonical_hash)
 SETTINGS index_granularity = 8192;
 
+-- Data skipping indexes for fast filtered queries
+-- Most queries filter on data_source_id which is not in the ORDER BY prefix
+ALTER TABLE evalco.metrics_data ADD INDEX IF NOT EXISTS idx_ds_id data_source_id TYPE set(0) GRANULARITY 4;
+ALTER TABLE evalco.metrics_data ADD INDEX IF NOT EXISTS idx_level level TYPE set(0) GRANULARITY 4;
+ALTER TABLE evalco.metrics_data ADD INDEX IF NOT EXISTS idx_date date TYPE minmax GRANULARITY 4;
+
 
 -- ─── Materialized View: daily rollup per client/connector ───
 

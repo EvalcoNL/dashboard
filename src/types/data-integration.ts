@@ -22,7 +22,7 @@ export type AuthType = 'oauth2' | 'api_key' | 'basic' | 'custom';
 
 export type ConnectionStatus = 'ACTIVE' | 'PAUSED' | 'ERROR' | 'REVOKED';
 
-export type SyncJobStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+export type SyncJobStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'COMPLETED_WITH_ERRORS' | 'FAILED' | 'CANCELLED';
 
 export type DataType = 'STRING' | 'NUMBER' | 'DATE' | 'BOOLEAN';
 
@@ -217,6 +217,7 @@ export type CanonicalMetric = keyof typeof CANONICAL_METRICS;
 /** Credentials returned after authentication */
 export interface AuthResult {
     success: boolean;
+    credentials?: string;
     refreshToken?: string;
     accessToken?: string;
     expiresAt?: Date;
@@ -260,14 +261,14 @@ export interface DiscoveredAccount {
 /** Dimension field mapping from platform → canonical */
 export interface DimensionMapping {
     platformField: string;
-    canonicalField: CanonicalDimension;
+    canonicalField: CanonicalDimension | string;
     transform?: (value: string | number) => string | number;
 }
 
 /** Metric field mapping from platform → canonical */
 export interface MetricMapping {
     platformField: string;
-    canonicalField: CanonicalMetric;
+    canonicalField: CanonicalMetric | string;
     transform?: (value: number) => number;
 }
 

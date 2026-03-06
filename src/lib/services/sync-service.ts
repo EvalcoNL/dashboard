@@ -14,9 +14,9 @@ export class SyncService {
      * Synchronizes campaign metrics for a specific client.
      * Writes campaign metrics to ClickHouse metrics_data table.
      */
-    async syncClientData(clientId: string, daysBack: number = 90) {
-        const client = await prisma.client.findUnique({
-            where: { id: clientId },
+    async syncProjectData(projectId: string, daysBack: number = 90) {
+        const client = await prisma.project.findUnique({
+            where: { id: projectId },
             include: { dataSources: { where: { active: true, type: "GOOGLE_ADS" } } },
         });
 
@@ -55,7 +55,7 @@ export class SyncService {
                     return {
                         canonical_hash: hash,
                         data_source_id: source.id,
-                        client_id: clientId,
+                        client_id: projectId,
                         connector_slug: 'google-ads',
                         date: format(m.date, "yyyy-MM-dd"),
                         level: 'campaign',
@@ -121,7 +121,7 @@ export class SyncService {
             }
         } catch (error: any) {
             const message = error instanceof Error ? error.message : String(error);
-            console.error(`Sync error for client ${clientId}:`, message);
+            console.error(`Sync error for client ${projectId}:`, message);
             throw error;
         }
 

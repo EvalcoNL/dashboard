@@ -16,11 +16,11 @@ import { connectionHealthMonitor } from '@/lib/data-integration/connection-healt
  * Protected by CRON_SECRET header.
  */
 export async function GET(request: Request) {
-    // Verify cron secret — mandatory, block if not configured
-    const cronSecret = request.headers.get('x-cron-secret') || new URL(request.url).searchParams.get('secret');
+    // Verify cron secret via Authorization: Bearer (consistent with uptime cron)
+    const authHeader = request.headers.get('authorization');
     const expectedSecret = process.env.CRON_SECRET;
 
-    if (!expectedSecret || cronSecret !== expectedSecret) {
+    if (!expectedSecret || authHeader !== `Bearer ${expectedSecret}`) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

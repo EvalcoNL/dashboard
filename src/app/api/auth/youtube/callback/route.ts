@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { decodeOAuthState } from "@/lib/oauth-state";
 import { encrypt } from "@/lib/encryption";
 
 export async function GET(req: NextRequest) {
@@ -10,15 +11,16 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const code = searchParams.get("code");
-    const clientId = searchParams.get("state");
+    const rawState = searchParams.get("state") || "";
+    const projectId = decodeOAuthState(rawState);
     const error = searchParams.get("error");
 
     const origin = process.env.NEXTAUTH_URL || new URL(req.url).origin;
 
-    if (error || !code || !clientId) {
-        const redirectPath = clientId
-            ? `/dashboard/projects/${clientId}/data/sources?error=${error === "access_denied" ? "Koppeling geannuleerd" : "YouTubeLinkFailed"}`
-            : "/dashboard";
+    if (error || !code || !projectId) {
+        const redirectPath = projectId
+            ? `/projects/${projectId}/data/sources?error=${error === "access_denied" ? "Koppeling geannuleerd" : "YouTubeLinkFailed"}`
+            : "/";
         return NextResponse.redirect(`${origin}${redirectPath}`);
     }
 
@@ -28,7 +30,7 @@ export async function GET(req: NextRequest) {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: new URLSearchParams({
-                code, client_id: process.env.GOOGLE_OAUTH_CLIENT_ID || "",
+                code, project_id: process.env.GOOGLE_OAUTH_CLIENT_ID || "",
                 client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET || "",
                 redirect_uri: redirectUri, grant_type: "authorization_code",
             }),
@@ -36,7 +38,7 @@ export async function GET(req: NextRequest) {
         const tokenData = await tokenResponse.json();
         if (tokenData.error) throw new Error(tokenData.error_description || tokenData.error);
         const refreshToken = tokenData.refresh_token;
-        if (!refreshToken) return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/data/sources?error=NoRefreshToken`);
+        if (!refreshToken) return NextResponse.redirect(`${origin}/projects/${projectId}/data/sources?error=NoRefreshToken`);
 
         // Fetch YouTube channel
         const accessToken = tokenData.access_token;
@@ -51,15 +53,15 @@ export async function GET(req: NextRequest) {
 
         await prisma.dataSource.create({
             data: {
-                clientId, type: "YOUTUBE", category: "APP",
+                projectId, type: "YOUTUBE", category: "APP",
                 externalId: channelId, name: channelName,
                 token: encrypt(refreshToken), active: true,
             },
         });
 
-        return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/data/sources`);
+        return NextResponse.redirect(`${origin}/projects/${projectId}/data/sources`);
     } catch (error: any) {
         console.error("YouTube OAuth Error:", error);
-        return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/data/sources?error=YouTubeLinkFailed`);
+        return NextResponse.redirect(`${origin}/projects/${projectId}/data/sources?error=YouTubeLinkFailed`);
     }
 }

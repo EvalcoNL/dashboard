@@ -58,7 +58,7 @@ export async function PATCH(
         // Check if another source with the same externalId+type already exists for this client
         const existingSource = await prisma.dataSource.findFirst({
             where: {
-                clientId: pendingSource.clientId,
+                projectId: pendingSource.projectId,
                 type: pendingSource.type,
                 externalId,
                 id: { not: sourceId }, // exclude the current pending source
@@ -144,12 +144,12 @@ export async function DELETE(
     try {
         const source = await prisma.dataSource.findUnique({
             where: { id: sourceId },
-            select: { clientId: true, type: true }
+            select: { projectId: true, type: true }
         });
 
         if (source?.type === "SLACK") {
-            await prisma.client.update({
-                where: { id: source.clientId },
+            await prisma.project.update({
+                where: { id: source.projectId },
                 data: { slackWebhookUrl: null }
             });
         }

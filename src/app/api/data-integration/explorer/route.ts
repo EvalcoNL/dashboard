@@ -26,7 +26,7 @@ export async function POST(request: Request) {
         let resolvedIds = connectionIds;
         if (!resolvedIds || resolvedIds.length === 0) {
             const sources = await prisma.dataSource.findMany({
-                where: { clientId: projectId, syncStatus: 'ACTIVE', active: true },
+                where: { projectId: projectId, syncStatus: 'ACTIVE', active: true },
                 select: { id: true },
             });
             resolvedIds = sources.map((s: { id: string }) => s.id);

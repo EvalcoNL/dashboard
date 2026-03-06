@@ -50,13 +50,13 @@ export interface DailyMetric {
  * Returns data in the legacy CampaignMetric format for backward compatibility.
  */
 export async function queryNormalizedMetrics(
-    clientId: string,
+    projectId: string,
     dateFrom: Date,
     dateTo?: Date,
     options?: { orderBy?: 'asc' | 'desc'; take?: number }
 ): Promise<LegacyCampaignMetric[]> {
     try {
-        const campaigns = await chQueries.campaignMetrics(clientId, dateFrom, dateTo, {
+        const campaigns = await chQueries.campaignMetrics(projectId, dateFrom, dateTo, {
             orderBy: options?.orderBy,
             limit: options?.take,
         });
@@ -83,9 +83,9 @@ export async function queryNormalizedMetrics(
 /**
  * Check if a client has any data in ClickHouse.
  */
-export async function hasNormalizedData(clientId: string): Promise<boolean> {
+export async function hasNormalizedData(projectId: string): Promise<boolean> {
     try {
-        return await chQueries.hasData(clientId);
+        return await chQueries.hasData(projectId);
     } catch {
         return false;
     }
@@ -94,9 +94,9 @@ export async function hasNormalizedData(clientId: string): Promise<boolean> {
 /**
  * Count total records for a client.
  */
-export async function countNormalizedRecords(clientId: string): Promise<number> {
+export async function countNormalizedRecords(projectId: string): Promise<number> {
     try {
-        return await chQueries.countRecords(clientId);
+        return await chQueries.countRecords(projectId);
     } catch {
         return 0;
     }
@@ -107,12 +107,12 @@ export async function countNormalizedRecords(clientId: string): Promise<number> 
  * Returns in the format used by legacy dashboard components.
  */
 export async function aggregateNormalizedMetrics(
-    clientId: string,
+    projectId: string,
     dateFrom: Date,
     dateTo?: Date
 ): Promise<AggregatedMetrics> {
     try {
-        const agg = await chQueries.aggregateMetrics(clientId, dateFrom, dateTo);
+        const agg = await chQueries.aggregateMetrics(projectId, dateFrom, dateTo);
 
         return {
             _sum: {
@@ -142,12 +142,12 @@ export async function aggregateNormalizedMetrics(
  * Returns daily time-series data for charts.
  */
 export async function groupNormalizedByDate(
-    clientId: string,
+    projectId: string,
     dateFrom: Date,
     dateTo: Date
 ): Promise<DailyMetric[]> {
     try {
-        const daily = await chQueries.dailyMetrics(clientId, dateFrom, dateTo);
+        const daily = await chQueries.dailyMetrics(projectId, dateFrom, dateTo);
 
         return daily.map(d => ({
             date: new Date(d.date),

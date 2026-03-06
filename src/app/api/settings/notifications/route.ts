@@ -18,7 +18,7 @@ export async function GET() {
         const globalSettings = await getGlobalNotificationSettings();
 
         // Get all clients with their notification mode
-        const clients = await (prisma as any).client.findMany({
+        const clients = await (prisma as any).project.findMany({
             select: {
                 id: true,
                 name: true,

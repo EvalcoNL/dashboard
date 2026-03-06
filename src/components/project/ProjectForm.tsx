@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Save, Loader2 } from "lucide-react";
 import Link from "next/link";
 
-interface ClientData {
+interface ProjectData {
     id?: string;
     name?: string;
     industryType?: string;
@@ -17,21 +17,21 @@ interface ClientData {
     currency?: string;
 }
 
-export default function ProjectForm({ client }: { client?: ClientData }) {
+export default function ProjectForm({ project }: { project?: ProjectData }) {
     const router = useRouter();
-    const isEdit = !!client;
+    const isEdit = !!project;
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
 
     const [form, setForm] = useState({
-        name: client?.name || "",
-        industryType: client?.industryType || "LEADGEN",
-        targetType: client?.targetType || "CPA",
-        targetValue: client?.targetValue?.toString() || "",
-        tolerancePct: client?.tolerancePct?.toString() || "15",
-        evaluationWindowDays: client?.evaluationWindowDays?.toString() || "7",
-        profitMarginPct: client?.profitMarginPct?.toString() || "",
-        currency: client?.currency || "EUR",
+        name: project?.name || "",
+        industryType: project?.industryType || "LEADGEN",
+        targetType: project?.targetType || "CPA",
+        targetValue: project?.targetValue?.toString() || "",
+        tolerancePct: project?.tolerancePct?.toString() || "15",
+        evaluationWindowDays: project?.evaluationWindowDays?.toString() || "7",
+        profitMarginPct: project?.profitMarginPct?.toString() || "",
+        currency: project?.currency || "EUR",
     });
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -40,7 +40,7 @@ export default function ProjectForm({ client }: { client?: ClientData }) {
         setLoading(true);
 
         try {
-            const url = isEdit ? `/api/projects/${client!.id}` : "/api/projects";
+            const url = isEdit ? `/api/projects/${project!.id}` : "/api/projects";
             const method = isEdit ? "PUT" : "POST";
 
             const res = await fetch(url, {
@@ -60,7 +60,7 @@ export default function ProjectForm({ client }: { client?: ClientData }) {
                 throw new Error(data.error || "Er is een fout opgetreden");
             }
 
-            router.push("/dashboard/projects");
+            router.push("/projects");
             router.refresh();
         } catch (err) {
             setError(err instanceof Error ? err.message : "Er is een fout opgetreden");
@@ -72,7 +72,7 @@ export default function ProjectForm({ client }: { client?: ClientData }) {
     return (
         <div className="animate-fade-in" style={{ maxWidth: "640px" }}>
             <Link
-                href="/dashboard/projects"
+                href="/projects"
                 style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -87,7 +87,7 @@ export default function ProjectForm({ client }: { client?: ClientData }) {
             </Link>
 
             <h1 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "32px" }}>
-                {isEdit ? `${client!.name} bewerken` : "Nieuwe Project"}
+                {isEdit ? `${project!.name} bewerken` : "Nieuwe Project"}
             </h1>
 
             <form onSubmit={handleSubmit}>

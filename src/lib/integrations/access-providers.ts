@@ -411,7 +411,11 @@ export class GoogleAdsAccessProvider implements AccessProvider {
             }
         } catch (err: any) {
             console.error("[GoogleAds] listUsers failed:", err);
-            throw new Error(err?.errors?.[0]?.message || err?.message || "Fout bij ophalen van gebruikers");
+            const rawMsg = err?.errors?.[0]?.message || err?.message || "Fout bij ophalen van gebruikers";
+            if (rawMsg.toLowerCase().includes("invalid_grant") || rawMsg.includes("TOKEN_EXPIRED")) {
+                throw new Error(`TOKEN_EXPIRED: ${rawMsg}`);
+            }
+            throw new Error(rawMsg);
         }
 
         return { users };
@@ -420,6 +424,22 @@ export class GoogleAdsAccessProvider implements AccessProvider {
 
 // ─── Google Analytics Access Provider ────────────────────────────────
 // Uses the GA4 Admin API to list users with property access.
+
+const TOKEN_ERROR_PATTERNS = ["invalid_grant", "invalid_client", "unauthorized_client", "invalid_scope"];
+
+function isTokenError(error: string | undefined): boolean {
+    if (!error) return false;
+    const lower = error.toLowerCase();
+    return TOKEN_ERROR_PATTERNS.some(p => lower.includes(p));
+}
+
+export function formatTokenError(sourceName: string, rawError: string): string {
+    const lower = rawError.toLowerCase();
+    if (isTokenError(lower) || lower.includes("bad request")) {
+        return `${sourceName}: Token verlopen — koppeling opnieuw verbinden`;
+    }
+    return `${sourceName}: ${rawError}`;
+}
 
 async function refreshGoogleOAuthToken(refreshToken: string): Promise<string> {
     const res = await fetch("https://oauth2.googleapis.com/token", {
@@ -433,7 +453,13 @@ async function refreshGoogleOAuthToken(refreshToken: string): Promise<string> {
         }),
     });
     const data = await res.json();
-    if (data.error) throw new Error(data.error_description || data.error);
+    if (data.error) {
+        const rawMsg = data.error_description || data.error;
+        if (isTokenError(data.error)) {
+            throw new Error(`TOKEN_EXPIRED: ${rawMsg}`);
+        }
+        throw new Error(rawMsg);
+    }
     return data.access_token;
 }
 
@@ -935,6 +961,295 @@ class GoogleMerchantAccessProvider implements AccessProvider {
     }
 }
 
+// ─── Meta Access Provider ────────────────────────────────────────────
+
+class MetaAccessProvider implements AccessProvider {
+    async inviteUser(params: {
+        email: string;
+        role: string;
+        token: string;
+        externalId: string;
+        config?: Record<string, any>;
+    }) {
+        const { email, role, token, externalId } = params;
+        const metaRole = role === "ADMIN" ? "ADMIN" : "EMPLOYEE";
+
+        const res = await fetch(
+            `https://graph.facebook.com/v19.0/${externalId}/business_users`,
+            {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ email, role: metaRole }),
+            }
+        );
+
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error?.message || "Kon gebruiker niet uitnodigen bij Meta Business");
+        }
+
+        return {
+            success: true,
+            message: `Uitnodiging verstuurd naar ${email} voor Meta Business`,
+        };
+    }
+
+    async removeUser(params: {
+        email: string;
+        token: string;
+        externalId: string;
+        config?: Record<string, any>;
+    }) {
+        // Meta doesn't have a simple "remove by email" — need to find the user first
+        const { email, token, externalId } = params;
+
+        // Find user ID by listing business users
+        const listRes = await fetch(
+            `https://graph.facebook.com/v19.0/${externalId}/business_users?fields=id,name,email,role&limit=200`,
+            { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        if (!listRes.ok) throw new Error("Kon gebruikerslijst niet ophalen");
+        const listData = await listRes.json();
+        const user = (listData.data || []).find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
+
+        if (!user) {
+            return { success: true, message: `Gebruiker ${email} had al geen toegang` };
+        }
+
+        const delRes = await fetch(
+            `https://graph.facebook.com/v19.0/${user.id}`,
+            {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${token}` },
+            }
+        );
+
+        if (!delRes.ok) {
+            const err = await delRes.json();
+            throw new Error(err.error?.message || "Kon gebruiker niet verwijderen");
+        }
+
+        return {
+            success: true,
+            message: `Toegang van ${email} tot Meta Business is verwijderd`,
+        };
+    }
+
+    async listUsers(params: {
+        token: string;
+        externalId: string;
+        config?: Record<string, any>;
+    }) {
+        const { token, externalId } = params;
+        const users: Array<{ email: string; name?: string; role: string; status: string; kind: string }> = [];
+        const seenEmails = new Set<string>();
+        const seenNames = new Set<string>(); // Track names too for cross-dedup
+
+        // Helper to paginate a Graph API edge
+        const fetchEdge = async (bizId: string, edge: string, fields: string, status: string, kind: string) => {
+            let url: string | null = `https://graph.facebook.com/v19.0/${bizId}/${edge}?fields=${fields}&limit=200`;
+            while (url) {
+                const res: Response = await fetch(url, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    console.log(`[Meta] ${edge} for ${bizId} failed:`, errData.error?.message || res.status);
+                    break;
+                }
+                const data: any = await res.json();
+                const items = data.data || [];
+                console.log(`[Meta] ${edge} for ${bizId}: ${items.length} items`);
+                for (const u of items) {
+                    const email = u.email || u.owner?.email || "";
+                    if (!email || seenEmails.has(email.toLowerCase())) continue;
+                    seenEmails.add(email.toLowerCase());
+                    const uName = u.name || u.owner?.name || undefined;
+                    if (uName) seenNames.add(uName.toLowerCase());
+                    users.push({
+                        email,
+                        name: uName,
+                        role: u.role || u.access_type || "EMPLOYEE",
+                        status,
+                        kind,
+                    });
+                }
+                url = data.paging?.next || null;
+            }
+        };
+
+        // 1. Active business users (people)
+        await fetchEdge(externalId, "business_users", "id,name,email,role", "ACTIVE", "USER");
+
+        // 2. Pending users (invited but not yet accepted)
+        await fetchEdge(externalId, "pending_users", "id,email,role,owner", "PENDING", "USER");
+
+        // 3. System users (API integrations)
+        await fetchEdge(externalId, "system_users", "id,name,role", "ACTIVE", "SYSTEM");
+
+        // 4. Users from owned pages (page roles)
+        try {
+            const pagesRes: Response = await fetch(
+                `https://graph.facebook.com/v19.0/${externalId}/owned_pages?fields=id,name&limit=50`,
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            if (pagesRes.ok) {
+                const pagesData: any = await pagesRes.json();
+                const pages = pagesData.data || [];
+                console.log(`[Meta] Found ${pages.length} owned pages`);
+                for (const page of pages) {
+                    // Get users assigned to this page via assigned_users (returns business users with page tasks)
+                    const assignedRes: Response = await fetch(
+                        `https://graph.facebook.com/v19.0/${page.id}/assigned_users?business=${externalId}&fields=id,name,email,tasks`,
+                        { headers: { Authorization: `Bearer ${token}` } }
+                    );
+                    if (assignedRes.ok) {
+                        const assignedData: any = await assignedRes.json();
+                        const assigned = assignedData.data || [];
+                        console.log(`[Meta] Page ${page.name} (${page.id}): ${assigned.length} assigned users`);
+                        for (const u of assigned) {
+                            let email = u.email || "";
+                            const name = u.name || "";
+
+                            // If no email returned, try to fetch it from the user's profile
+                            if (!email && u.id) {
+                                try {
+                                    const profileRes: Response = await fetch(
+                                        `https://graph.facebook.com/v19.0/${u.id}?fields=email,name`,
+                                        { headers: { Authorization: `Bearer ${token}` } }
+                                    );
+                                    if (profileRes.ok) {
+                                        const profile: any = await profileRes.json();
+                                        email = profile.email || "";
+                                        if (email) console.log(`[Meta] Resolved email for ${name}: ${email}`);
+                                    }
+                                } catch { /* skip */ }
+                            }
+
+                            const identifier = email || name;
+                            if (!identifier) continue;
+                            // Dedup on both email and name
+                            if (seenEmails.has(identifier.toLowerCase())) continue;
+                            if (name && seenNames.has(name.toLowerCase())) continue;
+                            seenEmails.add(identifier.toLowerCase());
+                            if (name) seenNames.add(name.toLowerCase());
+                            const tasks = u.tasks || [];
+                            users.push({
+                                email: identifier,
+                                name: name || undefined,
+                                role: tasks.includes('MANAGE') ? 'ADMIN' : tasks.join(', ') || 'PAGE_USER',
+                                status: "ACTIVE",
+                                kind: "USER",
+                            });
+                        }
+                    } else {
+                        const errData = await assignedRes.json().catch(() => ({}));
+                        console.log(`[Meta] Page ${page.name} assigned_users failed:`, errData.error?.message || assignedRes.status);
+                    }
+                }
+            }
+        } catch (err: any) {
+            console.log(`[Meta] owned_pages check failed:`, err.message);
+        }
+
+        // 5. Users from owned ad accounts (fetch assigned_users separately per account)
+        try {
+            const adRes: Response = await fetch(
+                `https://graph.facebook.com/v19.0/${externalId}/owned_ad_accounts?fields=id,name&limit=50`,
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            if (adRes.ok) {
+                const adData: any = await adRes.json();
+                const adAccounts = adData.data || [];
+                console.log(`[Meta] Found ${adAccounts.length} owned ad accounts`);
+                for (const acc of adAccounts) {
+                    // Fetch assigned users for this ad account
+                    const assignedRes: Response = await fetch(
+                        `https://graph.facebook.com/v19.0/${acc.id}/assigned_users?business=${externalId}&fields=id,name,email,tasks`,
+                        { headers: { Authorization: `Bearer ${token}` } }
+                    );
+                    if (assignedRes.ok) {
+                        const assignedData: any = await assignedRes.json();
+                        const assigned = assignedData.data || [];
+                        console.log(`[Meta] Ad account ${acc.name || acc.id}: ${assigned.length} assigned users`);
+                        for (const u of assigned) {
+                            const email = u.email || u.name || "";
+                            if (!email || seenEmails.has(email.toLowerCase())) continue;
+                            seenEmails.add(email.toLowerCase());
+                            users.push({
+                                email,
+                                name: u.name || undefined,
+                                role: u.role || "AD_ACCOUNT_USER",
+                                status: "ACTIVE",
+                                kind: "USER",
+                            });
+                        }
+                    } else {
+                        const errData = await assignedRes.json().catch(() => ({}));
+                        console.log(`[Meta] Ad account ${acc.name || acc.id} assigned_users failed:`, errData.error?.message || assignedRes.status);
+                    }
+                }
+            }
+        } catch (err: any) {
+            console.log(`[Meta] owned_ad_accounts check failed:`, err.message);
+        }
+
+        // 6. Partner agencies
+        try {
+            const agencyRes: Response = await fetch(
+                `https://graph.facebook.com/v19.0/${externalId}/agencies?fields=id,name&limit=50`,
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            if (agencyRes.ok) {
+                const agencyData: any = await agencyRes.json();
+                const agencies = agencyData.data || [];
+                console.log(`[Meta] Found ${agencies.length} partner agencies`);
+                for (const agency of agencies) {
+                    const agencyKey = agency.name || agency.id;
+                    if (seenEmails.has(agencyKey.toLowerCase())) continue;
+                    users.push({
+                        email: agencyKey,
+                        name: agency.name,
+                        role: "PARTNER",
+                        status: "ACTIVE",
+                        kind: "MANAGER",
+                    });
+                    seenEmails.add(agencyKey.toLowerCase());
+                    console.log(`[Meta] Partner agency: ${agency.name} (${agency.id})`);
+                }
+            }
+        } catch (err: any) {
+            console.log(`[Meta] agencies check failed:`, err.message);
+        }
+
+        // 7. Owned businesses (sub-businesses)
+        try {
+            const ownedRes: Response = await fetch(
+                `https://graph.facebook.com/v19.0/${externalId}/owned_businesses?fields=id,name&limit=50`,
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            if (ownedRes.ok) {
+                const ownedData: any = await ownedRes.json();
+                const owned = ownedData.data || [];
+                console.log(`[Meta] Found ${owned.length} owned businesses`);
+                for (const child of owned) {
+                    await fetchEdge(child.id, "business_users", "id,name,email,role", "ACTIVE", "USER");
+                }
+            }
+        } catch (err: any) {
+            console.log(`[Meta] owned_businesses check failed:`, err.message);
+        }
+
+        console.log(`[Meta] Found ${users.length} total users (${seenEmails.size} unique) for business ${externalId}`);
+
+        return { users };
+    }
+}
+
 // ─── Factory ─────────────────────────────────────────────────────────
 
 const providers: Record<string, AccessProvider> = {
@@ -943,6 +1258,7 @@ const providers: Record<string, AccessProvider> = {
     GOOGLE_BUSINESS: new GoogleBusinessAccessProvider(),
     GOOGLE_TAG_MANAGER: new GoogleTagManagerAccessProvider(),
     GOOGLE_MERCHANT: new GoogleMerchantAccessProvider(),
+    META: new MetaAccessProvider(),
 };
 
 /**

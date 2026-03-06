@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
-import { sendClientInviteEmail } from "@/lib/services/email-service";
+import { sendProjectInviteEmail } from "@/lib/services/email-service";
 export async function POST(
     req: Request,
     context: { params: Promise<{ id: string, inviteId: string }> }
@@ -15,12 +15,12 @@ export async function POST(
         const { id, inviteId } = await context.params;
 
         // Verify the invite exists and belongs to the client
-        const invite = await (prisma as any).clientInvite.findUnique({
+        const invite = await (prisma as any).projectInvite.findUnique({
             where: { id: inviteId },
-            include: { client: true }
+            include: { project: true }
         });
 
-        if (!invite || invite.clientId !== id) {
+        if (!invite || invite.projectId !== id) {
             return NextResponse.json({ error: "Invite not found" }, { status: 404 });
         }
 
@@ -32,14 +32,14 @@ export async function POST(
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 7);
 
-        await (prisma as any).clientInvite.update({
+        await (prisma as any).projectInvite.update({
             where: { id: inviteId },
             data: { expiresAt }
         });
 
         // Resend the email
         const token = invite.token;
-        const emailResult = await sendClientInviteEmail(invite.email, invite.client.name, token);
+        const emailResult = await sendProjectInviteEmail(invite.email, invite.project.name, token);
 
         if (!emailResult.success) {
             console.error("[POST /api/projects/[id]/invites/[inviteId]/resend] Failed to send email via Resend.");

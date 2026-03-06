@@ -36,10 +36,13 @@ for (const [slug, meta] of Object.entries(DIMENSION_METADATA)) {
  * List all dimension definitions grouped by category.
  * Auto-discovers from normalized data when no definitions exist.
  */
-export async function GET() {
+export async function GET(request: Request) {
     try {
         const [, authError] = await requireAuth();
         if (authError) return authError;
+
+        const { searchParams } = new URL(request.url);
+        const projectId = searchParams.get('projectId');
 
         // 1) Load defined dimensions from database
         const definedDimensions = await prisma.dimensionDefinition.findMany({
@@ -73,6 +76,7 @@ export async function GET() {
 
         // Get all data sources to find connected connectors
         const dataSources = await prisma.dataSource.findMany({
+            where: projectId ? { projectId, active: true } : undefined,
             select: { connector: { select: { slug: true, name: true, id: true } } },
         });
         const activeConnectorSlugs = new Set(dataSources.map(ds => ds.connector?.slug).filter(Boolean));

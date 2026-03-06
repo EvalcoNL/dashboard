@@ -25,7 +25,7 @@ import {
 } from "@/lib/services/kpi-engine";
 import SummaryCard from "@/components/ui/SummaryCard";
 
-interface ClientWithData {
+interface ProjectWithData {
     id: string;
     name: string;
     industryType: string;
@@ -59,14 +59,14 @@ interface ClientWithData {
 }
 
 export default function DashboardHome({
-    clients,
+    projects,
     userName,
 }: {
-    clients: ClientWithData[];
+    projects: ProjectWithData[];
     userName: string;
 }) {
     // Process KPIs for each client
-    const clientKPIs = clients.map((client) => {
+    const clientKPIs = projects.map((client) => {
         const now = new Date();
         const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
         const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
@@ -160,7 +160,7 @@ export default function DashboardHome({
                 <SummaryCard
                     icon={<Users size={20} />}
                     label="Projecten"
-                    value={clients.length.toString()}
+                    value={projects.length.toString()}
                     color="var(--color-brand)"
                 />
                 <SummaryCard
@@ -223,7 +223,7 @@ export default function DashboardHome({
                     {sorted.map(({ client, kpi, advisorStatus }, index) => (
                         <Link
                             key={client.id}
-                            href={`/dashboard/projects/${client.id}`}
+                            href={`/projects/${client.id}`}
                             style={{
                                 textDecoration: "none",
                                 color: "inherit",

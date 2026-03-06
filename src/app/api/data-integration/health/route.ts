@@ -7,7 +7,7 @@ import { requireAuth } from '@/lib/api-guard';
 import { connectionHealthMonitor } from '@/lib/data-integration/connection-health';
 
 /**
- * GET /api/data-integration/health?clientId=xxx
+ * GET /api/data-integration/health?projectId=xxx
  * 
  * Get health status for all connections of a client.
  * Optional: connectionId for single connection detail.
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
         if (authError) return authError;
 
         const { searchParams } = new URL(request.url);
-        const clientId = searchParams.get('clientId');
+        const projectId = searchParams.get('projectId');
         const connectionId = searchParams.get('connectionId');
 
         if (connectionId) {
@@ -31,12 +31,12 @@ export async function GET(request: Request) {
             return NextResponse.json({ success: true, health, history });
         }
 
-        if (clientId) {
-            const summary = await connectionHealthMonitor.getClientHealth(clientId);
+        if (projectId) {
+            const summary = await connectionHealthMonitor.getClientHealth(projectId);
             return NextResponse.json({ success: true, summary });
         }
 
-        return NextResponse.json({ error: 'clientId or connectionId required' }, { status: 400 });
+        return NextResponse.json({ error: 'projectId or connectionId required' }, { status: 400 });
     } catch (error) {
         return NextResponse.json(
             { success: false, error: error instanceof Error ? error.message : 'Failed' },

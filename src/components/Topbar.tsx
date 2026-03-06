@@ -19,7 +19,7 @@ import {
 import { useTheme } from "./ThemeProvider";
 import { useLanguage } from "@/lib/i18n/LanguageContext";
 
-interface Client {
+interface Project {
     id: string;
     name: string;
     dataSources?: { externalId: string }[];
@@ -29,7 +29,7 @@ export default function Topbar() {
     const { data: session } = useSession();
     const { theme, toggleTheme } = useTheme();
     const { language, setLanguage, t } = useLanguage();
-    const [clients, setClients] = useState<Client[]>([]);
+    const [clients, setClients] = useState<Project[]>([]);
     const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
     const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
@@ -41,7 +41,7 @@ export default function Topbar() {
     const accountMenuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        fetch("/api/clients")
+        fetch("/api/projects")
             .then((res) => res.json())
             .then((data) => setClients(data))
             .catch((err) => console.error("Failed to fetch clients:", err));
@@ -49,7 +49,7 @@ export default function Topbar() {
 
     // Derived client state from URL
     const selectedClient = React.useMemo(() => {
-        const match = pathname.match(/\/dashboard\/clients\/([^\/]+)/);
+        const match = pathname.match(/\/clients\/([^\/]+)/);
         if (match && clients.length > 0) {
             return clients.find(c => c.id === match[1]) || null;
         }
@@ -82,13 +82,13 @@ export default function Topbar() {
         };
     }, []);
 
-    const handleClientChange = (client: Client | null) => {
+    const handleClientChange = (client: Project | null) => {
         setIsAccountMenuOpen(false);
         setSearchQuery("");
         if (!client) {
-            router.push("/dashboard/projects");
+            router.push("/projects");
         } else {
-            router.push(`/dashboard/projects/${client.id}`);
+            router.push(`/projects/${client.id}`);
         }
     };
 
@@ -120,7 +120,7 @@ export default function Topbar() {
             {/* Left section: Logo and Client Selector */}
             <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
                 <Link
-                    href="/dashboard"
+                    href="/"
                     style={{
                         display: "flex",
                         alignItems: "center",
@@ -392,7 +392,7 @@ export default function Topbar() {
                             </div>
 
                             <Link
-                                href="/dashboard/settings"
+                                href="/settings"
                                 onClick={() => setIsUserMenuOpen(false)}
                                 style={{
                                     display: "flex",

@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { decodeOAuthState } from "@/lib/oauth-state";
 import { encrypt } from "@/lib/encryption";
 
 export async function GET(req: NextRequest) {
@@ -10,15 +11,16 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const code = searchParams.get("code");
-    const clientId = searchParams.get("state");
+    const rawState = searchParams.get("state") || "";
+    const projectId = decodeOAuthState(rawState);
     const error = searchParams.get("error");
 
     const origin = process.env.NEXTAUTH_URL || new URL(req.url).origin;
 
-    if (error || !code || !clientId) {
-        const redirectPath = clientId
-            ? `/dashboard/projects/${clientId}/data/sources?error=${error === "access_denied" ? "Koppeling geannuleerd" : "PinterestLinkFailed"}`
-            : "/dashboard";
+    if (error || !code || !projectId) {
+        const redirectPath = projectId
+            ? `/projects/${projectId}/data/sources?error=${error === "access_denied" ? "Koppeling geannuleerd" : "PinterestLinkFailed"}`
+            : "/";
         return NextResponse.redirect(`${origin}${redirectPath}`);
     }
 
@@ -51,16 +53,16 @@ export async function GET(req: NextRequest) {
 
         await prisma.dataSource.create({
             data: {
-                clientId, type: "PINTEREST", category: "APP",
+                projectId, type: "PINTEREST", category: "APP",
                 externalId: userData.username || "default",
                 name: `Pinterest - ${userData.username || "Account"}`,
                 token: encrypt(accessToken), active: true,
             },
         });
 
-        return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/data/sources`);
+        return NextResponse.redirect(`${origin}/projects/${projectId}/data/sources`);
     } catch (error: any) {
         console.error("Pinterest OAuth Error:", error);
-        return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/data/sources?error=PinterestLinkFailed`);
+        return NextResponse.redirect(`${origin}/projects/${projectId}/data/sources?error=PinterestLinkFailed`);
     }
 }

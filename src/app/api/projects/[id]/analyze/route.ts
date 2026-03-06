@@ -16,11 +16,11 @@ export async function POST(
     }
 
     try {
-        const { id: clientId } = await params;
+        const { id: projectId } = await params;
 
         // 1. Fetch data
-        const client = await prisma.client.findUnique({
-            where: { id: clientId },
+        const client = await prisma.project.findUnique({
+            where: { id: projectId },
             include: {
                 analystReports: {
                     orderBy: { createdAt: "desc" },
@@ -36,7 +36,7 @@ export async function POST(
         // 2. Prepare data for AI using ClickHouse metrics
         const now = new Date();
         const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        const currentMetrics = await queryNormalizedMetrics(clientId, sevenDaysAgo);
+        const currentMetrics = await queryNormalizedMetrics(projectId, sevenDaysAgo);
         const currentPeriod = aggregateCampaigns(currentMetrics as any);
 
         const aiInput = {
@@ -49,7 +49,7 @@ export async function POST(
         };
 
         // 3. Generate Report
-        const report = await aiService.generateAnalystReport(clientId, aiInput);
+        const report = await aiService.generateAnalystReport(projectId, aiInput);
 
         // 4. Calculate trend
         let trendDirection = "STABLE";
@@ -62,7 +62,7 @@ export async function POST(
         // 5. Save to DB
         const savedReport = await prisma.analystReport.create({
             data: {
-                clientId,
+                projectId,
                 periodStart: sevenDaysAgo,
                 periodEnd: now,
                 healthScore: report.healthScore,

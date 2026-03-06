@@ -27,22 +27,21 @@ export default function SourceCard({ href, onClick, icon, title, description, is
                 flexDirection: "column",
                 alignItems: "center",
                 gap: "20px",
-                opacity: 0.5,
-                cursor: "not-allowed"
+                opacity: 0.55,
+                cursor: "not-allowed",
+                position: "relative",
             }}>
                 <div style={{
                     width: "80px",
                     height: "80px",
                     borderRadius: "20px",
-                    background: "var(--color-surface)",
+                    background: "rgba(99, 102, 241, 0.06)",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    color: "var(--color-text-muted)",
-                    fontSize: "0.75rem",
-                    textAlign: "center"
+                    filter: "grayscale(0.6)",
                 }}>
-                    Coming Soon
+                    {icon}
                 </div>
                 <div style={{ textAlign: "center" }}>
                     <div style={{ fontWeight: 700, fontSize: "1.25rem", color: "var(--color-text-primary)", marginBottom: "4px" }}>
@@ -51,6 +50,18 @@ export default function SourceCard({ href, onClick, icon, title, description, is
                     <div style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
                         {description}
                     </div>
+                </div>
+                <div style={{
+                    marginTop: "4px",
+                    padding: "4px 14px",
+                    borderRadius: "20px",
+                    background: "rgba(245, 158, 11, 0.12)",
+                    color: "#f59e0b",
+                    fontSize: "0.8rem",
+                    fontWeight: 600,
+                    letterSpacing: "0.03em",
+                }}>
+                    Coming Soon
                 </div>
             </div>
         );

@@ -50,26 +50,26 @@ export default function Sidebar() {
     const isSuperAdmin = session?.user?.email === "admin@evalco.nl";
 
     // Extract project ID from URL
-    const clientMatch = pathname.match(/\/dashboard\/projects\/([^\/]+)/);
-    const clientId = clientMatch ? clientMatch[1] : null;
+    const clientMatch = pathname.match(/\/projects\/([^\/]+)/);
+    const projectId = clientMatch ? clientMatch[1] : null;
 
     const isActive = (href: string, exactOnly?: boolean) => {
-        if (href === "/dashboard") return pathname === "/dashboard";
-        // Client home (e.g. /dashboard/projects/123) should only match exactly
-        if (clientId && href === `/dashboard/projects/${clientId}`) return pathname === href;
+        if (href === "/") return pathname === "/";
+        // Client home (e.g. /projects/123) should only match exactly
+        if (projectId && href === `/projects/${projectId}`) return pathname === href;
         if (exactOnly) return pathname === href;
         return pathname === href || pathname.startsWith(href + "/");
     };
 
     const adminNavItems: NavItem[] = [
-        { href: "/dashboard", label: t("navigation", "home"), icon: LayoutDashboard },
-        { href: "/dashboard/projects", label: t("navigation", "accounts"), icon: Users },
-        { href: "/dashboard/incidents", label: t("navigation", "incidents"), icon: AlertTriangle },
+        { href: "/", label: t("navigation", "home"), icon: LayoutDashboard },
+        { href: "/projects", label: t("navigation", "accounts"), icon: Users },
+        { href: "/incidents", label: t("navigation", "incidents"), icon: AlertTriangle },
     ];
 
     if (isSuperAdmin) {
         adminNavItems.push({
-            href: "/dashboard/admin/users",
+            href: "/admin/users",
             label: "Gebruikersoverzicht",
             icon: ShieldCheck
         });
@@ -78,8 +78,8 @@ export default function Sidebar() {
     // Starred dashboards
     const [starredDashboards, setStarredDashboards] = useState<{ id: string; name: string }[]>([]);
     useEffect(() => {
-        if (!clientId) return;
-        fetch(`/api/dashboards?clientId=${clientId}`)
+        if (!projectId) return;
+        fetch(`/api/dashboards?projectId=${projectId}`)
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
@@ -91,48 +91,48 @@ export default function Sidebar() {
                 }
             })
             .catch(() => { });
-    }, [clientId, pathname]); // Refetch on route change to catch star toggles
+    }, [projectId, pathname]); // Refetch on route change to catch star toggles
 
     const clientNavItems: NavItem[] = [
-        { href: `/dashboard/projects/${clientId}`, label: "Overzicht", icon: LayoutDashboard },
+        { href: `/projects/${projectId}`, label: "Overzicht", icon: LayoutDashboard },
         {
             label: "Reports",
             icon: TrendingUp,
             submenu: [
-                { href: `/dashboard/projects/${clientId}/reports/dashboards`, label: "Dashboards" },
+                { href: `/projects/${projectId}/reports/dashboards`, label: "Dashboards" },
                 ...starredDashboards.map(d => ({
-                    href: `/dashboard/projects/${clientId}/reports/dashboards/${d.id}`,
+                    href: `/projects/${projectId}/reports/dashboards/${d.id}`,
                     label: d.name,
                 })),
-                { sectionTitle: "AI", href: `/dashboard/projects/${clientId}/reports/ai`, label: "AI Reports" },
+                { sectionTitle: "AI", href: `/projects/${projectId}/reports/ai`, label: "AI Reports" },
             ]
         },
         {
             label: t("navigation", "monitoring"),
             icon: Activity,
             submenu: [
-                { href: `/dashboard/projects/${clientId}/monitoring/web`, label: t("navigation", "webMonitoring") },
-                { href: `/dashboard/projects/${clientId}/monitoring/incidents`, label: t("navigation", "incidents") },
-                { href: `/dashboard/projects/${clientId}/monitoring/tracking`, label: t("navigation", "dataTrackingMonitoring"), sectionTitle: t("navigation", "dataTrackingMonitoringTitle") }
+                { href: `/projects/${projectId}/monitoring/web`, label: t("navigation", "webMonitoring") },
+                { href: `/projects/${projectId}/monitoring/incidents`, label: t("navigation", "incidents") },
+                { href: `/projects/${projectId}/monitoring/tracking`, label: t("navigation", "dataTrackingMonitoring"), sectionTitle: t("navigation", "dataTrackingMonitoringTitle") }
             ]
         },
         {
             label: t("navigation", "data"),
             icon: Database,
             submenu: [
-                { sectionTitle: "Connect", href: `/dashboard/projects/${clientId}/data/sources`, label: t("navigation", "dataSources") },
-                { href: `/dashboard/projects/${clientId}/data/access`, label: t("navigation", "access") },
-                { sectionTitle: "Analyze", href: `/dashboard/projects/${clientId}/data/explorer`, label: "Data Explorer" },
-                { sectionTitle: "Organize", href: `/dashboard/projects/${clientId}/data/dimensions`, label: "Dimensies" },
-                { href: `/dashboard/projects/${clientId}/data/metrics`, label: "Metrics" },
-                { href: `/dashboard/projects/${clientId}/data/currencies`, label: "Currencies" },
-                { sectionTitle: "Beheer", href: `/dashboard/projects/${clientId}/data/sync`, label: "Sync & Planning" },
-                { href: `/dashboard/projects/${clientId}/data/health`, label: "Data Health & Kwaliteit" },
+                { sectionTitle: "Connect", href: `/projects/${projectId}/data/sources`, label: t("navigation", "dataSources") },
+                { href: `/projects/${projectId}/data/access`, label: t("navigation", "access") },
+                { sectionTitle: "Analyze", href: `/projects/${projectId}/data/explorer`, label: "Data Explorer" },
+                { sectionTitle: "Organize", href: `/projects/${projectId}/data/dimensions`, label: "Dimensies" },
+                { href: `/projects/${projectId}/data/metrics`, label: "Metrics" },
+                { href: `/projects/${projectId}/data/currencies`, label: "Currencies" },
+                { sectionTitle: "Beheer", href: `/projects/${projectId}/data/sync`, label: "Sync & Planning" },
+                { href: `/projects/${projectId}/data/health`, label: "Data Health & Kwaliteit" },
             ]
         },
     ];
 
-    const currentNavItems: NavItem[] = clientId ? clientNavItems : adminNavItems;
+    const currentNavItems: NavItem[] = projectId ? clientNavItems : adminNavItems;
 
     // Derive the currently open submenu items from the fresh nav items list
     const openSubmenuItem = currentNavItems.find(item => item.label === openMenuLabel);
@@ -230,7 +230,7 @@ export default function Sidebar() {
                     </nav>
                     <div style={{ marginTop: "auto", paddingBottom: "8px", display: "flex", justifyContent: "center" }}>
                         <Link
-                            href={clientId ? `/dashboard/projects/${clientId}/settings` : `/dashboard/settings`}
+                            href={projectId ? `/projects/${projectId}/settings` : `/settings`}
                             title={t("navigation", "settings")}
                             onClick={() => setOpenMenuLabel(null)}
                             style={{
@@ -240,14 +240,14 @@ export default function Sidebar() {
                                 width: "42px",
                                 height: "42px",
                                 borderRadius: "10px",
-                                color: isActive(clientId ? `/dashboard/projects/${clientId}/settings` : `/dashboard/settings`) ? "var(--color-text-primary)" : "var(--color-text-secondary)",
-                                background: isActive(clientId ? `/dashboard/projects/${clientId}/settings` : `/dashboard/settings`) ? "rgba(99, 102, 241, 0.15)" : "transparent",
+                                color: isActive(projectId ? `/projects/${projectId}/settings` : `/settings`) ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+                                background: isActive(projectId ? `/projects/${projectId}/settings` : `/settings`) ? "rgba(99, 102, 241, 0.15)" : "transparent",
                                 transition: "all 0.2s ease",
                                 position: "relative"
                             }}
                             className="nav-link"
                         >
-                            {isActive(clientId ? `/dashboard/projects/${clientId}/settings` : `/dashboard/settings`) && <div className="active-indicator" />}
+                            {isActive(projectId ? `/projects/${projectId}/settings` : `/settings`) && <div className="active-indicator" />}
                             <Settings size={20} />
                         </Link>
                     </div>

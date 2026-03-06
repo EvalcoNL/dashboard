@@ -18,8 +18,8 @@ model User {
   backupCodes         Json?           @map("backup_codes")
   createdAt           DateTime        @default(now()) @map("created_at")
   advisorActions      AdvisorReport[] @relation("reviewedBy")
-  clients             Client[]        @relation("ClientAccess")
-  notificationClients Client[]        @relation("NotificationUsers")
+  projects            Project[]       @relation("ProjectAccess")
+  notificationProjects Project[]      @relation("NotificationUsers")
   notificationPreferences UserNotificationPreference[]
 
   @@map("users")
@@ -49,7 +49,7 @@ model EmailVerificationToken {
   @@map("email_verification_tokens")
 }
 
-model Client {
+model Project {
   id                   String                 @id @default(cuid())
   name                 String
   industryType         String                 @map("industry_type")
@@ -63,39 +63,40 @@ model Client {
   slackWebhookUrl      String?                @map("slack_webhook_url")
   notificationMode     String                 @default("global") @map("notification_mode") // global, custom, disabled
   analystReports       AnalystReport[]
-  clientInvites        ClientInvite[]
+  projectInvites       ProjectInvite[]
   dataSources          DataSource[]
   incidents            Incident[]
   merchantCenterHealth MerchantCenterHealth[]
   notifications        Notification[]
-  users                User[]                 @relation("ClientAccess")
+  users                User[]                 @relation("ProjectAccess")
   notificationUsers    User[]                 @relation("NotificationUsers")
   notificationPreferences UserNotificationPreference[]
   datasets             Dataset[]
   dashboards           Dashboard[]
+  personAliases        PersonAlias[]
 
-  @@map("clients")
+  @@map("projects")
 }
 
-model ClientInvite {
+model ProjectInvite {
   id        String   @id @default(cuid())
-  clientId  String   @map("client_id")
+  projectId String   @map("project_id")
   email     String
   token     String   @unique
   status    String   @default("PENDING")
   createdAt DateTime @default(now()) @map("created_at")
   expiresAt DateTime @map("expires_at")
-  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  @@index([clientId])
+  @@index([projectId])
   @@index([token])
   @@index([email])
-  @@map("client_invites")
+  @@map("project_invites")
 }
 
 model DataSource {
   id             String               @id @default(cuid())
-  clientId       String               @map("client_id")
+  projectId      String               @map("project_id")
   type           String
   name           String?
   category       String               @default("DATA_SOURCE")
@@ -111,8 +112,9 @@ model DataSource {
   lookbackDays   Int                  @default(30) @map("lookback_days")
   syncStatus     String               @default("ACTIVE") @map("sync_status") // ACTIVE, PAUSED, ERROR
   syncError      String?              @map("sync_error")
+  piiEnabled     Boolean              @default(false) @map("pii_enabled")
   // Relations
-  client         Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  project        Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
   connector      ConnectorDefinition? @relation(fields: [connectorId], references: [id])
   incidents      Incident[]
   linkedAccounts LinkedAccount[]
@@ -121,10 +123,14 @@ model DataSource {
   // normalizedData now stored in ClickHouse metrics_data table
   syncJobs       SyncJob[]
   syncAccounts   DataSourceAccount[]
+  merchantCenterHealth MerchantCenterHealth[]
 
-  @@index([clientId, type])
+  @@index([projectId, type])
+  @@index([projectId, syncStatus])
   @@index([connectorId])
   @@index([syncStatus])
+  @@index([type])
+  @@index([lastSyncedAt])
   @@map("data_sources")
 }
 
@@ -144,23 +150,27 @@ model UptimeCheck {
 // NOTE: CampaignMetric data is now stored in ClickHouse (metrics_data table)
 
 model MerchantCenterHealth {
-  id               String   @id @default(cuid())
-  clientId         String   @map("client_id")
-  date             DateTime
-  totalItems       Int      @map("total_items")
-  disapprovedItems Int      @map("disapproved_items")
-  disapprovedPct   Float    @map("disapproved_pct")
-  topReasons       Json     @map("top_reasons")
-  accountIssues    Json     @map("account_issues")
-  client           Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  id                  String      @id @default(cuid())
+  projectId           String      @map("project_id")
+  dataSourceId        String?     @map("data_source_id")
+  date                DateTime
+  totalItems          Int         @map("total_items")
+  disapprovedItems    Int         @map("disapproved_items")
+  disapprovedPct      Float       @map("disapproved_pct")
+  topReasons          Json        @map("top_reasons")
+  accountIssues       Json        @map("account_issues")
+  disapprovedProducts Json?       @map("disapproved_products")
+  project             Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  dataSource          DataSource? @relation(fields: [dataSourceId], references: [id], onDelete: SetNull)
 
-  @@index([clientId, date])
+  @@index([projectId, date])
+  @@index([dataSourceId])
   @@map("merchant_center_health")
 }
 
 model AnalystReport {
   id                   String         @id @default(cuid())
-  clientId             String         @map("client_id")
+  projectId            String         @map("project_id")
   periodStart          DateTime       @map("period_start")
   periodEnd            DateTime       @map("period_end")
   healthScore          Int            @map("health_score")
@@ -171,10 +181,10 @@ model AnalystReport {
   inputJson            Json           @map("input_json")
   createdAt            DateTime       @default(now()) @map("created_at")
   advisorReport        AdvisorReport?
-  client               Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  project              Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  @@index([clientId, createdAt])
-  @@index([clientId, periodEnd])
+  @@index([projectId, createdAt])
+  @@index([projectId, periodEnd])
   @@map("analyst_reports")
 }
 
@@ -198,7 +208,7 @@ model AdvisorReport {
 model PromptLog {
   id         String   @id @default(cuid())
   type       String
-  clientId   String   @map("client_id")
+  projectId  String   @map("project_id")
   inputJson  Json     @map("input_json")
   outputJson Json     @map("output_json")
   model      String
@@ -206,7 +216,7 @@ model PromptLog {
   latencyMs  Int?     @map("latency_ms")
   createdAt  DateTime @default(now()) @map("created_at")
 
-  @@index([clientId, createdAt])
+  @@index([projectId, createdAt])
   @@index([type])
   @@map("prompt_logs")
 }
@@ -235,6 +245,19 @@ model LinkedAccount {
   @@map("linked_accounts")
 }
 
+model PersonAlias {
+  id           String   @id @default(cuid())
+  projectId    String   @map("project_id")
+  primaryEmail String   @map("primary_email")
+  alias        String
+  createdAt    DateTime @default(now()) @map("created_at")
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, alias])
+  @@index([projectId, primaryEmail])
+  @@map("person_aliases")
+}
+
 model UserRole {
   id          String   @id @default(cuid())
   name        String
@@ -250,7 +273,7 @@ model UserRole {
 
 model Notification {
   id         String   @id @default(cuid())
-  clientId   String   @map("client_id")
+  projectId  String   @map("project_id")
   type       String
   title      String
   message    String
@@ -259,10 +282,10 @@ model Notification {
   url        String?
   statusCode Int?     @map("status_code")
   createdAt  DateTime @default(now()) @map("created_at")
-  client     Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  @@index([clientId, read, createdAt])
-  @@index([clientId, url, statusCode, read])
+  @@index([projectId, read, createdAt])
+  @@index([projectId, url, statusCode, read])
   @@map("notifications")
 }
 
@@ -282,7 +305,7 @@ model MonitoredPage {
 
 model Incident {
   id             String          @id @default(cuid())
-  clientId       String          @map("client_id")
+  projectId      String          @map("project_id")
   dataSourceId   String?         @map("data_source_id")
   title          String
   cause          String
@@ -301,9 +324,10 @@ model Incident {
   createdAt      DateTime        @default(now()) @map("created_at")
   events         IncidentEvent[]
   dataSource     DataSource?     @relation(fields: [dataSourceId], references: [id])
-  client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  @@index([clientId, status])
+  @@index([projectId, status])
+  @@index([projectId, createdAt])
   @@index([dataSourceId])
   @@index([startedAt])
   @@map("incidents")
@@ -416,7 +440,7 @@ model MetricDefinition {
 // Dataset definitions — logical groupings for dashboard reporting
 model Dataset {
   id              String          @id @default(cuid())
-  clientId        String          @map("client_id")
+  projectId       String          @map("project_id")
   slug            String          // e.g. "paid-performance", "seo-performance"
   name            String          // "Paid Advertising Performance"
   description     String?
@@ -424,11 +448,11 @@ model Dataset {
   config          Json?           // { selectedDimensions: [...], selectedMetrics: [...], filters: [...] }
   createdAt       DateTime        @default(now()) @map("created_at")
   updatedAt       DateTime        @updatedAt @map("updated_at")
-  client          Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   sources         DatasetSource[]
 
-  @@unique([clientId, slug])
-  @@index([clientId])
+  @@unique([projectId, slug])
+  @@index([projectId])
   @@map("datasets")
 }
 
@@ -454,17 +478,17 @@ model DatasetSource {
 
 model Dashboard {
   id          String            @id @default(cuid())
-  clientId    String            @map("client_id")
+  projectId   String            @map("project_id")
   name        String
   description String?
   starred     Boolean           @default(false)
   filters     Json?             // [{ dimension, operator, values }]
   createdAt   DateTime          @default(now()) @map("created_at")
   updatedAt   DateTime          @updatedAt @map("updated_at")
-  client      Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  project     Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   widgets     DashboardWidget[]
 
-  @@index([clientId])
+  @@index([projectId])
   @@map("dashboards")
 }
 
@@ -488,7 +512,7 @@ model DashboardWidget {
 model DerivedMetricDefinition {
   id              String              @id @default(cuid())
   connectorId     String?             @map("connector_id") // null = universal/cross-platform
-  clientId        String?             @map("client_id") // null = system-wide
+  projectId       String?             @map("project_id") // null = system-wide
   slug            String
   name            String
   formula         String              // e.g. "clicks / impressions * 100" or "conversion_value / cost"
@@ -499,7 +523,7 @@ model DerivedMetricDefinition {
   connector       ConnectorDefinition? @relation(fields: [connectorId], references: [id], onDelete: Cascade)
 
   @@index([connectorId])
-  @@index([clientId])
+  @@index([projectId])
   @@map("derived_metric_definitions")
 }
 
@@ -525,6 +549,7 @@ model SyncJob {
   dataSource      DataSource @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
   logs            SyncLog[]
 
+  @@index([dataSourceId])
   @@index([dataSourceId, status])
   @@index([createdAt])
   @@map("sync_jobs")
@@ -562,13 +587,13 @@ model AuditLog {
 model UserNotificationPreference {
   id        String   @id @default(cuid())
   userId    String   @map("user_id")
-  clientId  String   @map("client_id")
+  projectId String   @map("project_id")
   enabled   Boolean  @default(true)
   createdAt DateTime @default(now()) @map("created_at")
 
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, clientId])
+  @@unique([userId, projectId])
   @@map("user_notification_preferences")
 }

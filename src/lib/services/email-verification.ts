@@ -73,7 +73,7 @@ export async function sendVerificationEmail(email: string, token: string): Promi
 }
 
 export async function sendWelcomeEmail(email: string, name: string): Promise<void> {
-    const dashboardUrl = `${APP_URL}/dashboard`;
+    const dashboardUrl = `${APP_URL}/`;
 
     const contentHtml = `
         <p style="color:#94a3b8;font-size:0.9rem;line-height:1.6;margin:0 0 16px;">

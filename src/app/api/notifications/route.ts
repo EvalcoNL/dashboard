@@ -5,20 +5,20 @@ import { auth } from "@/lib/auth";
 
 /**
  * GET /api/notifications
- * Fetch notifications. Supports filtering by clientId and unread status.
- * Query params: ?clientId=xxx&unreadOnly=true&limit=50
+ * Fetch notifications. Supports filtering by projectId and unread status.
+ * Query params: ?projectId=xxx&unreadOnly=true&limit=50
  */
 export async function GET(req: NextRequest) {
     const session = await auth();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { searchParams } = new URL(req.url);
-    const clientId = searchParams.get("clientId");
+    const projectId = searchParams.get("projectId");
     const unreadOnly = searchParams.get("unreadOnly") === "true";
     const limit = parseInt(searchParams.get("limit") || "50", 10);
 
     const where: any = {};
-    if (clientId) where.clientId = clientId;
+    if (projectId) where.projectId = projectId;
     if (unreadOnly) where.read = false;
 
     const notifications = await (prisma as any).notification.findMany({
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
         orderBy: { createdAt: "desc" },
         take: Math.min(limit, 100),
         include: {
-            client: { select: { name: true } }
+            project: { select: { name: true } }
         }
     });
 
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
 /**
  * PUT /api/notifications
  * Mark notifications as read.
- * Body: { ids: string[] } or { all: true, clientId?: string }
+ * Body: { ids: string[] } or { all: true, projectId?: string }
  */
 export async function PUT(req: NextRequest) {
     const session = await auth();
@@ -50,7 +50,7 @@ export async function PUT(req: NextRequest) {
 
     if (body.all) {
         const where: any = { read: false };
-        if (body.clientId) where.clientId = body.clientId;
+        if (body.projectId) where.projectId = body.projectId;
 
         await (prisma as any).notification.updateMany({
             where,

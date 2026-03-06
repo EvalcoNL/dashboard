@@ -58,7 +58,7 @@ export default function InviteAcceptance({
 
             setStep("success");
             setTimeout(() => {
-                router.push("/dashboard");
+                router.push("/");
                 router.refresh();
             }, 2000);
 
@@ -129,7 +129,7 @@ export default function InviteAcceptance({
 
             setStep("success");
             setTimeout(() => {
-                router.push("/dashboard");
+                router.push("/");
                 router.refresh();
             }, 2000);
 

@@ -22,6 +22,7 @@ function getEncryptionKey(): Buffer | null {
         return null;
     }
     // Derive a 32-byte key from the env variable using scrypt
+    // TODO: Use a per-installation salt (requires re-encrypting all existing tokens)
     return scryptSync(key, 'evalco-salt', 32);
 }
 

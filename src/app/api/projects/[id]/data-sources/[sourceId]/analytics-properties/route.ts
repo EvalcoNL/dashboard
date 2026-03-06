@@ -11,11 +11,11 @@ export async function GET(
     const session = await auth();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { id: clientId, sourceId } = await params;
+    const { id: projectId, sourceId } = await params;
 
     try {
         const source = await prisma.dataSource.findUnique({
-            where: { id: sourceId, clientId }
+            where: { id: sourceId, projectId }
         });
 
         if (!source || source.type !== "GOOGLE_ANALYTICS" || !source.token) {
@@ -28,7 +28,7 @@ export async function GET(
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: new URLSearchParams({
                 refresh_token: decrypt(source.token),
-                client_id: process.env.GOOGLE_OAUTH_CLIENT_ID || "",
+                project_id: process.env.GOOGLE_OAUTH_CLIENT_ID || "",
                 client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET || "",
                 grant_type: "refresh_token",
             }),

@@ -58,10 +58,10 @@ export interface ConnectorBreakdown {
 /**
  * Check if a client has any data in ClickHouse.
  */
-export async function hasData(clientId: string): Promise<boolean> {
+export async function hasData(projectId: string): Promise<boolean> {
     const result = await queryOne<{ cnt: string }>(
-        `SELECT count() AS cnt FROM metrics_data FINAL WHERE client_id = {clientId:String} LIMIT 1`,
-        { clientId }
+        `SELECT count() AS cnt FROM metrics_data FINAL WHERE client_id = {projectId:String} LIMIT 1`,
+        { projectId }
     );
     return Number(result?.cnt || 0) > 0;
 }
@@ -69,10 +69,10 @@ export async function hasData(clientId: string): Promise<boolean> {
 /**
  * Count total records for a client.
  */
-export async function countRecords(clientId: string): Promise<number> {
+export async function countRecords(projectId: string): Promise<number> {
     const result = await queryOne<{ cnt: string }>(
-        `SELECT count() AS cnt FROM metrics_data FINAL WHERE client_id = {clientId:String}`,
-        { clientId }
+        `SELECT count() AS cnt FROM metrics_data FINAL WHERE client_id = {projectId:String}`,
+        { projectId }
     );
     return Number(result?.cnt || 0);
 }
@@ -81,12 +81,12 @@ export async function countRecords(clientId: string): Promise<number> {
  * Aggregate all metrics for a client within a date range.
  */
 export async function aggregateMetrics(
-    clientId: string,
+    projectId: string,
     dateFrom: Date,
     dateTo?: Date
 ): Promise<AggregatedMetrics> {
     const params: Record<string, string> = {
-        clientId,
+        projectId,
         dateFrom: fmtDate(dateFrom),
     };
 
@@ -107,7 +107,7 @@ export async function aggregateMetrics(
             sum(sessions)           AS sessions,
             count()                 AS record_count
         FROM metrics_data FINAL
-        WHERE client_id = {clientId:String}
+        WHERE client_id = {projectId:String}
           AND ${dateFilter}
     `, params);
 
@@ -127,7 +127,7 @@ export async function aggregateMetrics(
  * Get daily aggregated metrics for a client within a date range.
  */
 export async function dailyMetrics(
-    clientId: string,
+    projectId: string,
     dateFrom: Date,
     dateTo: Date
 ): Promise<DailyMetric[]> {
@@ -143,13 +143,13 @@ export async function dailyMetrics(
             sum(sessions)           AS sessions,
             sum(page_views)         AS page_views
         FROM metrics_data FINAL
-        WHERE client_id = {clientId:String}
+        WHERE client_id = {projectId:String}
           AND date >= toDate({dateFrom:String})
           AND date <= toDate({dateTo:String})
         GROUP BY date
         ORDER BY date ASC
     `, {
-        clientId,
+        projectId,
         dateFrom: fmtDate(dateFrom),
         dateTo: fmtDate(dateTo),
     });
@@ -171,7 +171,7 @@ export async function dailyMetrics(
  * Get daily metrics broken down by connector (platform).
  */
 export async function dailyMetricsByConnector(
-    clientId: string,
+    projectId: string,
     dateFrom: Date,
     dateTo: Date
 ): Promise<(DailyMetric & { connector_slug: string })[]> {
@@ -188,13 +188,13 @@ export async function dailyMetricsByConnector(
             sum(sessions)           AS sessions,
             sum(page_views)         AS page_views
         FROM metrics_data FINAL
-        WHERE client_id = {clientId:String}
+        WHERE client_id = {projectId:String}
           AND date >= toDate({dateFrom:String})
           AND date <= toDate({dateTo:String})
         GROUP BY date, connector_slug
         ORDER BY date ASC, connector_slug
     `, {
-        clientId,
+        projectId,
         dateFrom: fmtDate(dateFrom),
         dateTo: fmtDate(dateTo),
     });
@@ -216,7 +216,7 @@ export async function dailyMetricsByConnector(
  * Get aggregated metrics broken down by connector.
  */
 export async function metricsByConnector(
-    clientId: string,
+    projectId: string,
     dateFrom: Date,
     dateTo: Date
 ): Promise<ConnectorBreakdown[]> {
@@ -230,13 +230,13 @@ export async function metricsByConnector(
             sum(conversion_value)   AS conversion_value,
             count()                 AS record_count
         FROM metrics_data FINAL
-        WHERE client_id = {clientId:String}
+        WHERE client_id = {projectId:String}
           AND date >= toDate({dateFrom:String})
           AND date <= toDate({dateTo:String})
         GROUP BY connector_slug
         ORDER BY cost DESC
     `, {
-        clientId,
+        projectId,
         dateFrom: fmtDate(dateFrom),
         dateTo: fmtDate(dateTo),
     });
@@ -257,13 +257,13 @@ export async function metricsByConnector(
  * Returns individual campaign rows (like the old CampaignMetric model).
  */
 export async function campaignMetrics(
-    clientId: string,
+    projectId: string,
     dateFrom: Date,
     dateTo?: Date,
     options?: { orderBy?: 'asc' | 'desc'; limit?: number }
 ): Promise<CampaignMetric[]> {
     const params: Record<string, string> = {
-        clientId,
+        projectId,
         dateFrom: fmtDate(dateFrom),
     };
 
@@ -289,7 +289,7 @@ export async function campaignMetrics(
             sum(conversion_value)   AS conversion_value,
             any(campaign_status)    AS status
         FROM metrics_data FINAL
-        WHERE client_id = {clientId:String}
+        WHERE client_id = {projectId:String}
           AND ${dateFilter}
           AND campaign_id IS NOT NULL
         GROUP BY campaign_id, campaign_name, campaign_type, date
@@ -311,7 +311,7 @@ export async function campaignMetrics(
  * Get distinct values for a dimension (for filter dropdowns).
  */
 export async function distinctDimensionValues(
-    clientId: string,
+    projectId: string,
     dimension: string,
     options?: { limit?: number }
 ): Promise<string[]> {
@@ -335,12 +335,12 @@ export async function distinctDimensionValues(
     const rows = await query<{ value: string }>(`
         SELECT DISTINCT ${dimension} AS value
         FROM metrics_data FINAL
-        WHERE client_id = {clientId:String}
+        WHERE client_id = {projectId:String}
           AND ${dimension} IS NOT NULL
           AND ${dimension} != ''
         ORDER BY value ASC
         LIMIT ${limit}
-    `, { clientId });
+    `, { projectId });
 
     return rows.map(r => r.value);
 }
@@ -349,15 +349,15 @@ export async function distinctDimensionValues(
  * Get the date range of available data for a client.
  */
 export async function dateRange(
-    clientId: string
+    projectId: string
 ): Promise<{ earliest: string | null; latest: string | null }> {
     const result = await queryOne<{ earliest: string; latest: string }>(`
         SELECT
             toString(min(date)) AS earliest,
             toString(max(date)) AS latest
         FROM metrics_data FINAL
-        WHERE client_id = {clientId:String}
-    `, { clientId });
+        WHERE client_id = {projectId:String}
+    `, { projectId });
 
     if (!result || result.earliest === '1970-01-01') {
         return { earliest: null, latest: null };

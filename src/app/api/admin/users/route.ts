@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
                 emailVerified: true, // Admin-created users are pre-verified
             },
             include: {
-                clients: { select: { id: true, name: true } }
+                projects: { select: { id: true, name: true } }
             }
         });
 

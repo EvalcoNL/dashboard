@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Create the client/project
-        const client = await prisma.client.create({
+        const client = await prisma.project.create({
             data: {
                 name,
                 industryType,
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
 
             await prisma.dataSource.create({
                 data: {
-                    clientId: client.id,
+                    projectId: client.id,
                     type: "DOMAIN",
                     name: cleanDomain,
                     externalId: cleanDomain,
@@ -76,7 +76,7 @@ export async function GET() {
 
     const isAdmin = session.user.role === "ADMIN";
 
-    const clients = await prisma.client.findMany({
+    const clients = await prisma.project.findMany({
         where: isAdmin ? undefined : {
             users: {
                 some: { id: session.user.id }

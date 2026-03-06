@@ -1,18 +1,19 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { encodeOAuthState } from "@/lib/oauth-state";
 
 export async function GET(req: NextRequest) {
     const session = await auth();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { searchParams } = new URL(req.url);
-    const clientId = searchParams.get("clientId");
+    const projectId = searchParams.get("projectId");
     const scope = searchParams.get("scope");
 
-    // Either clientId or scope=global must be provided
-    if (!clientId && scope !== "global") {
-        return NextResponse.json({ error: "Missing clientId or scope=global parameter" }, { status: 400 });
+    // Either projectId or scope=global must be provided
+    if (!projectId && scope !== "global") {
+        return NextResponse.json({ error: "Missing projectId or scope=global parameter" }, { status: 400 });
     }
 
     const slackClientId = process.env.SLACK_CLIENT_ID;
@@ -27,11 +28,11 @@ export async function GET(req: NextRequest) {
     const scopes = ["incoming-webhook"];
 
     const authUrl = new URL("https://slack.com/oauth/v2/authorize");
-    authUrl.searchParams.set("client_id", slackClientId);
+    authUrl.searchParams.set("project_id", slackClientId);
     authUrl.searchParams.set("scope", scopes.join(","));
     authUrl.searchParams.set("redirect_uri", redirectUri);
-    // Use state to pass context: "__global__" for global settings, or the clientId for project-level
-    authUrl.searchParams.set("state", scope === "global" ? "__global__" : clientId!);
+    // Use CSRF-protected state: "__global__" for global settings, encoded projectId for project-level
+    authUrl.searchParams.set("state", scope === "global" ? encodeOAuthState("__global__") : encodeOAuthState(projectId!));
 
     return NextResponse.redirect(authUrl.toString());
 }

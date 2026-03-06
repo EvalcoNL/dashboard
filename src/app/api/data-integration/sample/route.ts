@@ -12,7 +12,7 @@ import crypto from 'crypto';
 const SAMPLE_SOURCE_NAME = '__sample__';
 
 /**
- * GET /api/data-integration/sample?clientId=xxx
+ * GET /api/data-integration/sample?projectId=xxx
  */
 export async function GET(request: Request) {
     try {
@@ -20,11 +20,11 @@ export async function GET(request: Request) {
         if (authError) return authError;
 
         const { searchParams } = new URL(request.url);
-        const clientId = searchParams.get('clientId');
-        if (!clientId) return NextResponse.json({ error: 'clientId required' }, { status: 400 });
+        const projectId = searchParams.get('projectId');
+        if (!projectId) return NextResponse.json({ error: 'projectId required' }, { status: 400 });
 
         const source = await prisma.dataSource.findFirst({
-            where: { clientId, name: SAMPLE_SOURCE_NAME },
+            where: { projectId, name: SAMPLE_SOURCE_NAME },
         });
 
         if (!source) {
@@ -56,8 +56,8 @@ export async function POST(request: Request) {
         const [, authError] = await requireAuth();
         if (authError) return authError;
 
-        const { clientId } = await request.json();
-        if (!clientId) return NextResponse.json({ error: 'clientId required' }, { status: 400 });
+        const { projectId } = await request.json();
+        if (!projectId) return NextResponse.json({ error: 'projectId required' }, { status: 400 });
 
         // 1. Ensure ConnectorDefinition for google-ads exists
         let connector = await prisma.connectorDefinition.findUnique({ where: { slug: 'google-ads' } });
@@ -123,12 +123,12 @@ export async function POST(request: Request) {
 
         // 5. Create/find sample DataSource
         let source = await prisma.dataSource.findFirst({
-            where: { clientId, name: SAMPLE_SOURCE_NAME },
+            where: { projectId, name: SAMPLE_SOURCE_NAME },
         });
         if (!source) {
             source = await prisma.dataSource.create({
                 data: {
-                    clientId,
+                    projectId,
                     type: 'sample',
                     name: SAMPLE_SOURCE_NAME,
                     externalId: 'sample-data',
@@ -191,7 +191,7 @@ export async function POST(request: Request) {
                 records.push({
                     canonical_hash: canonicalHash,
                     data_source_id: source.id,
-                    client_id: clientId,
+                    project_id: projectId,
                     connector_slug: 'google-ads',
                     date: dateStr,
                     level: 'campaign',
@@ -234,11 +234,11 @@ export async function DELETE(request: Request) {
         if (authError) return authError;
 
         const { searchParams } = new URL(request.url);
-        const clientId = searchParams.get('clientId');
-        if (!clientId) return NextResponse.json({ error: 'clientId required' }, { status: 400 });
+        const projectId = searchParams.get('projectId');
+        if (!projectId) return NextResponse.json({ error: 'projectId required' }, { status: 400 });
 
         const source = await prisma.dataSource.findFirst({
-            where: { clientId, name: SAMPLE_SOURCE_NAME },
+            where: { projectId, name: SAMPLE_SOURCE_NAME },
         });
 
         if (!source) {

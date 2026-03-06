@@ -28,26 +28,26 @@ export async function requireAuth(): Promise<[AuthSession, null] | [null, NextRe
 }
 
 /**
- * Require authentication AND verify the user has access to the given client.
- * Admins have access to all clients. Regular users must be in the client's access list.
+ * Require authentication AND verify the user has access to the given project.
+ * Admins have access to all projects. Regular users must be in the project's access list.
  */
-export async function requireClientAccess(clientId: string): Promise<[AuthSession, null] | [null, NextResponse]> {
+export async function requireProjectAccess(projectId: string): Promise<[AuthSession, null] | [null, NextResponse]> {
     const [session, authError] = await requireAuth();
     if (authError) return [null, authError];
 
     // Admins can access everything
     if (session.user.role === 'ADMIN') return [session, null];
 
-    // Check if user has access to this client
-    const client = await prisma.client.findFirst({
+    // Check if user has access to this project
+    const project = await prisma.project.findFirst({
         where: {
-            id: clientId,
+            id: projectId,
             users: { some: { id: session.user.id } },
         },
         select: { id: true },
     });
 
-    if (!client) {
+    if (!project) {
         return [null, NextResponse.json(
             { success: false, error: 'Access denied' },
             { status: 403 }
@@ -58,16 +58,16 @@ export async function requireClientAccess(clientId: string): Promise<[AuthSessio
 }
 
 /**
- * Require authentication AND verify the user owns the dashboard (via its clientId).
+ * Require authentication AND verify the user owns the dashboard (via its projectId).
  */
-export async function requireDashboardAccess(dashboardId: string): Promise<[AuthSession & { dashboardClientId: string }, null] | [null, NextResponse]> {
+export async function requireDashboardAccess(dashboardId: string): Promise<[AuthSession & { dashboardProjectId: string }, null] | [null, NextResponse]> {
     const [session, authError] = await requireAuth();
     if (authError) return [null, authError];
 
-    // Look up the dashboard to get its clientId
+    // Look up the dashboard to get its projectId
     const dashboard = await prisma.dashboard.findUnique({
         where: { id: dashboardId },
-        select: { clientId: true },
+        select: { projectId: true },
     });
 
     if (!dashboard) {
@@ -79,47 +79,39 @@ export async function requireDashboardAccess(dashboardId: string): Promise<[Auth
 
     // Admins can access everything
     if (session.user.role === 'ADMIN') {
-        return [{ ...session, dashboardClientId: dashboard.clientId } as AuthSession & { dashboardClientId: string }, null];
+        return [{ ...session, dashboardProjectId: dashboard.projectId } as AuthSession & { dashboardProjectId: string }, null];
     }
 
-    // Check if user has access to this client
-    const client = await prisma.client.findFirst({
+    // Check if user has access to this project
+    const project = await prisma.project.findFirst({
         where: {
-            id: dashboard.clientId,
+            id: dashboard.projectId,
             users: { some: { id: session.user.id } },
         },
         select: { id: true },
     });
 
-    if (!client) {
+    if (!project) {
         return [null, NextResponse.json(
             { success: false, error: 'Access denied' },
             { status: 403 }
         )];
     }
 
-    return [{ ...session, dashboardClientId: dashboard.clientId } as AuthSession & { dashboardClientId: string }, null];
+    return [{ ...session, dashboardProjectId: dashboard.projectId } as AuthSession & { dashboardProjectId: string }, null];
 }
 
 /**
- * Require authentication AND verify the user has access to the given project (client).
- * The project ID is actually the client ID in the data model.
- */
-export async function requireProjectAccess(projectId: string): Promise<[AuthSession, null] | [null, NextResponse]> {
-    return requireClientAccess(projectId);
-}
-
-/**
- * Require authentication AND verify the user has access to the data source's client.
+ * Require authentication AND verify the user has access to the data source's project.
  * Returns the session + the data source record.
  */
-export async function requireDataSourceAccess(dataSourceId: string): Promise<[AuthSession & { dataSource: { id: string; clientId: string } }, null] | [null, NextResponse]> {
+export async function requireDataSourceAccess(dataSourceId: string): Promise<[AuthSession & { dataSource: { id: string; projectId: string } }, null] | [null, NextResponse]> {
     const [session, authError] = await requireAuth();
     if (authError) return [null, authError];
 
     const dataSource = await prisma.dataSource.findUnique({
         where: { id: dataSourceId },
-        select: { id: true, clientId: true },
+        select: { id: true, projectId: true },
     });
 
     if (!dataSource) {
@@ -131,26 +123,26 @@ export async function requireDataSourceAccess(dataSourceId: string): Promise<[Au
 
     // Admins can access everything
     if (session.user.role === 'ADMIN') {
-        return [{ ...session, dataSource } as AuthSession & { dataSource: { id: string; clientId: string } }, null];
+        return [{ ...session, dataSource } as AuthSession & { dataSource: { id: string; projectId: string } }, null];
     }
 
-    // Check if user has access to this client
-    const client = await prisma.client.findFirst({
+    // Check if user has access to this project
+    const project = await prisma.project.findFirst({
         where: {
-            id: dataSource.clientId,
+            id: dataSource.projectId,
             users: { some: { id: session.user.id } },
         },
         select: { id: true },
     });
 
-    if (!client) {
+    if (!project) {
         return [null, NextResponse.json(
             { success: false, error: 'Access denied' },
             { status: 403 }
         )];
     }
 
-    return [{ ...session, dataSource } as AuthSession & { dataSource: { id: string; clientId: string } }, null];
+    return [{ ...session, dataSource } as AuthSession & { dataSource: { id: string; projectId: string } }, null];
 }
 
 /**

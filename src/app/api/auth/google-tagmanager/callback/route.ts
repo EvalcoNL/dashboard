@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { decodeOAuthState } from "@/lib/oauth-state";
 import { encrypt } from "@/lib/encryption";
 
 export async function GET(req: NextRequest) {
@@ -10,15 +11,16 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const code = searchParams.get("code");
-    const clientId = searchParams.get("state");
+    const rawState = searchParams.get("state") || "";
+    const projectId = decodeOAuthState(rawState);
     const error = searchParams.get("error");
 
     const origin = process.env.NEXTAUTH_URL || new URL(req.url).origin;
 
-    if (error || !code || !clientId) {
-        const redirectPath = clientId
-            ? `/dashboard/projects/${clientId}/data/sources?error=${error === "access_denied" ? "Koppeling geannuleerd" : "GTMLinkFailed"}`
-            : "/dashboard";
+    if (error || !code || !projectId) {
+        const redirectPath = projectId
+            ? `/projects/${projectId}/data/sources?error=${error === "access_denied" ? "Koppeling geannuleerd" : "GTMLinkFailed"}`
+            : "/";
         return NextResponse.redirect(`${origin}${redirectPath}`);
     }
 
@@ -28,7 +30,7 @@ export async function GET(req: NextRequest) {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: new URLSearchParams({
-                code, client_id: process.env.GOOGLE_OAUTH_CLIENT_ID || "",
+                code, project_id: process.env.GOOGLE_OAUTH_CLIENT_ID || "",
                 client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET || "",
                 redirect_uri: redirectUri, grant_type: "authorization_code",
             }),
@@ -36,7 +38,7 @@ export async function GET(req: NextRequest) {
         const tokenData = await tokenResponse.json();
         if (tokenData.error) throw new Error(tokenData.error_description || tokenData.error);
         const refreshToken = tokenData.refresh_token;
-        if (!refreshToken) return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/data/sources?error=NoRefreshToken`);
+        if (!refreshToken) return NextResponse.redirect(`${origin}/projects/${projectId}/data/sources?error=NoRefreshToken`);
 
         // fetch GTM accounts
         const accessToken = tokenData.access_token;
@@ -57,12 +59,12 @@ export async function GET(req: NextRequest) {
             // No accounts found — still create a pending source so user sees it
             await prisma.dataSource.create({
                 data: {
-                    clientId, type: "GOOGLE_TAG_MANAGER", category: "APP",
+                    projectId, type: "GOOGLE_TAG_MANAGER", category: "APP",
                     externalId: "PENDING", name: "Google Tag Manager (geen accounts gevonden)",
                     token: encrypt(refreshToken), active: false,
                 },
             });
-            return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/data/sources?error=NoGTMAccounts`);
+            return NextResponse.redirect(`${origin}/projects/${projectId}/data/sources?error=NoGTMAccounts`);
         }
 
         if (accounts.length === 1) {
@@ -72,29 +74,29 @@ export async function GET(req: NextRequest) {
 
             await prisma.dataSource.create({
                 data: {
-                    clientId, type: "GOOGLE_TAG_MANAGER", category: "APP",
+                    projectId, type: "GOOGLE_TAG_MANAGER", category: "APP",
                     externalId: accounts[0].accountId,
                     name: containerName || accounts[0].name || "Google Tag Manager",
                     token: encrypt(refreshToken), active: true,
                     config: { containers: containers.map((c: any) => ({ id: c.containerId, name: c.name })) },
                 },
             });
-            return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/data/sources`);
+            return NextResponse.redirect(`${origin}/projects/${projectId}/data/sources`);
         }
 
         // Multiple accounts — create pending source with account list and redirect to picker
         const pendingSource = await prisma.dataSource.create({
             data: {
-                clientId, type: "GOOGLE_TAG_MANAGER", category: "APP",
+                projectId, type: "GOOGLE_TAG_MANAGER", category: "APP",
                 externalId: "PENDING", name: "Pending Google Tag Manager Link",
                 token: encrypt(refreshToken), active: false,
                 config: { accounts: accounts.map((a: any) => ({ id: a.accountId, name: a.name, path: a.path })) },
             },
         });
-        return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/link-gtm?sourceId=${pendingSource.id}`);
+        return NextResponse.redirect(`${origin}/projects/${projectId}/link-gtm?sourceId=${pendingSource.id}`);
     } catch (error: any) {
         console.error("GTM OAuth Error:", error);
-        return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/data/sources?error=GTMLinkFailed&message=${encodeURIComponent(error.message || "")}`);
+        return NextResponse.redirect(`${origin}/projects/${projectId}/data/sources?error=GTMLinkFailed&message=${encodeURIComponent(error.message || "")}`);
     }
 }
 

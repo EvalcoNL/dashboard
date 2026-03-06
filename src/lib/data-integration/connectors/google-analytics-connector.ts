@@ -60,12 +60,12 @@ export class GoogleAnalyticsConnector extends BaseConnector {
     // ─── Authentication ───
 
     async getAuthUrl(redirectUri: string): Promise<string> {
-        const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || '';
+        const projectId = process.env.GOOGLE_OAUTH_CLIENT_ID || '';
         const scopes = [
             'https://www.googleapis.com/auth/analytics.readonly',
         ].join(' ');
         const params = new URLSearchParams({
-            client_id: clientId,
+            client_id: projectId,
             redirect_uri: redirectUri,
             response_type: 'code',
             scope: scopes,

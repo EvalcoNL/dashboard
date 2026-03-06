@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { ChevronDown, Search } from "lucide-react";
 
-interface Client {
+interface Project {
     id: string;
     name: string;
     dataSources?: { externalId: string }[];
@@ -15,7 +15,7 @@ interface ProjectSwitcherProps {
 }
 
 export default function ProjectSwitcher({ t }: ProjectSwitcherProps) {
-    const [clients, setClients] = useState<Client[]>([]);
+    const [clients, setClients] = useState<Project[]>([]);
     const [isOpen, setIsOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const ref = useRef<HTMLDivElement>(null);
@@ -30,7 +30,7 @@ export default function ProjectSwitcher({ t }: ProjectSwitcherProps) {
     }, []);
 
     const selectedClient = useMemo(() => {
-        const match = pathname.match(/\/dashboard\/projects\/([^\/]+)/);
+        const match = pathname.match(/\/projects\/([^\/]+)/);
         if (match && clients.length > 0) {
             return clients.find(c => c.id === match[1]) || null;
         }
@@ -54,13 +54,13 @@ export default function ProjectSwitcher({ t }: ProjectSwitcherProps) {
         };
     }, []);
 
-    const handleClientChange = (client: Client | null) => {
+    const handleClientChange = (client: Project | null) => {
         setIsOpen(false);
         setSearchQuery("");
         if (!client) {
-            router.push("/dashboard/projects");
+            router.push("/projects");
         } else {
-            router.push(`/dashboard/projects/${client.id}`);
+            router.push(`/projects/${client.id}`);
         }
     };
 

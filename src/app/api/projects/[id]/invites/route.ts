@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import crypto from "crypto";
-import { sendClientInviteEmail } from "@/lib/services/email-service";
+import { sendProjectInviteEmail } from "@/lib/services/email-service";
 
 export async function POST(
     req: Request,
@@ -14,7 +14,7 @@ export async function POST(
             return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
         }
 
-        const { id: clientId } = await params;
+        const { id: projectId } = await params;
         const { email } = await req.json();
 
         if (!email || !email.includes("@")) {
@@ -22,8 +22,8 @@ export async function POST(
         }
 
         // Validate client exists
-        const client = await prisma.client.findUnique({
-            where: { id: clientId }
+        const client = await prisma.project.findUnique({
+            where: { id: projectId }
         });
 
         if (!client) {
@@ -33,10 +33,10 @@ export async function POST(
         // Check if user already has access directly
         const existingUser = await prisma.user.findUnique({
             where: { email },
-            include: { clients: { select: { id: true } } }
+            include: { projects: { select: { id: true } } }
         });
 
-        if (existingUser && existingUser.clients.some(c => c.id === clientId)) {
+        if (existingUser && existingUser.projects.some(c => c.id === projectId)) {
             return NextResponse.json({ error: "User already has access to this client" }, { status: 400 });
         }
 
@@ -48,9 +48,9 @@ export async function POST(
         expiresAt.setDate(expiresAt.getDate() + 7);
 
         // Save invite to DB
-        const invite = await (prisma as any).clientInvite.create({
+        const invite = await (prisma as any).projectInvite.create({
             data: {
-                clientId,
+                projectId,
                 email,
                 token,
                 status: "PENDING",
@@ -59,7 +59,7 @@ export async function POST(
         });
 
         const userExists = !!existingUser;
-        await sendClientInviteEmail(email, client.name, token, userExists);
+        await sendProjectInviteEmail(email, client.name, token, userExists);
 
         return NextResponse.json({ success: true, invite });
 
@@ -79,15 +79,15 @@ export async function DELETE(
             return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
         }
 
-        const { id: clientId } = await params;
+        const { id: projectId } = await params;
         const { inviteId } = await req.json();
 
         if (!inviteId) {
             return NextResponse.json({ error: "Invite ID required" }, { status: 400 });
         }
 
-        await (prisma as any).clientInvite.delete({
-            where: { id: inviteId, clientId } // Ensure it logs to this client
+        await (prisma as any).projectInvite.delete({
+            where: { id: inviteId, projectId } // Ensure it logs to this client
         });
 
         return NextResponse.json({ success: true });

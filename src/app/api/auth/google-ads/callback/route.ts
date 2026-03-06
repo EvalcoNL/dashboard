@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { googleAdsService } from "@/lib/integrations/google-ads";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { decodeOAuthState } from "@/lib/oauth-state";
 import { encrypt } from "@/lib/encryption";
 
 export async function GET(req: NextRequest) {
@@ -11,14 +12,15 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const code = searchParams.get("code");
-    const clientId = searchParams.get("state"); // This is our internal Client.id passed in 'state'
+    const rawState = searchParams.get("state") || "";
+    const projectId = decodeOAuthState(rawState); // This is our internal Client.id passed in 'state'
     const error = searchParams.get("error");
     const origin = process.env.NEXTAUTH_URL || new URL(req.url).origin;
 
-    if (error || !code || !clientId) {
-        const redirectPath = clientId
-            ? `/dashboard/projects/${clientId}/data/sources?error=${error === "access_denied" ? "Koppeling geannuleerd" : "GoogleAdsLinkFailed"}`
-            : "/dashboard";
+    if (error || !code || !projectId) {
+        const redirectPath = projectId
+            ? `/projects/${projectId}/data/sources?error=${error === "access_denied" ? "Koppeling geannuleerd" : "GoogleAdsLinkFailed"}`
+            : "/";
         return NextResponse.redirect(`${origin}${redirectPath}`);
     }
 
@@ -41,7 +43,7 @@ export async function GET(req: NextRequest) {
         // We'll pass the refreshToken securely? No, let's create a pending DataSource
         const pendingSource = await (prisma as any).dataSource.create({
             data: {
-                clientId: clientId,
+                projectId: projectId,
                 type: "GOOGLE_ADS",
                 category: "APP",
                 externalId: "PENDING",
@@ -52,7 +54,7 @@ export async function GET(req: NextRequest) {
         });
 
         // Redirect to selection UI
-        return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/link?sourceId=${pendingSource.id}`);
+        return NextResponse.redirect(`${origin}/projects/${projectId}/link?sourceId=${pendingSource.id}`);
     } catch (error: any) {
         console.error("OAuth Callback Error:", error);
         return NextResponse.json({ error: "Failed to link Google Ads" }, { status: 500 });

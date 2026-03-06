@@ -2,7 +2,8 @@ export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
-import { getAccessProvider } from "@/lib/integrations/access-providers";
+import { getAccessProvider, formatTokenError } from "@/lib/integrations/access-providers";
+import { decrypt } from "@/lib/encryption";
 
 /**
  * POST: Sync users from platform APIs (e.g. Google Ads) into LinkedAccounts.
@@ -14,14 +15,14 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { clientId } = await req.json();
-    if (!clientId) {
-        return NextResponse.json({ error: "clientId is required" }, { status: 400 });
+    const { projectId } = await req.json();
+    if (!projectId) {
+        return NextResponse.json({ error: "projectId is required" }, { status: 400 });
     }
 
     // Get all data sources for this client that have an access provider with listUsers
     const dataSources = await prisma.dataSource.findMany({
-        where: { clientId, active: true },
+        where: { projectId, active: true },
     });
 
     let totalSynced = 0;
@@ -45,8 +46,22 @@ export async function POST(req: NextRequest) {
         console.log(`[SyncAccess] Syncing ${ds.type} (${ds.name}, externalId: ${ds.externalId})...`);
 
         try {
+            // For providers that store access tokens (META), decrypt first
+            const tokenTypes = ["META", "MICROSOFT_ADS", "LINKEDIN", "MAGENTO", "SHOPWARE"];
+            let rawToken = tokenTypes.includes(ds.type) ? decrypt(ds.token) : ds.token;
+
+            // Support new JSON token format: { accessToken: "...", refreshToken: "..." }
+            if (tokenTypes.includes(ds.type)) {
+                try {
+                    const parsed = JSON.parse(rawToken);
+                    if (parsed.accessToken) rawToken = parsed.accessToken;
+                } catch {
+                    // Legacy plain string token, use as-is
+                }
+            }
+
             const { users } = await provider.listUsers({
-                token: ds.token,
+                token: rawToken,
                 externalId: ds.externalId,
                 config: ds.config as Record<string, any> | undefined,
             });
@@ -115,9 +130,14 @@ export async function POST(req: NextRequest) {
             totalSynced++;
         } catch (err: any) {
             console.error(`[SyncAccess] Failed for ${ds.type} (${ds.externalId}):`, err);
-            errors.push(`${ds.name || ds.type}: ${err.message}`);
+            const msg = err.message || String(err);
+            errors.push(formatTokenError(ds.name || ds.type, msg));
         }
     }
+
+    // Separate token errors for frontend UI
+    const tokenErrors = errors.filter(e => e.includes("Token verlopen"));
+    const otherErrors = errors.filter(e => !e.includes("Token verlopen"));
 
     return NextResponse.json({
         success: true,
@@ -125,6 +145,8 @@ export async function POST(req: NextRequest) {
         created: totalCreated,
         updated: totalUpdated,
         errors: errors.length > 0 ? errors : undefined,
+        tokenErrors: tokenErrors.length > 0 ? tokenErrors : undefined,
+        otherErrors: otherErrors.length > 0 ? otherErrors : undefined,
         message: `Sync voltooid: ${totalCreated} nieuw, ${totalUpdated} bijgewerkt`,
     });
 }

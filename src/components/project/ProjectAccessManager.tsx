@@ -19,12 +19,12 @@ interface PendingInvite {
 }
 
 export default function ProjectAccessManager({
-    clientId,
+    projectId,
     allUsers,
     linkedUserIds,
     pendingInvites
 }: {
-    clientId: string;
+    projectId: string;
     allUsers: User[];
     linkedUserIds: string[];
     pendingInvites: PendingInvite[];
@@ -52,7 +52,7 @@ export default function ProjectAccessManager({
     const updateAccess = async (newUserIds: string[]) => {
         setLoading(true);
         try {
-            const res = await fetch(`/api/projects/${clientId}/access`, {
+            const res = await fetch(`/api/projects/${projectId}/access`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ userIds: newUserIds }),
@@ -83,7 +83,7 @@ export default function ProjectAccessManager({
 
         setLoading(true);
         try {
-            const res = await fetch(`/api/projects/${clientId}/invites`, {
+            const res = await fetch(`/api/projects/${projectId}/invites`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email: inviteEmail }),
@@ -109,7 +109,7 @@ export default function ProjectAccessManager({
     const handleResendInvite = async (inviteId: string) => {
         setLoading(true);
         try {
-            const res = await fetch(`/api/projects/${clientId}/invites/${inviteId}/resend`, {
+            const res = await fetch(`/api/projects/${projectId}/invites/${inviteId}/resend`, {
                 method: "POST"
             });
             if (!res.ok) throw new Error("Opnieuw versturen mislukt");
@@ -127,7 +127,7 @@ export default function ProjectAccessManager({
     const handleRevokeInvite = async (inviteId: string) => {
         setLoading(true);
         try {
-            const res = await fetch(`/api/projects/${clientId}/invites`, {
+            const res = await fetch(`/api/projects/${projectId}/invites`, {
                 method: "DELETE",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ inviteId }),

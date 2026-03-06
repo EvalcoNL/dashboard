@@ -30,9 +30,10 @@ export interface PlatformMeta {
     name: string;
     color: string;
     abbr: string;
-    category: "google" | "social" | "ecommerce" | "analytics";
+    category: "google" | "social" | "ecommerce" | "analytics" | "other";
     authType: "oauth_google" | "oauth_third" | "api_key" | "login";
     description: string;
+    comingSoon?: boolean;
 }
 
 export const PLATFORMS: PlatformMeta[] = [
@@ -44,23 +45,24 @@ export const PLATFORMS: PlatformMeta[] = [
     { key: "GOOGLE_BUSINESS", name: "Google Business Profile", color: "#4285F4", abbr: "GBP", category: "google", authType: "oauth_google", description: "Beheer bedrijfsvermelding, reviews en lokale zichtbaarheid" },
     { key: "YOUTUBE", name: "YouTube Studio", color: "#FF0000", abbr: "YT", category: "google", authType: "oauth_google", description: "Monitor YouTube kanaalstatistieken en video performance" },
     // Social & Advertising
-    { key: "INSTAGRAM", name: "Instagram", color: "#E4405F", abbr: "IG", category: "social", authType: "login", description: "Koppel Instagram accounts voor social media inzichten" },
-    { key: "META", name: "Meta Business Suite", color: "#1877F2", abbr: "META", category: "social", authType: "oauth_third", description: "Beheer het volledige Meta Business Portfolio" },
-    { key: "LINKEDIN", name: "LinkedIn", color: "#0A66C2", abbr: "LI", category: "social", authType: "oauth_third", description: "Koppel LinkedIn bedrijfspagina's voor B2B marketing" },
-    { key: "PINTEREST", name: "Pinterest", color: "#E60023", abbr: "PIN", category: "social", authType: "oauth_third", description: "Monitor Pinterest pins, borden en advertentie performance" },
     { key: "MICROSOFT_ADS", name: "Microsoft Ads", color: "#0078D4", abbr: "MA", category: "social", authType: "oauth_third", description: "Importeer Bing Ads campagnedata en performance" },
+    { key: "META", name: "Meta (Instagram & Facebook)", color: "#1877F2", abbr: "META", category: "social", authType: "oauth_third", description: "Beheer Instagram, Facebook pagina's en advertenties" },
+    { key: "INSTAGRAM", name: "Instagram", color: "#E4405F", abbr: "IG", category: "social", authType: "login", description: "Koppel Instagram accounts voor social media inzichten", comingSoon: true },
+    { key: "LINKEDIN", name: "LinkedIn", color: "#0A66C2", abbr: "LI", category: "social", authType: "oauth_third", description: "Koppel LinkedIn bedrijfspagina's voor B2B marketing" },
+    { key: "PINTEREST", name: "Pinterest", color: "#E60023", abbr: "PIN", category: "social", authType: "oauth_third", description: "Monitor Pinterest pins, borden en advertentie performance", comingSoon: true },
     // E-commerce & CMS
-    { key: "SHOPIFY", name: "Shopify", color: "#95BF47", abbr: "SH", category: "ecommerce", authType: "api_key", description: "Koppel Shopify webshops voor omzet en besteldata" },
-    { key: "WORDPRESS", name: "WordPress", color: "#21759B", abbr: "WP", category: "ecommerce", authType: "api_key", description: "Monitor WordPress-sites, plugins en content performance" },
-    { key: "LIGHTSPEED", name: "Lightspeed", color: "#EF4B22", abbr: "LS", category: "ecommerce", authType: "api_key", description: "Koppel Lightspeed POS en e-commerce voor verkoopdata" },
-    { key: "CHANNABLE", name: "Channable", color: "#0047FF", abbr: "CH", category: "ecommerce", authType: "api_key", description: "Beheer product feeds en marketplace integraties" },
     { key: "MAGENTO", name: "Magento", color: "#EE672F", abbr: "MG", category: "ecommerce", authType: "api_key", description: "Koppel Magento webshops voor omzet, product- en projectdata" },
+    { key: "SHOPWARE", name: "Shopware", color: "#189EFF", abbr: "SW", category: "ecommerce", authType: "api_key", description: "Koppel Shopware webshops voor omzet, product- en klantdata" },
+    { key: "SHOPIFY", name: "Shopify", color: "#95BF47", abbr: "SH", category: "ecommerce", authType: "api_key", description: "Koppel Shopify webshops voor omzet en besteldata", comingSoon: true },
+    { key: "WORDPRESS", name: "WordPress", color: "#21759B", abbr: "WP", category: "ecommerce", authType: "api_key", description: "Monitor WordPress-sites, plugins en content performance" },
+    { key: "LIGHTSPEED", name: "Lightspeed", color: "#EF4B22", abbr: "LS", category: "ecommerce", authType: "api_key", description: "Koppel Lightspeed POS en e-commerce voor verkoopdata", comingSoon: true },
     // Analytics & Tools
-    { key: "MICROSOFT_CLARITY", name: "Microsoft Clarity", color: "#3B5998", abbr: "MC", category: "analytics", authType: "api_key", description: "Heatmaps, sessie-opnames en gebruikersgedrag analyse" },
-    { key: "KLAVIYO", name: "Klaviyo", color: "#000000", abbr: "KL", category: "analytics", authType: "api_key", description: "E-mail marketing automation, flows en campagne statistieken" },
-    { key: "COOKIEBOT", name: "Cookiebot", color: "#1769FF", abbr: "CB", category: "analytics", authType: "api_key", description: "Cookie consent management en GDPR/AVG compliance" },
-    { key: "STAPE", name: "Stape", color: "#6C47FF", abbr: "ST", category: "analytics", authType: "api_key", description: "Server-side tagging en tracking proxy" },
-    { key: "SLACK", name: "Slack", color: "#4A154B", abbr: "SL", category: "social", authType: "oauth_third", description: "Koppel Slack voor incident notificaties en reporting alerts" },
+    { key: "CHANNABLE", name: "Channable", color: "#0047FF", abbr: "CH", category: "analytics", authType: "api_key", description: "Beheer product feeds en marketplace integraties", comingSoon: true },
+    { key: "MICROSOFT_CLARITY", name: "Microsoft Clarity", color: "#3B5998", abbr: "MC", category: "analytics", authType: "api_key", description: "Heatmaps, sessie-opnames en gebruikersgedrag analyse", comingSoon: true },
+    { key: "KLAVIYO", name: "Klaviyo", color: "#000000", abbr: "KL", category: "analytics", authType: "api_key", description: "E-mail marketing automation, flows en campagne statistieken", comingSoon: true },
+    { key: "COOKIEBOT", name: "Cookiebot", color: "#1769FF", abbr: "CB", category: "analytics", authType: "api_key", description: "Cookie consent management en GDPR/AVG compliance", comingSoon: true },
+    { key: "STAPE", name: "Stape", color: "#6C47FF", abbr: "ST", category: "analytics", authType: "api_key", description: "Server-side tagging en tracking proxy", comingSoon: true },
+    { key: "SLACK", name: "Slack", color: "#4A154B", abbr: "SL", category: "other", authType: "oauth_third", description: "Koppel Slack voor incident notificaties en reporting alerts" },
 ];
 
 export function getPlatformMeta(type: string): PlatformMeta | undefined {
@@ -179,6 +181,12 @@ const PLATFORM_ICONS: Record<string, (size: number) => React.ReactNode> = {
             <path d="M37.5 9.3c-.1-.4-.4-.7-.8-.7-.3 0-5-.4-5-.4s-3.3-3.3-3.7-3.7c-.4-.4-1.1-.3-1.4-.2 0 0-.7.2-1.9.6-.4-1.2-1.1-2.3-2-3.2C21.1.3 19 0 17.3 0c-5.6 0-8.2 7-9 10.6l-4.5 1.4c-1.4.4-1.4.5-1.6 1.8L0 31.3 27.2 36l14.7-3.2S37.6 9.7 37.5 9.3zm-12-2.5c-.9.3-1.9.6-3 .9V6.5c0-.6 0-1.1-.1-1.5 1.2.2 2 1.2 3.1 1.8zm-5-.6c.1.6.1 1.4.1 2.3 0 .1 0 .2 0 .3-1.9.6-4 1.2-6 1.9C16 7 18 4.4 20.5 6.2zm-3.6-3.7c.5 0 .9.2 1.3.5-2.8 1.3-5.8 4.6-7.1 11.2l-4.7 1.5c1.3-4.3 4.2-13.2 10.5-13.2z" fill="#95BF47" transform="translate(5, 4) scale(0.85)" />
             <path d="M36.7 8.6c-.3 0-5-.4-5-.4s-3.3-3.3-3.7-3.7c-.1-.1-.3-.2-.5-.2l-2.1 42.7 14.7-3.2L37.5 9.3c-.1-.4-.4-.7-.8-.7z" fill="#5E8E3E" transform="translate(5, 4) scale(0.85)" />
             <path d="M21.5 16.5l-2.4 7s-1-.5-2.2-.5c-3.5.4-3.5 2.4-3.5 3 .2 2.9 7.9 3.5 8.3 10.3.3 5.3-2.8 9-7.4 9.3-5.5.3-8.5-2.9-8.5-2.9l1.2-4.9s3 2.3 5.5 2.1c1.6-.1 2.2-1.4 2.2-2.4-.2-3.8-6.6-3.6-6.9-9.7-.3-5.2 3.1-10.4 10.6-10.9 2.8-.1 4.1.6 4.1.6z" fill="white" transform="translate(5, 4) scale(0.85)" />
+        </svg>
+    ),
+    SHOPWARE: (s) => (
+        <svg viewBox="0 0 48 48" width={s} height={s}>
+            <rect width="48" height="48" rx="8" fill="#189EFF" />
+            <path d="M34 20c0-3.3-4.5-5-10-5s-10 1.7-10 5c0 2.2 2.5 3.5 6 4.2-3.5.7-6 2-6 4.2 0 3.3 4.5 5 10 5s10-1.7 10-5c0-2.2-2.5-3.5-6-4.2 3.5-.7 6-2 6-4.2z" fill="white" opacity="0.9" />
         </svg>
     ),
     WORDPRESS: (s) => (

@@ -293,6 +293,13 @@ export class MetaAdsConnector extends BaseConnector {
             { platformField: 'clicks', canonicalField: 'clicks' as CanonicalMetric },
             { platformField: 'spend', canonicalField: 'cost' as CanonicalMetric },
             { platformField: 'reach', canonicalField: 'reach' as CanonicalMetric },
+            { platformField: 'frequency', canonicalField: 'frequency' as CanonicalMetric },
+            { platformField: 'unique_clicks', canonicalField: 'unique_clicks' as CanonicalMetric },
+            { platformField: 'link_clicks', canonicalField: 'link_clicks' as CanonicalMetric },
+            { platformField: 'post_engagement', canonicalField: 'post_engagement' as CanonicalMetric },
+            { platformField: 'conversions', canonicalField: 'conversions' as CanonicalMetric },
+            { platformField: 'conversion_value', canonicalField: 'conversion_value' as CanonicalMetric },
+            { platformField: 'video_views', canonicalField: 'video_views' as CanonicalMetric },
         ];
     }
 
@@ -396,16 +403,17 @@ export class MetaAdsConnector extends BaseConnector {
     }
 
     private extractDimensions(row: MetaInsightsRow, level: string): Record<string, string | number | boolean> {
+        // Use PLATFORM field names here — mapDimensions() handles the canonical mapping
         const dims: Record<string, string | number | boolean> = {};
 
-        dims.date = row.date_start;
+        dims.date_start = row.date_start;
         if (row.campaign_id) dims.campaign_id = row.campaign_id;
         if (row.campaign_name) dims.campaign_name = row.campaign_name;
-        if (row.objective) dims.campaign_objective = row.objective;
+        if (row.objective) dims.objective = row.objective;
 
         if ((level === 'adset' || level === 'ad') && row.adset_id) {
-            dims.ad_group_id = row.adset_id;
-            if (row.adset_name) dims.ad_group_name = row.adset_name;
+            dims.adset_id = row.adset_id;
+            if (row.adset_name) dims.adset_name = row.adset_name;
         }
 
         if (level === 'ad' && row.ad_id) {
@@ -416,7 +424,7 @@ export class MetaAdsConnector extends BaseConnector {
         // Breakdown dimensions
         if (row.age) dims.age = row.age;
         if (row.gender) dims.gender = row.gender;
-        if (row.device_platform) dims.device = row.device_platform;
+        if (row.device_platform) dims.device_platform = row.device_platform;
         if (row.publisher_platform) dims.publisher_platform = row.publisher_platform;
         if (row.country) dims.country = row.country;
         if (row.placement) dims.placement = row.placement;
@@ -427,9 +435,10 @@ export class MetaAdsConnector extends BaseConnector {
     private extractMetrics(row: MetaInsightsRow): Record<string, number> {
         const mets: Record<string, number> = {};
 
+        // Use PLATFORM field names here — mapMetrics() handles the canonical mapping
         if (row.impressions) mets.impressions = Number(row.impressions);
         if (row.clicks) mets.clicks = Number(row.clicks);
-        if (row.spend) mets.cost = Number(row.spend);
+        if (row.spend) mets.spend = Number(row.spend);
         if (row.reach) mets.reach = Number(row.reach);
         if (row.frequency) mets.frequency = Number(row.frequency);
         if (row.unique_clicks) mets.unique_clicks = Number(row.unique_clicks);

@@ -55,6 +55,9 @@ COPY --from=builder /app/node_modules/@libsql ./node_modules/@libsql
 COPY --from=builder /app/node_modules/libsql ./node_modules/libsql
 COPY --from=builder /app/prisma ./prisma
 
+# Copy Prisma CLI (needed for migrations via prisma db push)
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+
 # Copy ClickHouse init scripts (for reference)
 COPY --from=builder /app/scripts ./scripts
 

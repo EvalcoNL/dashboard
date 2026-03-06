@@ -152,9 +152,9 @@ Bij gemengde selectie (bijv. `campaign_name` + `sessions`) gebruikt de query eng
 | `google-ads-connector.ts` | `google-ads` | ✅ Actief | OAuth2 | 20 | 30 |
 | `google-analytics-connector.ts` | `ga4` | ✅ Klaar | OAuth2 | 10 | 13 |
 | `meta-ads-connector.ts` | `meta-ads` | ✅ Actief | OAuth2 | 15 | 12 |
-| `linkedin-ads-connector.ts` | `linkedin-ads` | 🔧 Basis | OAuth2 | 8 | 8 |
+| `linkedin-ads-connector.ts` | `linkedin-ads` | ✅ Klaar | OAuth2 | 8 | 11 |
 | `tiktok-ads-connector.ts` | `tiktok-ads` | 🔧 Basis | OAuth2 | 10 | 10 |
-| `microsoft-ads-connector.ts` | `microsoft-ads` | 🔧 Basis | OAuth2 | 10 | 10 |
+| `microsoft-ads-connector.ts` | `microsoft-ads` | ✅ Klaar | OAuth2 | 10 | 9 |
 
 ---
 
@@ -353,9 +353,9 @@ Twee rijen met dezelfde source, datum, level en dimensiewaarden krijgen dezelfde
 
 | # | Connector | Auth | Status |
 |---|---|---|---|
-| 4 | LinkedIn Ads | OAuth2 | 🔧 Code aanwezig, niet getest |
+| 4 | LinkedIn Ads | OAuth2 | ✅ Klaar voor test (credentials nodig) |
 | 5 | TikTok Ads | OAuth2 | 🔧 Code aanwezig, niet getest |
-| 6 | Microsoft Ads | OAuth2 | 🔧 Code aanwezig, niet getest |
+| 6 | Microsoft Ads | OAuth2 | ✅ Klaar voor test (credentials nodig) |
 
 ### 📋 Fase 3+ — Toekomstig
 
@@ -368,6 +368,7 @@ Twee rijen met dezelfde source, datum, level en dimensiewaarden krijgen dezelfde
 | CRM | HubSpot, Salesforce, Pipedrive |
 | Email | Mailchimp, ActiveCampaign, Braze |
 | Data Import | CSV/Excel, Google Sheets, BigQuery, Webhook API |
+| E-commerce & CMS | Shopware |
 
 ---
 
@@ -386,6 +387,69 @@ src/lib/data-integration/connectors/{slug}-connector.ts
 5. **Implementeer `authenticate()`** — OAuth2 of API key
 6. **Voeg velden toe aan `field-registry.ts`** — unieke dimensies/metrics met NL/EN namen
 7. Data gaat automatisch door normalization pipeline → ClickHouse
+
+## Connector Controle-Checklist ✅
+
+> **Gebruik deze checklist bij elke nieuwe connector of wijziging aan een bestaande connector.**
+> Gebaseerd op bugs gevonden tijdens Microsoft Ads, LinkedIn Ads en Meta Ads integratie (maart 2026).
+
+### 1. Connector Code
+
+- [ ] `extractMetrics()` retourneert **platform** veldnamen (bijv. `Spend`, `costInLocalCurrency`), NIET canonical namen (`cost`)
+- [ ] `extractDimensions()` retourneert **platform** veldnamen (bijv. `TimePeriod`, `date_start`), NIET canonical namen (`date`)
+- [ ] `getMetricMappings()` mapt elk platform veld naar een canonical veld
+- [ ] `getDimensionMappings()` mapt elk platform veld naar een canonical veld
+- [ ] Alle canonical velden bestaan in `field-registry.ts` (DIMENSIONS + BASE_METRICS)
+- [ ] Alle canonical velden bestaan als kolommen in ClickHouse `metrics_data`
+- [ ] `parseCredentials<T>()` leest JSON token correct (met refreshToken indien nodig)
+- [ ] `getAvailableAccounts()` retourneert `{ externalId, name, currency }[]`
+
+### 2. OAuth Flow
+
+- [ ] **Link route** (`/api/auth/{connector}/link/route.ts`): juiste scopes, redirect URI, state = clientId
+- [ ] **Callback route** (`/api/auth/{connector}/callback/route.ts`):
+  - [ ] Zoekt of maakt `ConnectorDefinition` (via `prisma.connectorDefinition.findUnique({ slug })`)
+  - [ ] Slaat token op als **JSON** (`{ accessToken, refreshToken }`)
+  - [ ] Versleutelt token met `encrypt()`
+  - [ ] Zet `connectorId` op de `DataSource`
+  - [ ] Ontdekt accounts via de platform API
+  - [ ] Maakt `DataSourceAccount` records aan per account
+  - [ ] Triggert auto-sync via `syncScheduler.scheduleNow()`
+
+### 3. Sync Engine
+
+- [ ] Connector type staat in `tokenTypes` array in `sync-access/route.ts`
+- [ ] Date-extractie in `sync-engine.ts` ondersteunt het platform-specifieke datumveld
+  - Google Ads: `date` / `Date`
+  - Meta: `date_start`  
+  - Microsoft: `TimePeriod`
+  - LinkedIn: `dateRange.start`
+- [ ] Level-gebaseerde stale detectie in `normalization-service.ts` (niet cross-level deleten)
+
+### 4. UI Integratie
+
+- [ ] Reconnect route in `DataSourceActions.tsx` → `linkRoutes` map
+- [ ] Connector naam in `field-registry.ts` → `connector_name` builtin dimension
+- [ ] Koppel-knop op de bronnen-pagina (niet "coming soon")
+- [ ] Toegangen-pagina werkt (data sources met `linkedAccounts`)
+
+### 5. Environment
+
+- [ ] `.env` variabelen toegevoegd (CLIENT_ID, CLIENT_SECRET, eventueel DEVELOPER_TOKEN)
+- [ ] `.env.example` bijgewerkt (indien aanwezig)
+- [ ] Productie-server: redirect URI geconfigureerd in het platform developer portal
+
+### 6. Testen
+
+- [ ] OAuth koppeling werkt → DataSource + DataSourceAccount aangemaakt
+- [ ] Sync levert rijen op in ClickHouse
+- [ ] Alle levels bevatten data (campaign, ad_group, ad)
+- [ ] `extra_dimensions == '{}'` → geen unmapped dimensies
+- [ ] `extra_metrics == '{}'` → geen unmapped metrics
+- [ ] Dimensies gevuld (campaign_name, ad_group_name, etc.)
+- [ ] Cost/impressions/clicks correct (niet 0, niet micro-units)
+- [ ] Data zichtbaar in Data Explorer
+- [ ] Metrics/Dimensies API toont waarden voor deze connector
 
 ---
 

@@ -12,13 +12,13 @@ export async function GET() {
 
     const preferences = await (prisma as any).userNotificationPreference.findMany({
         where: { userId: session.user.id },
-        select: { clientId: true, enabled: true }
+        select: { projectId: true, enabled: true }
     });
 
-    // Build a map: { clientId: boolean }
+    // Build a map: { projectId: boolean }
     const prefMap: Record<string, boolean> = {};
     for (const p of preferences) {
-        prefMap[p.clientId] = p.enabled;
+        prefMap[p.projectId] = p.enabled;
     }
 
     return NextResponse.json({ preferences: prefMap });
@@ -26,43 +26,43 @@ export async function GET() {
 
 /**
  * PATCH — toggle notification preference for a specific client
- * Body: { clientId: string, enabled: boolean }
+ * Body: { projectId: string, enabled: boolean }
  */
 export async function PATCH(req: NextRequest) {
     const session = await auth();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { clientId, enabled } = await req.json();
+    const { projectId, enabled } = await req.json();
 
-    if (!clientId || typeof enabled !== "boolean") {
-        return NextResponse.json({ error: "clientId and enabled (boolean) are required." }, { status: 400 });
+    if (!projectId || typeof enabled !== "boolean") {
+        return NextResponse.json({ error: "projectId and enabled (boolean) are required." }, { status: 400 });
     }
 
     // Verify user has access to this client
     const user = await prisma.user.findUnique({
         where: { id: session.user.id },
-        select: { clients: { where: { id: clientId }, select: { id: true } } }
+        select: { projects: { where: { id: projectId }, select: { id: true } } }
     });
 
-    if (!user || user.clients.length === 0) {
+    if (!user || user.projects.length === 0) {
         return NextResponse.json({ error: "Geen toegang tot dit project." }, { status: 403 });
     }
 
     // Upsert the preference
     await (prisma as any).userNotificationPreference.upsert({
         where: {
-            userId_clientId: {
+            userId_projectId: {
                 userId: session.user.id,
-                clientId
+                projectId
             }
         },
         update: { enabled },
         create: {
             userId: session.user.id,
-            clientId,
+            projectId,
             enabled
         }
     });
 
-    return NextResponse.json({ success: true, clientId, enabled });
+    return NextResponse.json({ success: true, projectId, enabled });
 }

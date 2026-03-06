@@ -240,9 +240,9 @@ export default function NotificationDropdown() {
                                             <span style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
                                                 {getTimeAgo(notif.createdAt)}
                                             </span>
-                                            {notif.client?.name && (
+                                            {notif.project?.name && (
                                                 <span style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
-                                                    • {notif.client.name}
+                                                    • {notif.project.name}
                                                 </span>
                                             )}
                                             {!notif.read && (

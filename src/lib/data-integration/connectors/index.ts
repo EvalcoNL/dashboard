@@ -1,7 +1,3 @@
-// ═══════════════════════════════════════════════════════════════════
-// Connector Registration — Auto-registers all available connectors
-// ═══════════════════════════════════════════════════════════════════
-
 import { connectorRegistry } from '@/lib/data-integration/connector-registry';
 import { GoogleAdsConnector } from './google-ads-connector';
 import { GoogleAnalyticsConnector } from './google-analytics-connector';
@@ -9,6 +5,8 @@ import { MetaAdsConnector } from './meta-ads-connector';
 import { MicrosoftAdsConnector } from './microsoft-ads-connector';
 import { LinkedInAdsConnector } from './linkedin-ads-connector';
 import { TikTokAdsConnector } from './tiktok-ads-connector';
+import { MagentoConnector } from './magento-connector';
+import { ShopwareConnector } from './shopware-connector';
 
 /**
  * Register all available connectors.
@@ -22,6 +20,8 @@ export function registerAllConnectors(): void {
         new MicrosoftAdsConnector(),
         new LinkedInAdsConnector(),
         new TikTokAdsConnector(),
+        new MagentoConnector(),
+        new ShopwareConnector(),
     ];
 
     for (const connector of connectors) {
@@ -41,3 +41,5 @@ export { MetaAdsConnector } from './meta-ads-connector';
 export { MicrosoftAdsConnector } from './microsoft-ads-connector';
 export { LinkedInAdsConnector } from './linkedin-ads-connector';
 export { TikTokAdsConnector } from './tiktok-ads-connector';
+export { MagentoConnector } from './magento-connector';
+export { ShopwareConnector } from './shopware-connector';

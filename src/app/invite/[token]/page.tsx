@@ -11,9 +11,9 @@ export default async function InvitePage({
 }) {
     const { token } = await params;
 
-    const invite = await (prisma as any).clientInvite.findUnique({
+    const invite = await (prisma as any).projectInvite.findUnique({
         where: { token },
-        include: { client: true }
+        include: { project: true }
     });
 
     if (!invite) {
@@ -37,14 +37,14 @@ export default async function InvitePage({
         await prisma.user.update({
             where: { id: session.user.id },
             data: {
-                clients: {
-                    connect: { id: invite.clientId }
+                projects: {
+                    connect: { id: invite.projectId }
                 }
             }
         });
 
         // 2. Mark the invite as ACCEPTED
-        await (prisma as any).clientInvite.update({
+        await (prisma as any).projectInvite.update({
             where: { id: invite.id },
             data: { status: "ACCEPTED" }
         });
@@ -52,8 +52,8 @@ export default async function InvitePage({
         return (
             <InviteMessage
                 title="Uitnodiging Geaccepteerd!"
-                message={`Je hebt nu succesvol toegang tot het account van ${invite.client.name}.`}
-                actionLink="/dashboard"
+                message={`Je hebt nu succesvol toegang tot het account van ${invite.project.name}.`}
+                actionLink="/"
                 actionLabel="Ga naar het Dashboard"
             />
         );
@@ -79,7 +79,7 @@ export default async function InvitePage({
         <InviteAcceptance
             token={token}
             email={invite.email.toLowerCase()}
-            clientName={invite.client.name}
+            clientName={invite.project.name}
             userExists={!!existingUser}
         />
     );
@@ -124,7 +124,7 @@ function InviteMessage({ title, message, isError = false, actionLink, actionLabe
                 )}
 
                 {isError && (
-                    <Link href="/dashboard" style={{
+                    <Link href="/" style={{
                         display: "inline-block", padding: "12px 24px",
                         border: "1px solid var(--color-border)", color: "var(--color-text-primary)",
                         borderRadius: "8px", fontWeight: 600, textDecoration: "none"

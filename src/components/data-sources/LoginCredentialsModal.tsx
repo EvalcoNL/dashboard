@@ -6,14 +6,14 @@ import { X, User, Lock, Loader2, Eye, EyeOff } from "lucide-react";
 interface LoginCredentialsModalProps {
     open: boolean;
     onClose: () => void;
-    clientId: string;
+    projectId: string;
     platformType: string;
     platformName: string;
     platformColor: string;
 }
 
 export default function LoginCredentialsModal({
-    open, onClose, clientId, platformType, platformName, platformColor,
+    open, onClose, projectId, platformType, platformName, platformColor,
 }: LoginCredentialsModalProps) {
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
@@ -35,7 +35,7 @@ export default function LoginCredentialsModal({
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    clientId,
+                    projectId,
                     platformType,
                     name: name || `${platformName} - ${username}`,
                     config: { username, password },

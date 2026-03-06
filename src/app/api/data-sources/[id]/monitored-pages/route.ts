@@ -85,6 +85,14 @@ export async function DELETE(
         return NextResponse.json({ error: "pageId is verplicht" }, { status: 400 });
     }
 
+    // Verify the page belongs to THIS data source (prevent IDOR)
+    const page = await (prisma as any).monitoredPage.findFirst({
+        where: { id: body.pageId, dataSourceId: id }
+    });
+    if (!page) {
+        return NextResponse.json({ error: "Pagina niet gevonden" }, { status: 404 });
+    }
+
     await (prisma as any).monitoredPage.delete({
         where: { id: body.pageId }
     });

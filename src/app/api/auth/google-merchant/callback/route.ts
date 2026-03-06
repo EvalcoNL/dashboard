@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { decodeOAuthState } from "@/lib/oauth-state";
 import { encrypt } from "@/lib/encryption";
 
 export async function GET(req: NextRequest) {
@@ -10,14 +11,15 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const code = searchParams.get("code");
-    const clientId = searchParams.get("state");
+    const rawState = searchParams.get("state") || "";
+    const projectId = decodeOAuthState(rawState);
     const error = searchParams.get("error");
     const origin = process.env.NEXTAUTH_URL || new URL(req.url).origin;
 
-    if (error || !code || !clientId) {
-        const redirectPath = clientId
-            ? `/dashboard/projects/${clientId}/data/sources?error=${error === "access_denied" ? "Koppeling geannuleerd" : "MerchantLinkFailed"}`
-            : "/dashboard";
+    if (error || !code || !projectId) {
+        const redirectPath = projectId
+            ? `/projects/${projectId}/data/sources?error=${error === "access_denied" ? "Koppeling geannuleerd" : "MerchantLinkFailed"}`
+            : "/";
         return NextResponse.redirect(`${origin}${redirectPath}`);
     }
 
@@ -31,7 +33,7 @@ export async function GET(req: NextRequest) {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: new URLSearchParams({
                 code,
-                client_id: process.env.GOOGLE_OAUTH_CLIENT_ID || "",
+                project_id: process.env.GOOGLE_OAUTH_CLIENT_ID || "",
                 client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET || "",
                 redirect_uri: redirectUri,
                 grant_type: "authorization_code",
@@ -44,12 +46,12 @@ export async function GET(req: NextRequest) {
         const refreshToken = tokenData.refresh_token;
 
         if (!refreshToken) {
-            return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/data/sources?error=NoRefreshToken`);
+            return NextResponse.redirect(`${origin}/projects/${projectId}/data/sources?error=NoRefreshToken`);
         }
 
         const pendingSource = await prisma.dataSource.create({
             data: {
-                clientId: clientId,
+                projectId: projectId,
                 type: "GOOGLE_MERCHANT",
                 category: "APP",
                 externalId: "PENDING",
@@ -60,9 +62,9 @@ export async function GET(req: NextRequest) {
         });
 
         // Redirect to selection UI
-        return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/link-merchant?sourceId=${pendingSource.id}`);
+        return NextResponse.redirect(`${origin}/projects/${projectId}/link-merchant?sourceId=${pendingSource.id}`);
     } catch (error: any) {
         console.error("Google Merchant OAuth Callback Error:", error);
-        return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/data/sources?error=MerchantLinkFailed`);
+        return NextResponse.redirect(`${origin}/projects/${projectId}/data/sources?error=MerchantLinkFailed`);
     }
 }

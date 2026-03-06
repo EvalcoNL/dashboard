@@ -47,10 +47,10 @@ export class LinkedInAdsConnector extends BaseConnector {
     // ─── Authentication ───
 
     async getAuthUrl(redirectUri: string, state?: string): Promise<string> {
-        const clientId = process.env.LINKEDIN_CLIENT_ID || '';
+        const projectId = process.env.LINKEDIN_CLIENT_ID || '';
         const params = new URLSearchParams({
             response_type: 'code',
-            client_id: clientId,
+            client_id: projectId,
             redirect_uri: redirectUri,
             scope: 'r_ads r_ads_reporting r_organization_social',
             ...(state && { state }),
@@ -61,7 +61,7 @@ export class LinkedInAdsConnector extends BaseConnector {
     async authenticate(params: Record<string, string>): Promise<AuthResult> {
         try {
             const { code, redirectUri } = params;
-            const clientId = process.env.LINKEDIN_CLIENT_ID || '';
+            const projectId = process.env.LINKEDIN_CLIENT_ID || '';
             const clientSecret = process.env.LINKEDIN_CLIENT_SECRET || '';
 
             const response = await fetch(`${LINKEDIN_AUTH}/accessToken`, {
@@ -71,7 +71,7 @@ export class LinkedInAdsConnector extends BaseConnector {
                     grant_type: 'authorization_code',
                     code,
                     redirect_uri: redirectUri,
-                    client_id: clientId,
+                    client_id: projectId,
                     client_secret: clientSecret,
                 }),
             });
@@ -234,6 +234,17 @@ export class LinkedInAdsConnector extends BaseConnector {
                 transform: (v: number) => Number((v / 100).toFixed(2)), // LinkedIn reports cost in cents
             },
             { platformField: 'externalWebsiteConversions', canonicalField: 'conversions' as CanonicalMetric },
+            {
+                platformField: 'conversionValueInLocalCurrency',
+                canonicalField: 'conversion_value' as CanonicalMetric,
+                transform: (v: number) => Number((v / 100).toFixed(2)),
+            },
+            { platformField: 'videoViews', canonicalField: 'video_views' as CanonicalMetric },
+            { platformField: 'totalEngagements', canonicalField: 'engagements' as CanonicalMetric },
+            { platformField: 'shares', canonicalField: 'shares' as CanonicalMetric },
+            { platformField: 'likes', canonicalField: 'likes' as CanonicalMetric },
+            { platformField: 'comments', canonicalField: 'comments' as CanonicalMetric },
+            { platformField: 'follows', canonicalField: 'follows' as CanonicalMetric },
         ];
     }
 
@@ -249,24 +260,25 @@ export class LinkedInAdsConnector extends BaseConnector {
     }
 
     private extractDimensionsFromRow(row: Record<string, unknown>, level: string, fallbackDate: string): Record<string, string | number | boolean> {
+        // Use PLATFORM field names here — mapDimensions() handles the canonical mapping
         const dims: Record<string, string | number | boolean> = {};
 
-        // Extract date
+        // Extract date as 'dateRange.start' key for the dimension mapping
         const dateRange = row.dateRange as Record<string, Record<string, number>> | undefined;
         if (dateRange?.start) {
             const { year, month, day } = dateRange.start;
-            dims.date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            dims['dateRange.start'] = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         } else {
-            dims.date = fallbackDate;
+            dims['dateRange.start'] = fallbackDate;
         }
 
-        // Extract pivot value as campaign/creative id
+        // Extract pivot value — keep as 'pivotValue' for the dimension mapping
         if (row.pivotValue) {
             const pivotStr = String(row.pivotValue);
             if (level === 'creative') {
-                dims.ad_id = pivotStr.replace('urn:li:sponsoredCreative:', '');
+                dims.pivotValue = pivotStr.replace('urn:li:sponsoredCreative:', '');
             } else {
-                dims.campaign_id = pivotStr.replace('urn:li:sponsoredCampaign:', '').replace('urn:li:sponsoredCampaignGroup:', '');
+                dims.pivotValue = pivotStr.replace('urn:li:sponsoredCampaign:', '').replace('urn:li:sponsoredCampaignGroup:', '');
             }
         }
 
@@ -274,15 +286,16 @@ export class LinkedInAdsConnector extends BaseConnector {
     }
 
     private extractMetricsFromRow(row: Record<string, unknown>): Record<string, number> {
+        // Use PLATFORM field names here — mapMetrics() handles the canonical mapping
         const mets: Record<string, number> = {};
 
         if (row.impressions !== undefined) mets.impressions = Number(row.impressions);
         if (row.clicks !== undefined) mets.clicks = Number(row.clicks);
-        if (row.costInLocalCurrency !== undefined) mets.cost = Number(row.costInLocalCurrency) / 100;
-        if (row.externalWebsiteConversions !== undefined) mets.conversions = Number(row.externalWebsiteConversions);
-        if (row.conversionValueInLocalCurrency !== undefined) mets.conversion_value = Number(row.conversionValueInLocalCurrency) / 100;
-        if (row.videoViews !== undefined) mets.video_views = Number(row.videoViews);
-        if (row.totalEngagements !== undefined) mets.engagements = Number(row.totalEngagements);
+        if (row.costInLocalCurrency !== undefined) mets.costInLocalCurrency = Number(row.costInLocalCurrency);
+        if (row.externalWebsiteConversions !== undefined) mets.externalWebsiteConversions = Number(row.externalWebsiteConversions);
+        if (row.conversionValueInLocalCurrency !== undefined) mets.conversionValueInLocalCurrency = Number(row.conversionValueInLocalCurrency);
+        if (row.videoViews !== undefined) mets.videoViews = Number(row.videoViews);
+        if (row.totalEngagements !== undefined) mets.totalEngagements = Number(row.totalEngagements);
         if (row.shares !== undefined) mets.shares = Number(row.shares);
         if (row.likes !== undefined) mets.likes = Number(row.likes);
         if (row.comments !== undefined) mets.comments = Number(row.comments);

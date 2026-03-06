@@ -12,7 +12,7 @@ export async function POST(
 
     try {
         const { id } = await params;
-        const result = await syncService.syncClientData(id);
+        const result = await syncService.syncProjectData(id);
         return NextResponse.json(result);
     } catch (error: any) {
         console.error("Sync Error:", error);

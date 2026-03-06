@@ -8,7 +8,7 @@ import { prisma } from '@/lib/db';
 import { query as chQuery } from '@/lib/clickhouse';
 
 /**
- * GET /api/data-integration/datasets?clientId=xxx
+ * GET /api/data-integration/datasets?projectId=xxx
  * List all datasets with source data sources and field info.
  */
 export async function GET(request: Request) {
@@ -17,11 +17,11 @@ export async function GET(request: Request) {
         if (authError) return authError;
 
         const { searchParams } = new URL(request.url);
-        const clientId = searchParams.get('clientId');
-        if (!clientId) return NextResponse.json({ error: 'clientId required' }, { status: 400 });
+        const projectId = searchParams.get('projectId');
+        if (!projectId) return NextResponse.json({ error: 'projectId required' }, { status: 400 });
 
         const datasets = await prisma.dataset.findMany({
-            where: { clientId },
+            where: { projectId },
             include: {
                 sources: {
                     select: {
@@ -91,11 +91,11 @@ export async function POST(request: Request) {
         const [, authError] = await requireAuth();
         if (authError) return authError;
 
-        const { clientId } = await request.json();
-        if (!clientId) return NextResponse.json({ error: 'clientId required' }, { status: 400 });
+        const { projectId } = await request.json();
+        if (!projectId) return NextResponse.json({ error: 'projectId required' }, { status: 400 });
 
         const sources = await prisma.dataSource.findMany({
-            where: { clientId, syncStatus: 'ACTIVE' },
+            where: { projectId, syncStatus: 'ACTIVE' },
             include: { connector: true },
         });
 
@@ -126,7 +126,7 @@ export async function POST(request: Request) {
 
         for (const def of systemDatasets) {
             const existing = await prisma.dataset.findUnique({
-                where: { clientId_slug: { clientId, slug: def.slug } },
+                where: { projectId_slug: { projectId, slug: def.slug } },
             });
             if (existing) continue;
 
@@ -138,7 +138,7 @@ export async function POST(request: Request) {
 
             const dataset = await prisma.dataset.create({
                 data: {
-                    clientId,
+                    projectId,
                     slug: def.slug,
                     name: def.name,
                     description: def.description,

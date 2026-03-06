@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { decodeOAuthState } from "@/lib/oauth-state";
 import { encrypt } from "@/lib/encryption";
 
 export async function GET(req: NextRequest) {
@@ -10,15 +11,16 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const code = searchParams.get("code");
-    const clientId = searchParams.get("state");
+    const rawState = searchParams.get("state") || "";
+    const projectId = decodeOAuthState(rawState);
     const error = searchParams.get("error");
 
     const origin = process.env.NEXTAUTH_URL || new URL(req.url).origin;
 
-    if (error || !code || !clientId) {
-        const redirectPath = clientId
-            ? `/dashboard/projects/${clientId}/data/sources?error=${error === "access_denied" ? "Koppeling geannuleerd" : "BusinessLinkFailed"}`
-            : "/dashboard";
+    if (error || !code || !projectId) {
+        const redirectPath = projectId
+            ? `/projects/${projectId}/data/sources?error=${error === "access_denied" ? "Koppeling geannuleerd" : "BusinessLinkFailed"}`
+            : "/";
         return NextResponse.redirect(`${origin}${redirectPath}`);
     }
 
@@ -28,7 +30,7 @@ export async function GET(req: NextRequest) {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: new URLSearchParams({
-                code, client_id: process.env.GOOGLE_OAUTH_CLIENT_ID || "",
+                code, project_id: process.env.GOOGLE_OAUTH_CLIENT_ID || "",
                 client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET || "",
                 redirect_uri: redirectUri, grant_type: "authorization_code",
             }),
@@ -36,7 +38,7 @@ export async function GET(req: NextRequest) {
         const tokenData = await tokenResponse.json();
         if (tokenData.error) throw new Error(tokenData.error_description || tokenData.error);
         const refreshToken = tokenData.refresh_token;
-        if (!refreshToken) return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/data/sources?error=NoRefreshToken`);
+        if (!refreshToken) return NextResponse.redirect(`${origin}/projects/${projectId}/data/sources?error=NoRefreshToken`);
 
         // Fetch business accounts
         const accessToken = tokenData.access_token;
@@ -51,13 +53,13 @@ export async function GET(req: NextRequest) {
             // No accounts found — create pending source for visibility
             await prisma.dataSource.create({
                 data: {
-                    clientId, type: "GOOGLE_BUSINESS", category: "APP",
+                    projectId, type: "GOOGLE_BUSINESS", category: "APP",
                     externalId: "PENDING",
                     name: "Google Business Profile (geen accounts gevonden)",
                     token: encrypt(refreshToken), active: false,
                 },
             });
-            return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/data/sources?error=NoBusinessAccounts`);
+            return NextResponse.redirect(`${origin}/projects/${projectId}/data/sources?error=NoBusinessAccounts`);
         }
 
         if (accounts.length === 1) {
@@ -68,26 +70,26 @@ export async function GET(req: NextRequest) {
 
             // Skip if already linked
             const existing = await prisma.dataSource.findFirst({
-                where: { clientId, type: "GOOGLE_BUSINESS", externalId: accountId },
+                where: { projectId, type: "GOOGLE_BUSINESS", externalId: accountId },
             });
 
             if (!existing) {
                 await prisma.dataSource.create({
                     data: {
-                        clientId, type: "GOOGLE_BUSINESS", category: "APP",
+                        projectId, type: "GOOGLE_BUSINESS", category: "APP",
                         externalId: accountId,
                         name: accountName,
                         token: encrypt(refreshToken), active: true,
                     },
                 });
             }
-            return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/data/sources`);
+            return NextResponse.redirect(`${origin}/projects/${projectId}/data/sources`);
         }
 
         // Multiple accounts — create pending source with account list and redirect to picker
         const pendingSource = await prisma.dataSource.create({
             data: {
-                clientId, type: "GOOGLE_BUSINESS", category: "APP",
+                projectId, type: "GOOGLE_BUSINESS", category: "APP",
                 externalId: "PENDING",
                 name: "Pending Google Business Profile Link",
                 token: encrypt(refreshToken), active: false,
@@ -101,9 +103,9 @@ export async function GET(req: NextRequest) {
             },
         });
 
-        return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/link-business?sourceId=${pendingSource.id}`);
+        return NextResponse.redirect(`${origin}/projects/${projectId}/link-business?sourceId=${pendingSource.id}`);
     } catch (error: any) {
         console.error("Google Business OAuth Error:", error);
-        return NextResponse.redirect(`${origin}/dashboard/projects/${clientId}/data/sources?error=BusinessLinkFailed`);
+        return NextResponse.redirect(`${origin}/projects/${projectId}/data/sources?error=BusinessLinkFailed`);
     }
 }

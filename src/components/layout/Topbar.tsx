@@ -88,7 +88,7 @@ export default function Topbar() {
                     {sidebarOpen ? <X size={22} /> : <Menu size={22} />}
                 </button>
                 <Link
-                    href="/dashboard"
+                    href="/"
                     style={{
                         display: "flex",
                         alignItems: "center",
@@ -231,7 +231,7 @@ export default function Topbar() {
                             </div>
 
                             <Link
-                                href="/dashboard/settings"
+                                href="/settings"
                                 onClick={() => setIsUserMenuOpen(false)}
                                 style={{
                                     display: "flex",

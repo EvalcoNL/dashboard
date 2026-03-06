@@ -13,15 +13,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         }
 
         const resolvedParams = await params;
-        const clientId = resolvedParams.id;
+        const projectId = resolvedParams.id;
 
-        if (!clientId) {
+        if (!projectId) {
             return NextResponse.json({ error: "Missing client ID" }, { status: 400 });
         }
 
         // Fetch the client with notification users
-        const client = await prisma.client.findUnique({
-            where: { id: clientId },
+        const client = await prisma.project.findUnique({
+            where: { id: projectId },
             include: {
                 notificationUsers: { select: { email: true } }
             }

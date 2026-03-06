@@ -32,9 +32,9 @@ export interface HealthSummary {
 }
 
 export class ConnectionHealthMonitor {
-    async getClientHealth(clientId: string): Promise<HealthSummary> {
+    async getClientHealth(projectId: string): Promise<HealthSummary> {
         const sources = await prisma.dataSource.findMany({
-            where: { clientId },
+            where: { projectId },
             include: { connector: true },
         });
 
@@ -150,7 +150,7 @@ export class ConnectionHealthMonitor {
         let totalRecords = 0;
         try {
             const result = await chQuery<{ cnt: string }>(
-                `SELECT count() AS cnt FROM metrics_data FINAL WHERE data_source_id = {dsId:String}`,
+                `SELECT count() AS cnt FROM metrics_data WHERE data_source_id = {dsId:String}`,
                 { dsId: source.id }
             );
             totalRecords = Number(result[0]?.cnt || 0);

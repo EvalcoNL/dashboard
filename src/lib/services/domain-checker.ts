@@ -58,7 +58,7 @@ export async function performUptimeCheck(domainId: string) {
             if (missingSelected.length > 0) {
                 await (prisma as any).notification.create({
                     data: {
-                        clientId: domain.clientId,
+                        projectId: domain.projectId,
                         type: "PIXEL_MISSING",
                         title: `Tracking scripts ontbreken`,
                         message: `De volgende geselecteerde scripts zijn niet gevonden op ${domain.externalId}: ${missingSelected.join(", ")}.`,
@@ -83,7 +83,7 @@ export async function performUptimeCheck(domainId: string) {
         // Create notification for non-200 status codes
         if (statusCode !== null && statusCode !== 200) {
             await createStatusNotification(
-                domain.clientId,
+                domain.projectId,
                 targetUrl,
                 statusCode,
                 domain.name || domain.externalId
@@ -105,7 +105,7 @@ export async function performUptimeCheck(domainId: string) {
 
             if (elapsedMins >= confirmationMins) {
                 await autoCreateIncident({
-                    clientId: domain.clientId,
+                    projectId: domain.projectId,
                     dataSourceId: domain.id,
                     title: domain.name || domain.externalId,
                     checkedUrl: targetUrl,
@@ -153,7 +153,7 @@ export async function performUptimeCheck(domainId: string) {
             // Create notification for non-200 status codes
             if (result.statusCode !== null && result.statusCode !== 200) {
                 await createStatusNotification(
-                    domain.clientId,
+                    domain.projectId,
                     pageUrl,
                     result.statusCode,
                     page.label || page.url
@@ -166,7 +166,7 @@ export async function performUptimeCheck(domainId: string) {
             // For now, let's just keep the direct behavior to avoid over-complicating the domain config JSON.
             if (result.statusCode !== null && result.statusCode >= 400) {
                 await autoCreateIncident({
-                    clientId: domain.clientId,
+                    projectId: domain.projectId,
                     dataSourceId: domain.id,
                     title: `${domain.externalId}${page.url}`,
                     checkedUrl: pageUrl,
@@ -227,7 +227,7 @@ export async function performUptimeCheck(domainId: string) {
                 if (daysLeft <= threshold) {
                     await (prisma as any).notification.create({
                         data: {
-                            clientId: domain.clientId,
+                            projectId: domain.projectId,
                             type: "SSL_EXPIRING",
                             title: `SSL Certificaat verloopt bijna`,
                             message: `Het SSL certificaat voor ${domain.externalId} verloopt over ${daysLeft} dagen (${expires.toLocaleDateString('nl-NL')}).`,
@@ -333,7 +333,7 @@ function detectTrackingScripts(html: string) {
  * for the same URL + statusCode in the last hour.
  */
 async function createStatusNotification(
-    clientId: string,
+    projectId: string,
     url: string,
     statusCode: number,
     label: string
@@ -343,7 +343,7 @@ async function createStatusNotification(
     // Check for existing unread notification for same URL + statusCode
     const existing = await (prisma as any).notification.findFirst({
         where: {
-            clientId,
+            projectId,
             url,
             statusCode,
             read: false,
@@ -358,7 +358,7 @@ async function createStatusNotification(
 
     await (prisma as any).notification.create({
         data: {
-            clientId,
+            projectId,
             type: "STATUS_CODE_ERROR",
             title: `${statusLabel} op ${label}`,
             message: `${url} retourneert statuscode ${statusCode} (${statusLabel})`,
@@ -396,7 +396,7 @@ function getStatusLabel(code: number): string {
  * Auto-create an incident if no open incident exists for the same checked URL.
  */
 async function autoCreateIncident(opts: {
-    clientId: string;
+    projectId: string;
     dataSourceId: string;
     title: string;
     checkedUrl: string;
@@ -407,7 +407,7 @@ async function autoCreateIncident(opts: {
     // Check if there's already an open incident for this URL
     const existing = await (prisma as any).incident.findFirst({
         where: {
-            clientId: opts.clientId,
+            projectId: opts.projectId,
             checkedUrl: opts.checkedUrl,
             status: { in: ["ONGOING", "ACKNOWLEDGED"] },
         },
@@ -420,7 +420,7 @@ async function autoCreateIncident(opts: {
 
     const incident = await (prisma as any).incident.create({
         data: {
-            clientId: opts.clientId,
+            projectId: opts.projectId,
             dataSourceId: opts.dataSourceId,
             title: opts.title,
             cause: `Status ${causeCode}`,
@@ -441,9 +441,9 @@ async function autoCreateIncident(opts: {
     });
 
     // Resolve notification config (respects global/custom/disabled mode)
-    const notifConfig = await resolveNotificationConfig(opts.clientId);
-    const client = await (prisma as any).client.findUnique({
-        where: { id: opts.clientId },
+    const notifConfig = await resolveNotificationConfig(opts.projectId);
+    const client = await (prisma as any).project.findUnique({
+        where: { id: opts.projectId },
         select: { name: true }
     });
 
@@ -490,7 +490,7 @@ export async function autoResolveIncidents(dataSourceId: string, checkedUrl: str
     const now = new Date();
     const dataSource = await (prisma as any).dataSource.findUnique({
         where: { id: dataSourceId },
-        select: { clientId: true, name: true, externalId: true }
+        select: { projectId: true, name: true, externalId: true }
     });
 
     if (!dataSource) return;
@@ -523,9 +523,9 @@ export async function autoResolveIncidents(dataSourceId: string, checkedUrl: str
         const duration = formatDistanceStrict(inc.startedAt, now, { locale: nl });
 
         // Trigger Resolution Notifications (respects global/custom/disabled mode)
-        const notifConfig = await resolveNotificationConfig(dataSource.clientId);
-        const client = await (prisma as any).client.findUnique({
-            where: { id: dataSource.clientId },
+        const notifConfig = await resolveNotificationConfig(dataSource.projectId);
+        const client = await (prisma as any).project.findUnique({
+            where: { id: dataSource.projectId },
             select: { name: true }
         });
 
