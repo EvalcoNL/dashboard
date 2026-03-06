@@ -50,5 +50,11 @@ export default async function DashboardPage() {
         redirect(`/projects/${clientsWithMetrics[0].id}`);
     }
 
-    return <DashboardHome projects={clientsWithMetrics} userName={session.user.name} />;
+    // Get user's dashboard view preference
+    const user = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { dashboardView: true },
+    });
+
+    return <DashboardHome projects={clientsWithMetrics} userName={session.user.name} defaultView={(user?.dashboardView as "cards" | "table") || "cards"} />;
 }

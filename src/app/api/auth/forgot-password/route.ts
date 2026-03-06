@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { sendPasswordResetEmail } from "@/lib/services/email-service";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
+    // Rate limit: 5 forgot-password requests per minute
+    const rateLimited = checkRateLimit(`forgot-pw:${getClientIp(req)}`, 5, 60_000);
+    if (rateLimited) return rateLimited;
+
     try {
         const { email } = await req.json();
 
@@ -10,7 +15,6 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "E-mailadres is verplicht" }, { status: 400 });
         }
 
-        console.log("[ForgotPassword] RESEND_API_KEY present:", !!process.env.RESEND_API_KEY);
 
         const user = await prisma.user.findUnique({
             where: { email },

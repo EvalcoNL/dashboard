@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Activity, Eye, EyeOff, AlertCircle, ShieldCheck, ChevronLeft, ArrowRight } from "lucide-react";
+import { Eye, EyeOff, AlertCircle, ShieldCheck, ChevronLeft, ArrowRight } from "lucide-react";
 
 export default function LoginPage() {
     const router = useRouter();
@@ -89,7 +89,7 @@ export default function LoginPage() {
             <main className="content-wrapper">
                 <div className="header">
                     <div className="logo-box">
-                        <Activity size={32} strokeWidth={2.5} />
+                        <img src="/images/logo/logo_icon.svg" alt="Evalco" width={32} height={32} />
                     </div>
                     <h1>Evalco Dashboard</h1>
                     <p>AI Performance Analysis Platform</p>
@@ -266,12 +266,7 @@ export default function LoginPage() {
 
                 .logo-box {
                     display: inline-flex;
-                    padding: 12px;
-                    background: linear-gradient(135deg, #6366f1, #8b5cf6);
-                    border-radius: 16px;
                     margin-bottom: 20px;
-                    box-shadow: 0 8px 32px rgba(99, 102, 241, 0.4);
-                    color: white;
                 }
 
                 h1 {

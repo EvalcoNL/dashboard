@@ -1,5 +1,7 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
     TrendingUp,
@@ -8,10 +10,15 @@ import {
     AlertTriangle,
     CheckCircle,
     Clock,
-    ArrowUpRight,
+
     Users,
     Activity,
     BarChart3,
+    LayoutGrid,
+    List,
+    MoreVertical,
+    Settings,
+    Trash2,
 } from "lucide-react";
 import {
     aggregateCampaigns,
@@ -24,6 +31,8 @@ import {
     type TargetType,
 } from "@/lib/services/kpi-engine";
 import SummaryCard from "@/components/ui/SummaryCard";
+import DateRangePicker, { type DateRange } from "@/components/ui/DateRangePicker";
+import { useNotification } from "@/components/NotificationProvider";
 
 interface ProjectWithData {
     id: string;
@@ -58,27 +67,208 @@ interface ProjectWithData {
     }>;
 }
 
+type ViewMode = "cards" | "table";
+
 export default function DashboardHome({
     projects,
     userName,
+    defaultView = "cards",
 }: {
     projects: ProjectWithData[];
     userName: string;
+    defaultView?: ViewMode;
 }) {
+    const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
+    const [contextMenu, setContextMenu] = useState<string | null>(null);
+
+    // Date range state — default last 7 days
+    const [dateRange, setDateRange] = useState<DateRange>(() => {
+        const now = new Date();
+        const to = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+        const from = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
+        const fromStr = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, "0")}-${String(from.getDate()).padStart(2, "0")}`;
+        return { from: fromStr, to };
+    });
+    const menuRef = useRef<HTMLDivElement>(null);
+    const router = useRouter();
+    const { showToast, confirm } = useNotification();
+
+    // Close context menu on outside click
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+                setContextMenu(null);
+            }
+        };
+        if (contextMenu) document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [contextMenu]);
+
+    const toggleView = async (mode: ViewMode) => {
+        setViewMode(mode);
+        try {
+            await fetch("/api/user/dashboard-view", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ dashboardView: mode }),
+            });
+        } catch {
+            // Silently fail — preference is visual-only
+        }
+    };
+
+    const handleDelete = async (projectId: string, projectName: string) => {
+        setContextMenu(null);
+        const confirmed = await confirm({
+            title: "Project verwijderen",
+            message: `Weet je zeker dat je "${projectName}" wilt verwijderen? Dit kan niet ongedaan worden gemaakt en alle bijbehorende data wordt verwijderd.`,
+            confirmLabel: "Ja, verwijderen",
+            type: "danger",
+        });
+        if (!confirmed) return;
+        try {
+            const res = await fetch(`/api/projects/${projectId}`, { method: "DELETE" });
+            if (res.ok) {
+                showToast("success", "Project succesvol verwijderd");
+                router.refresh();
+            } else {
+                showToast("error", "Fout bij verwijderen. Probeer het opnieuw.");
+            }
+        } catch {
+            showToast("error", "Er ging iets mis.");
+        }
+    };
+
+    const [menuPos, setMenuPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+
+    const ContextMenuDropdown = ({ projectId, projectName }: { projectId: string; projectName: string }) => {
+        const btnRef = useRef<HTMLButtonElement>(null);
+
+        const handleToggle = (e: React.MouseEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (contextMenu === projectId) {
+                setContextMenu(null);
+            } else {
+                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                setMenuPos({ top: rect.bottom + 4, left: rect.right - 160 });
+                setContextMenu(projectId);
+            }
+        };
+
+        return (
+            <div style={{ position: "relative" }}>
+                <button
+                    ref={btnRef}
+                    onClick={handleToggle}
+                    style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: "28px",
+                        height: "28px",
+                        borderRadius: "6px",
+                        border: "none",
+                        background: contextMenu === projectId ? "rgba(99, 102, 241, 0.15)" : "transparent",
+                        color: "var(--color-text-muted)",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease",
+                    }}
+                    className="context-menu-trigger"
+                >
+                    <MoreVertical size={16} />
+                </button>
+                {contextMenu === projectId && (
+                    <div
+                        ref={menuRef}
+                        style={{
+                            position: "fixed",
+                            top: menuPos.top,
+                            left: menuPos.left,
+                            background: "var(--color-surface-elevated)",
+                            border: "1px solid var(--color-border)",
+                            borderRadius: "10px",
+                            padding: "4px",
+                            minWidth: "160px",
+                            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.3)",
+                            zIndex: 9999,
+                            animation: "fadeIn 0.15s ease",
+                        }}
+                    >
+                        <button
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setContextMenu(null);
+                                router.push(`/projects/${projectId}/settings`);
+                            }}
+                            style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "10px",
+                                width: "100%",
+                                padding: "8px 12px",
+                                borderRadius: "7px",
+                                border: "none",
+                                background: "transparent",
+                                color: "var(--color-text-primary)",
+                                cursor: "pointer",
+                                fontSize: "0.825rem",
+                                transition: "background 0.15s ease",
+                            }}
+                            className="context-menu-item"
+                        >
+                            <Settings size={14} />
+                            Instellingen
+                        </button>
+                        <div style={{ height: "1px", background: "var(--color-border)", margin: "4px 8px" }} />
+                        <button
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleDelete(projectId, projectName);
+                            }}
+                            style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "10px",
+                                width: "100%",
+                                padding: "8px 12px",
+                                borderRadius: "7px",
+                                border: "none",
+                                background: "transparent",
+                                color: "#ef4444",
+                                cursor: "pointer",
+                                fontSize: "0.825rem",
+                                transition: "background 0.15s ease",
+                            }}
+                            className="context-menu-item"
+                        >
+                            <Trash2 size={14} />
+                            Verwijderen
+                        </button>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     // Process KPIs for each client
     const clientKPIs = projects.map((client) => {
-        const now = new Date();
-        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+        // Use selected date range
+        const rangeFrom = new Date(dateRange.from + "T00:00:00");
+        const rangeTo = new Date(dateRange.to + "T23:59:59");
+        const rangeDays = Math.round((rangeTo.getTime() - rangeFrom.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+        const prevFrom = new Date(rangeFrom.getTime() - rangeDays * 24 * 60 * 60 * 1000);
 
         const currentMetrics = client.campaignMetrics.filter((m) => {
             const date = new Date(m.date);
-            return date >= sevenDaysAgo;
+            return date >= rangeFrom && date <= rangeTo;
         });
 
         const previousMetrics = client.campaignMetrics.filter((m) => {
             const date = new Date(m.date);
-            return date >= fourteenDaysAgo && date < sevenDaysAgo;
+            return date >= prevFrom && date < rangeFrom;
         });
 
         const currentPeriod = aggregateCampaigns(currentMetrics as never[]);
@@ -177,22 +367,88 @@ export default function DashboardHome({
                 />
                 <SummaryCard
                     icon={<BarChart3 size={20} />}
-                    label="Totale Spend (7d)"
+                    label="Totale Spend"
                     value={formatCurrency(totalSpend)}
                     color="var(--color-brand-light)"
                 />
             </div>
 
-            {/* Client Cards */}
+            {/* Projects header with view toggle + date picker */}
             <div style={{ marginBottom: "16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <h2 style={{ fontSize: "1.1rem", fontWeight: 600 }}>Projecten</h2>
-                <Link
-                    href="/projects/new"
-                    className="btn btn-primary btn-sm"
-                    style={{ textDecoration: "none" }}
-                >
-                    + Project Toevoegen
-                </Link>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    {/* Date Range Picker */}
+                    <DateRangePicker
+                        dateRange={dateRange}
+                        onApply={(range) => setDateRange(range)}
+                        showCompare={false}
+                    />
+                    {/* View Toggle */}
+                    <div
+                        style={{
+                            display: "flex",
+                            alignItems: "center",
+                            background: "rgba(30, 41, 59, 0.6)",
+                            borderRadius: "8px",
+                            padding: "3px",
+                            border: "1px solid rgba(51, 65, 85, 0.4)",
+                        }}
+                    >
+                        <button
+                            onClick={() => toggleView("cards")}
+                            title="Kaarten"
+                            style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                width: "32px",
+                                height: "28px",
+                                borderRadius: "6px",
+                                border: "none",
+                                cursor: "pointer",
+                                transition: "all 0.2s ease",
+                                background: viewMode === "cards"
+                                    ? "rgba(99, 102, 241, 0.25)"
+                                    : "transparent",
+                                color: viewMode === "cards"
+                                    ? "var(--color-brand-light)"
+                                    : "var(--color-text-muted)",
+                            }}
+                        >
+                            <LayoutGrid size={15} />
+                        </button>
+                        <button
+                            onClick={() => toggleView("table")}
+                            title="Tabel"
+                            style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                width: "32px",
+                                height: "28px",
+                                borderRadius: "6px",
+                                border: "none",
+                                cursor: "pointer",
+                                transition: "all 0.2s ease",
+                                background: viewMode === "table"
+                                    ? "rgba(99, 102, 241, 0.25)"
+                                    : "transparent",
+                                color: viewMode === "table"
+                                    ? "var(--color-brand-light)"
+                                    : "var(--color-text-muted)",
+                            }}
+                        >
+                            <List size={15} />
+                        </button>
+                    </div>
+                    <Link
+                        href="/projects/new"
+                        className="btn btn-primary btn-sm"
+                        style={{ textDecoration: "none" }}
+                    >
+                        + Project Toevoegen
+                    </Link>
+                </div>
             </div>
 
             {sorted.length === 0 ? (
@@ -212,7 +468,8 @@ export default function DashboardHome({
                         Voeg je eerste project toe om te beginnen met performance tracking.
                     </p>
                 </div>
-            ) : (
+            ) : viewMode === "cards" ? (
+                /* ═════════ CARD VIEW ═════════ */
                 <div
                     style={{
                         display: "grid",
@@ -258,17 +515,9 @@ export default function DashboardHome({
                                             >
                                                 {client.industryType}
                                             </span>
-                                            <span
-                                                style={{
-                                                    fontSize: "0.7rem",
-                                                    color: "var(--color-text-muted)",
-                                                }}
-                                            >
-                                                Target: {client.targetType} {formatNumber(Number(client.targetValue), 2)}
-                                            </span>
                                         </div>
                                     </div>
-                                    <ArrowUpRight size={16} style={{ color: "var(--color-text-muted)" }} />
+                                    <ContextMenuDropdown projectId={client.id} projectName={client.name} />
                                 </div>
 
                                 {/* Health Score Ring */}
@@ -324,6 +573,25 @@ export default function DashboardHome({
 
                                         <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
                                             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
+                                                <span>Target ({client.targetType})</span>
+                                                <span style={{ color: "var(--color-text-primary)", fontWeight: 500 }}>
+                                                    {client.targetType === "CPA"
+                                                        ? formatCurrency(Number(client.targetValue))
+                                                        : formatNumber(Number(client.targetValue), 2)}
+                                                </span>
+                                            </div>
+                                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
+                                                <span>Behaald</span>
+                                                <span style={{
+                                                    color: kpi.targetDeviation > 0 ? "#f87171" : "#34d399",
+                                                    fontWeight: 600,
+                                                }}>
+                                                    {client.targetType === "CPA"
+                                                        ? formatCurrency(kpi.blendedKPI)
+                                                        : formatNumber(kpi.blendedKPI, 2)}
+                                                </span>
+                                            </div>
+                                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
                                                 <span>Deviation</span>
                                                 <span style={{
                                                     color: kpi.targetDeviation > 0 ? "#f87171" : "#34d399",
@@ -333,7 +601,7 @@ export default function DashboardHome({
                                                 </span>
                                             </div>
                                             <div style={{ display: "flex", justifyContent: "space-between" }}>
-                                                <span>Spend (7d)</span>
+                                                <span>Spend</span>
                                                 <span style={{ color: "var(--color-text-primary)", fontWeight: 500 }}>
                                                     {formatCurrency(kpi.currentPeriod.totalSpend)}
                                                 </span>
@@ -373,6 +641,199 @@ export default function DashboardHome({
                             </div>
                         </Link>
                     ))}
+                </div>
+            ) : (
+                /* ═════════ TABLE VIEW ═════════ */
+                <div className="glass-card" style={{ overflow: "visible" }}>
+                    <table
+                        style={{
+                            width: "100%",
+                            borderCollapse: "collapse",
+                            fontSize: "0.85rem",
+                        }}
+                    >
+                        <thead>
+                            <tr
+                                style={{
+                                    borderBottom: "1px solid rgba(51, 65, 85, 0.4)",
+                                    textAlign: "left",
+                                }}
+                            >
+                                <th style={{ padding: "14px 20px", color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                                    Project
+                                </th>
+                                <th style={{ padding: "14px 16px", color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                                    Branche
+                                </th>
+                                <th style={{ padding: "14px 16px", color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "center" }}>
+                                    Health
+                                </th>
+                                <th style={{ padding: "14px 16px", color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                                    Status
+                                </th>
+                                <th style={{ padding: "14px 16px", color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "right" }}>
+                                    Target
+                                </th>
+                                <th style={{ padding: "14px 16px", color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "right" }}>
+                                    Behaald
+                                </th>
+                                <th style={{ padding: "14px 16px", color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "center" }}>
+                                    Trend
+                                </th>
+                                <th style={{ padding: "14px 16px", color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "right" }}>
+                                    Deviation
+                                </th>
+                                <th style={{ padding: "14px 16px", color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "right" }}>
+                                    Spend
+                                </th>
+                                <th style={{ padding: "14px 20px", width: "32px" }}></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {sorted.map(({ client, kpi, advisorStatus }, index) => (
+                                <tr
+                                    key={client.id}
+                                    onClick={() => router.push(`/projects/${client.id}`)}
+                                    style={{
+                                        borderBottom: index < sorted.length - 1 ? "1px solid rgba(51, 65, 85, 0.2)" : "none",
+                                        cursor: "pointer",
+                                        transition: "background 0.15s ease",
+                                    }}
+                                    onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(99, 102, 241, 0.05)"; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                                >
+                                    {/* Project name */}
+                                    <td style={{ padding: "14px 20px", fontWeight: 600 }}>
+                                        {client.name}
+                                    </td>
+
+                                    {/* Industry */}
+                                    <td style={{ padding: "14px 16px" }}>
+                                        <span
+                                            style={{
+                                                fontSize: "0.7rem",
+                                                padding: "2px 8px",
+                                                background: "rgba(99, 102, 241, 0.1)",
+                                                borderRadius: "6px",
+                                                color: "var(--color-brand-light)",
+                                                fontWeight: 500,
+                                            }}
+                                        >
+                                            {client.industryType}
+                                        </span>
+                                    </td>
+
+                                    {/* Health score with mini ring */}
+                                    <td style={{ padding: "14px 16px", textAlign: "center" }}>
+                                        <div style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+                                            <div style={{ position: "relative", width: "32px", height: "32px" }}>
+                                                <svg width="32" height="32" viewBox="0 0 32 32">
+                                                    <circle cx="16" cy="16" r="12" fill="none" stroke="rgba(51, 65, 85, 0.4)" strokeWidth="3" />
+                                                    <circle
+                                                        cx="16" cy="16" r="12"
+                                                        fill="none"
+                                                        stroke={getHealthColor(kpi.healthScore)}
+                                                        strokeWidth="3"
+                                                        strokeLinecap="round"
+                                                        strokeDasharray={`${(kpi.healthScore / 100) * 75.4} 75.4`}
+                                                        transform="rotate(-90 16 16)"
+                                                    />
+                                                </svg>
+                                                <span style={{
+                                                    position: "absolute",
+                                                    inset: 0,
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    justifyContent: "center",
+                                                    fontSize: "0.55rem",
+                                                    fontWeight: 700,
+                                                    color: getHealthColor(kpi.healthScore),
+                                                }}>
+                                                    {kpi.healthScore}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </td>
+
+                                    {/* Status */}
+                                    <td style={{ padding: "14px 16px" }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                            {kpi.targetStatus === "critical" ? (
+                                                <AlertTriangle size={13} color="#ef4444" />
+                                            ) : kpi.targetStatus === "warning" ? (
+                                                <Clock size={13} color="#f59e0b" />
+                                            ) : (
+                                                <CheckCircle size={13} color="#10b981" />
+                                            )}
+                                            <span style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)" }}>
+                                                {kpi.targetStatus === "critical"
+                                                    ? "Kritiek"
+                                                    : kpi.targetStatus === "warning"
+                                                        ? "Waarschuwing"
+                                                        : "Op Target"}
+                                            </span>
+                                        </div>
+                                    </td>
+
+                                    {/* Target */}
+                                    <td style={{
+                                        padding: "14px 16px",
+                                        textAlign: "right",
+                                        fontWeight: 500,
+                                        color: "var(--color-text-secondary)",
+                                    }}>
+                                        <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>{client.targetType}</div>
+                                        {client.targetType === "CPA"
+                                            ? formatCurrency(Number(client.targetValue))
+                                            : formatNumber(Number(client.targetValue), 2)}
+                                    </td>
+
+                                    {/* Actual */}
+                                    <td style={{
+                                        padding: "14px 16px",
+                                        textAlign: "right",
+                                        fontWeight: 600,
+                                        color: kpi.targetDeviation > 0 ? "#f87171" : "#34d399",
+                                    }}>
+                                        {client.targetType === "CPA"
+                                            ? formatCurrency(kpi.blendedKPI)
+                                            : formatNumber(kpi.blendedKPI, 2)}
+                                    </td>
+
+                                    {/* Trend */}
+                                    <td style={{ padding: "14px 16px", textAlign: "center" }}>
+                                        <span style={{ color: getTrendColor(kpi.trendDirection), display: "inline-flex" }}>
+                                            {getTrendIcon(kpi.trendDirection)}
+                                        </span>
+                                    </td>
+
+                                    {/* Deviation */}
+                                    <td style={{
+                                        padding: "14px 16px",
+                                        textAlign: "right",
+                                        fontWeight: 600,
+                                        color: kpi.targetDeviation > 0 ? "#f87171" : "#34d399",
+                                    }}>
+                                        {formatPercent(kpi.targetDeviation)}
+                                    </td>
+
+                                    {/* Spend */}
+                                    <td style={{
+                                        padding: "14px 16px",
+                                        textAlign: "right",
+                                        fontWeight: 500,
+                                    }}>
+                                        {formatCurrency(kpi.currentPeriod.totalSpend)}
+                                    </td>
+
+                                    {/* Arrow */}
+                                    <td style={{ padding: "14px 20px" }}>
+                                        <ContextMenuDropdown projectId={client.id} projectName={client.name} />
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
             )}
         </div>

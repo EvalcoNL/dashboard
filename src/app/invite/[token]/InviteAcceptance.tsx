@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Activity, ShieldCheck, Mail, ArrowRight, UserPlus, LogIn, KeyRound } from "lucide-react";
+import { ShieldCheck, Mail, ArrowRight, UserPlus, LogIn, KeyRound } from "lucide-react";
 
 export default function InviteAcceptance({
     token,
@@ -151,7 +151,7 @@ export default function InviteAcceptance({
             <main className="content-wrapper">
                 <div className="header">
                     <div className="logo-box">
-                        <Activity size={32} strokeWidth={2.5} />
+                        <img src="/images/logo/logo_icon.svg" alt="Evalco" width={32} height={32} />
                     </div>
                     <h1>Evalco Workspace</h1>
                     <p className="subtitle">Je bent uitgenodigd voor <strong>{clientName}</strong></p>
@@ -352,13 +352,7 @@ export default function InviteAcceptance({
                 
                 .logo-box { 
                     display: inline-flex; 
-                    padding: 14px; 
-                    background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.2)); 
-                    border: 1px solid rgba(99, 102, 241, 0.3);
-                    border-radius: 18px; 
                     margin-bottom: 24px; 
-                    color: #818cf8; 
-                    box-shadow: 0 0 30px rgba(99, 102, 241, 0.15);
                 }
                 
                 .header h1 { 

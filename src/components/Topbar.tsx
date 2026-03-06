@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
-    Bell,
     ChevronDown,
     LogOut,
     Settings,
@@ -16,6 +15,7 @@ import {
     Search,
     Globe
 } from "lucide-react";
+import NotificationDropdown from "./NotificationDropdown";
 import { useTheme } from "./ThemeProvider";
 import { useLanguage } from "@/lib/i18n/LanguageContext";
 
@@ -317,22 +317,7 @@ export default function Topbar() {
                     {theme === "light" ? <Moon size={20} /> : <Sun size={20} />}
                 </button>
 
-                <button
-                    style={{
-                        background: "none",
-                        border: "none",
-                        color: "var(--color-text-secondary)",
-                        cursor: "pointer",
-                        padding: "8px",
-                        borderRadius: "8px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                    }}
-                    className="hover-bg"
-                >
-                    <Bell size={20} />
-                </button>
+                <NotificationDropdown />
 
                 {/* User Account Dropdown */}
                 <div ref={userMenuRef} style={{ position: "relative" }}>

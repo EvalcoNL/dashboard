@@ -11,7 +11,6 @@ import {
     User,
     Moon,
     Sun,
-    Activity,
     Globe,
     Menu,
     X,
@@ -22,7 +21,7 @@ import { useLanguage } from "@/lib/i18n/LanguageContext";
 import NotificationDropdown from "./topbar/NotificationDropdown";
 import ProjectSwitcher from "./topbar/ProjectSwitcher";
 
-export default function Topbar() {
+export default function Topbar({ sidebarWidth = 64 }: { sidebarWidth?: number }) {
     const { data: session } = useSession();
     const { theme, toggleTheme } = useTheme();
     const { language, setLanguage, t } = useLanguage();
@@ -55,7 +54,7 @@ export default function Topbar() {
             style={{
                 position: "fixed",
                 top: 0,
-                left: 0,
+                left: `${sidebarWidth}px`,
                 right: 0,
                 height: "56px",
                 background: "var(--color-surface-elevated)",
@@ -66,6 +65,7 @@ export default function Topbar() {
                 padding: "0 24px",
                 zIndex: 100,
                 backdropFilter: "blur(12px)",
+                transition: "left 0.3s ease",
             }}
         >
             {/* Left section: Logo and Client Selector */}
@@ -87,39 +87,6 @@ export default function Topbar() {
                 >
                     {sidebarOpen ? <X size={22} /> : <Menu size={22} />}
                 </button>
-                <Link
-                    href="/"
-                    style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "10px",
-                        textDecoration: "none"
-                    }}
-                >
-                    <div
-                        style={{
-                            width: "32px",
-                            height: "32px",
-                            background: "linear-gradient(135deg, var(--color-brand), var(--color-brand-light))",
-                            borderRadius: "8px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                        }}
-                    >
-                        <Activity size={18} color="white" />
-                    </div>
-                    <span
-                        style={{
-                            fontSize: "1rem",
-                            fontWeight: 700,
-                            color: "var(--color-text-primary)",
-                            letterSpacing: "-0.02em",
-                        }}
-                    >
-                        Evalco
-                    </span>
-                </Link>
 
                 <ProjectSwitcher t={t} />
             </div>

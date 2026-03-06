@@ -16,6 +16,7 @@ model User {
   twoFactorEnabled    Boolean         @default(false) @map("two_factor_enabled")
   twoFactorSecret     String?         @map("two_factor_secret")
   backupCodes         Json?           @map("backup_codes")
+  dashboardView       String          @default("cards") @map("dashboard_view")
   createdAt           DateTime        @default(now()) @map("created_at")
   advisorActions      AdvisorReport[] @relation("reviewedBy")
   projects            Project[]       @relation("ProjectAccess")

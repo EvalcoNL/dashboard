@@ -17,6 +17,8 @@
   --color-text-primary: #0f172a;
   --color-text-secondary: #475569;
   --color-text-muted: #64748b;
+  --color-brand-alpha: rgba(99, 102, 241, 0.12);
+  --color-shadow: rgba(15, 23, 42, 0.08);
   color-scheme: light;
 }
 
@@ -28,6 +30,8 @@
   --color-text-primary: #f1f5f9;
   --color-text-secondary: #94a3b8;
   --color-text-muted: #64748b;
+  --color-brand-alpha: rgba(99, 102, 241, 0.15);
+  --color-shadow: rgba(0, 0, 0, 0.2);
   color-scheme: dark;
 }
 
@@ -352,16 +356,26 @@ body {
   opacity: 1;
 }
 
+/* Context menu */
+.context-menu-trigger:hover {
+  background: var(--color-surface-hover) !important;
+  color: var(--color-text-primary) !important;
+}
+
+.context-menu-item:hover {
+  background: var(--color-surface-hover) !important;
+}
+
 /* ===== RESPONSIVE / MOBILE ===== */
 
 /* Sidebar base (desktop) */
 .sidebar-wrapper {
   display: flex;
-  height: calc(100vh - 56px);
-  position: sticky;
+  height: 100vh;
+  position: fixed;
   left: 0;
-  top: 56px;
-  z-index: 90;
+  top: 0;
+  z-index: 110;
   flex-shrink: 0;
 }
 
@@ -376,11 +390,12 @@ body {
 
 @media (max-width: 768px) {
 
-  /* Prevent horizontal scroll */
+  /* ===== GLOBAL: Prevent horizontal scroll ===== */
   html,
   body {
     overflow-x: hidden !important;
-    width: 100%;
+    width: 100% !important;
+    max-width: 100vw !important;
   }
 
   .desktop-only {
@@ -391,7 +406,7 @@ body {
     display: flex !important;
   }
 
-  /* Sidebar: completely hidden on mobile */
+  /* ===== SIDEBAR: hidden on mobile ===== */
   .sidebar-wrapper {
     display: none !important;
     position: fixed;
@@ -406,7 +421,6 @@ body {
     display: flex !important;
   }
 
-  /* Mobile backdrop */
   .sidebar-backdrop {
     position: fixed;
     top: 0;
@@ -418,32 +432,113 @@ body {
     animation: fadeIn 0.2s ease-out;
   }
 
-  /* Topbar compact */
+  /* ===== TOPBAR: compact mobile ===== */
   .topbar {
     padding: 0 12px !important;
+    left: 0 !important;
+    gap: 8px !important;
   }
 
-  /* Main content */
+  /* ===== MAIN CONTENT: full-width, no sidebar margin ===== */
   .dashboard-main {
     padding: 16px !important;
+    padding-top: calc(56px + 16px) !important;
     margin-left: 0 !important;
     width: 100% !important;
     max-width: 100vw !important;
+    box-sizing: border-box !important;
   }
 
-  /* Grids adapt on mobile */
+  /* ===== FORCE ALL GRIDS TO SINGLE COLUMN ===== */
+  /* React renders gridTemplateColumns as grid-template-columns in DOM */
+  .dashboard-main div[style*="grid-template-columns"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ===== PAGE HEADERS: wrap on mobile ===== */
+  .dashboard-main>div>div[style*="display: flex"],
+  .dashboard-main>div>div[style*="justify-content"] {
+    flex-wrap: wrap !important;
+    gap: 12px !important;
+  }
+
+  /* ===== GLASS CARDS: minimal radius on mobile ===== */
   .glass-card {
-    border-radius: 12px;
+    border-radius: 12px !important;
+    padding: 16px !important;
   }
 
-  /* Tables: horizontal scroll */
+  /* ===== PAGE TITLE AREA: stack actions below ===== */
+  .animate-fade-in>div:first-child {
+    flex-wrap: wrap !important;
+  }
+
+  /* Buttons in headers should be full-width on mobile */
+  .dashboard-main button[style*="gap"],
+  .dashboard-main a[style*="gap"] {
+    white-space: nowrap !important;
+  }
+
+  /* ===== TABLES: horizontal scroll ===== */
   .data-table {
-    display: block;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+    display: block !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
   }
 
-  /* DateRangePicker full-screen on mobile */
+  /* Glass cards containing tables must scroll */
+  .glass-card {
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+  }
+
+  /* Table containers scroll */
+  .dashboard-main table {
+    min-width: 500px;
+    font-size: 0.8rem !important;
+  }
+
+  /* ===== FORM INPUTS: full-width on mobile ===== */
+  .dashboard-main input,
+  .dashboard-main select,
+  .dashboard-main textarea {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    min-width: 0 !important;
+  }
+
+  /* ===== STAT CARDS: 2 columns for small summary cards ===== */
+  .dashboard-main div[style*="repeat(auto-fit"],
+  .dashboard-main div[style*="repeat(auto-fill"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  /* ===== FLEX ROW ITEMS: wrap gracefully ===== */
+  .dashboard-main>div>div[style*="flex"],
+  .dashboard-main div[style*="display: flex"][style*="gap"] {
+    flex-wrap: wrap !important;
+  }
+
+  /* ===== FIX CONTAINER WIDTH ===== */
+  .dashboard-main>div,
+  .dashboard-main>div>div {
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+  }
+
+  /* Ensure inner elements don't exceed viewport */
+  .dashboard-main * {
+    max-width: 100vw !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Exception for elements that need to scroll (tables) */
+  .dashboard-main table,
+  .dashboard-main table * {
+    max-width: none !important;
+  }
+
+  /* ===== DATE RANGE PICKER: full-screen on mobile ===== */
   .drp-dropdown {
     position: fixed !important;
     top: 0 !important;
@@ -488,5 +583,43 @@ body {
 
   .drp-month {
     min-width: unset !important;
+  }
+
+  /* ===== TOPBAR ELEMENTS: compact ===== */
+  .topbar>div {
+    gap: 6px !important;
+  }
+
+  /* Project switcher compact */
+  .topbar button,
+  .topbar a {
+    font-size: 0.8rem !important;
+  }
+
+  /* ===== HEADINGS: smaller on mobile ===== */
+  .dashboard-main h1 {
+    font-size: 1.35rem !important;
+  }
+
+  .dashboard-main h2 {
+    font-size: 1.1rem !important;
+  }
+
+  /* ===== SUMMARY CARD SPACING ===== */
+  .dashboard-main .glass-card>div[style*="display: flex"] {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  /* ===== MONITOR DETAIL: stack columns ===== */
+  .dashboard-main div[style*="320px 1fr"],
+  .dashboard-main div[style*="2fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ===== MODAL / DIALOG: full-width on mobile ===== */
+  .dashboard-main div[style*="position: fixed"]>div[style*="maxWidth"] {
+    max-width: calc(100vw - 32px) !important;
+    margin: 16px !important;
   }
 }

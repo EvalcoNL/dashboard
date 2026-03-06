@@ -21,11 +21,13 @@ export const authConfig = {
                     const { prisma } = await import("@/lib/db");
                     const dbUser = await prisma.user.findUnique({
                         where: { id: token.id as string },
-                        select: { twoFactorEnabled: true, role: true },
+                        select: { twoFactorEnabled: true, role: true, name: true, email: true },
                     });
                     if (dbUser) {
                         token.twoFactorEnabled = dbUser.twoFactorEnabled;
                         token.role = dbUser.role;
+                        token.name = dbUser.name;
+                        token.email = dbUser.email;
                     }
                 } catch {
                     // Silently fail — keep existing token values
@@ -39,6 +41,8 @@ export const authConfig = {
                 session.user.role = token.role as string;
                 session.user.id = token.id as string;
                 session.user.twoFactorEnabled = token.twoFactorEnabled as boolean;
+                if (token.name) session.user.name = token.name as string;
+                if (token.email) session.user.email = token.email as string;
             }
             return session;
         },

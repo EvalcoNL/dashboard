@@ -5,9 +5,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import {
     LayoutDashboard,
-    Users,
     Database,
-    FileText,
     Settings,
     ChevronRight,
     ArrowLeft,
@@ -33,7 +31,7 @@ interface NavItem {
     submenu?: SubItem[];
 }
 
-export default function Sidebar() {
+export default function Sidebar({ onSubmenuChange }: { onSubmenuChange?: (open: boolean) => void }) {
     const { data: session } = useSession();
     const pathname = usePathname();
     const { t } = useLanguage();
@@ -41,9 +39,10 @@ export default function Sidebar() {
     const [openMenuLabel, setOpenMenuLabel] = useState<string | null>(null);
     const { isOpen: mobileSidebarOpen, close: closeMobileSidebar } = useMobileSidebar();
 
-    // Auto-close mobile sidebar on route change
+    // Auto-close mobile sidebar and submenu on route change
     useEffect(() => {
         closeMobileSidebar();
+        setOpenMenuLabel(null);
     }, [pathname]);
 
     // Filter admin nav items based on super admin status
@@ -63,7 +62,6 @@ export default function Sidebar() {
 
     const adminNavItems: NavItem[] = [
         { href: "/", label: t("navigation", "home"), icon: LayoutDashboard },
-        { href: "/projects", label: t("navigation", "accounts"), icon: Users },
         { href: "/incidents", label: t("navigation", "incidents"), icon: AlertTriangle },
     ];
 
@@ -138,6 +136,11 @@ export default function Sidebar() {
     const openSubmenuItem = currentNavItems.find(item => item.label === openMenuLabel);
     const activeSubmenu = openSubmenuItem?.submenu ? { title: openSubmenuItem.label, items: openSubmenuItem.submenu } : null;
 
+    // Notify parent when submenu opens/closes
+    useEffect(() => {
+        onSubmenuChange?.(!!activeSubmenu);
+    }, [!!activeSubmenu, onSubmenuChange]);
+
     return (
         <>
             {/* Mobile backdrop */}
@@ -160,10 +163,30 @@ export default function Sidebar() {
                         display: "flex",
                         flexDirection: "column",
                         alignItems: "center",
-                        padding: "16px 0",
+                        padding: "0",
                     }}
                 >
-                    <nav style={{ display: "flex", flexDirection: "column", gap: "12px", width: "100%", alignItems: "center" }}>
+                    {/* Logo */}
+                    <Link
+                        href="/"
+                        style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: "100%",
+                            height: "56px",
+                            borderBottom: "1px solid var(--color-border)",
+                            flexShrink: 0,
+                        }}
+                    >
+                        <img
+                            src="/images/logo/logo_icon.svg"
+                            alt="Evalco"
+                            style={{ width: "28px", height: "28px" }}
+                        />
+                    </Link>
+
+                    <nav style={{ display: "flex", flexDirection: "column", gap: "12px", width: "100%", alignItems: "center", paddingTop: "16px" }}>
                         {currentNavItems.map((item, idx) => {
                             const Icon = item.icon;
                             const active = item.href ? isActive(item.href) : (item.submenu?.some(sub => isActive(sub.href)));
@@ -254,103 +277,113 @@ export default function Sidebar() {
                 </aside>
 
                 {/* Secondary Submenu Sidebar */}
-                {activeSubmenu && (
-                    <aside
-                        style={{
-                            height: "100%",
-                            width: "240px",
-                            background: "var(--color-surface-elevated)",
-                            borderRight: "1px solid var(--color-border)",
-                            padding: "24px 16px",
-                            animation: "slideIn 0.2s ease-out",
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "16px",
-                            position: "relative"
-                        }}
-                    >
-                        {activeSubmenu.title !== t("navigation", "data") && (
-                            <div style={{
-                                fontSize: "0.75rem",
-                                fontWeight: 700,
-                                color: "var(--color-text-muted)",
-                                textTransform: "uppercase",
-                                letterSpacing: "0.05em",
-                                paddingLeft: "8px"
-                            }}>
-                                {activeSubmenu.title}
-                            </div>
-                        )}
-                        <nav style={{ display: "flex", flexDirection: "column", gap: "4px", flex: 1 }}>
-                            {activeSubmenu.items.map((sub, sIdx) => {
-                                const isSiblingPrefix = activeSubmenu.items.some(
-                                    (other, oIdx) => oIdx !== sIdx && other.href.startsWith(sub.href + "/")
-                                );
-                                const active = isActive(sub.href, isSiblingPrefix);
-                                return (
-                                    <div key={sIdx}>
-                                        {sub.sectionTitle && (
-                                            <div style={{
-                                                fontSize: "0.75rem",
-                                                fontWeight: 700,
-                                                color: "var(--color-text-muted)",
-                                                textTransform: "uppercase",
-                                                letterSpacing: "0.05em",
-                                                paddingLeft: "8px",
-                                                marginTop: sIdx > 0 ? "16px" : "0",
-                                                marginBottom: "8px"
-                                            }}>
-                                                {sub.sectionTitle}
-                                            </div>
-                                        )}
-                                        <Link
-                                            href={sub.href}
-                                            style={{
-                                                display: "flex",
-                                                alignItems: "center",
-                                                justifyContent: "space-between",
-                                                padding: "10px 12px",
-                                                borderRadius: "8px",
-                                                color: active ? "var(--color-brand)" : "var(--color-text-primary)",
-                                                background: active ? "rgba(99, 102, 241, 0.08)" : "transparent",
-                                                textDecoration: "none",
-                                                fontSize: "0.875rem",
-                                                fontWeight: 500,
-                                                transition: "all 0.2s ease"
-                                            }}
-                                            className="sub-link"
-                                        >
-                                            {sub.label}
-                                            {active && <ChevronRight size={14} />}
-                                        </Link>
-                                    </div>
-                                );
-                            })}
-                        </nav>
-
-                        {/* Close Link */}
-                        <button
-                            onClick={() => setOpenMenuLabel(null)}
+                <aside
+                    style={{
+                        height: "100%",
+                        width: activeSubmenu ? "240px" : "0px",
+                        background: "var(--color-surface-elevated)",
+                        borderRight: activeSubmenu ? "1px solid var(--color-border)" : "none",
+                        overflow: "hidden",
+                        transition: "width 0.3s ease",
+                        flexShrink: 0,
+                    }}
+                >
+                    {activeSubmenu && (
+                        <div
                             style={{
-                                alignSelf: "flex-end",
+                                width: "240px",
+                                padding: "24px 16px",
                                 display: "flex",
-                                alignItems: "center",
-                                gap: "8px",
-                                padding: "8px",
-                                borderRadius: "8px",
-                                color: "var(--color-text-muted)",
-                                background: "transparent",
-                                border: "none",
-                                cursor: "pointer",
-                                fontSize: "0.85rem",
-                                transition: "all 0.2s ease"
+                                flexDirection: "column",
+                                gap: "16px",
+                                height: "100%",
+                                position: "relative",
                             }}
-                            className="close-button"
                         >
-                            <ArrowLeft size={16} />
-                        </button>
-                    </aside>
-                )}
+                            {activeSubmenu.title !== t("navigation", "data") && (
+                                <div style={{
+                                    fontSize: "0.75rem",
+                                    fontWeight: 700,
+                                    color: "var(--color-text-muted)",
+                                    textTransform: "uppercase",
+                                    letterSpacing: "0.05em",
+                                    paddingLeft: "8px"
+                                }}>
+                                    {activeSubmenu.title}
+                                </div>
+                            )}
+                            <nav style={{ display: "flex", flexDirection: "column", gap: "4px", flex: 1 }}>
+                                {activeSubmenu.items.map((sub, sIdx) => {
+                                    const isSiblingPrefix = activeSubmenu.items.some(
+                                        (other, oIdx) => oIdx !== sIdx && other.href.startsWith(sub.href + "/")
+                                    );
+                                    const active = isActive(sub.href, isSiblingPrefix);
+                                    return (
+                                        <div key={sIdx}>
+                                            {sub.sectionTitle && (
+                                                <div style={{
+                                                    fontSize: "0.75rem",
+                                                    fontWeight: 700,
+                                                    color: "var(--color-text-muted)",
+                                                    textTransform: "uppercase",
+                                                    letterSpacing: "0.05em",
+                                                    paddingLeft: "8px",
+                                                    marginTop: sIdx > 0 ? "16px" : "0",
+                                                    marginBottom: "8px"
+                                                }}>
+                                                    {sub.sectionTitle}
+                                                </div>
+                                            )}
+                                            <Link
+                                                href={sub.href}
+                                                style={{
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    justifyContent: "space-between",
+                                                    padding: "10px 12px",
+                                                    borderRadius: "8px",
+                                                    color: active ? "var(--color-brand)" : "var(--color-text-primary)",
+                                                    background: active ? "rgba(99, 102, 241, 0.08)" : "transparent",
+                                                    textDecoration: "none",
+                                                    fontSize: "0.875rem",
+                                                    fontWeight: 500,
+                                                    transition: "all 0.2s ease",
+                                                    whiteSpace: "nowrap",
+                                                }}
+                                                className="sub-link"
+                                            >
+                                                {sub.label}
+                                                {active && <ChevronRight size={14} />}
+                                            </Link>
+                                        </div>
+                                    );
+                                })}
+                            </nav>
+
+                            {/* Close Link */}
+                            <button
+                                onClick={() => setOpenMenuLabel(null)}
+                                style={{
+                                    alignSelf: "flex-end",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "8px",
+                                    padding: "8px",
+                                    borderRadius: "8px",
+                                    color: "var(--color-text-muted)",
+                                    background: "transparent",
+                                    border: "none",
+                                    cursor: "pointer",
+                                    fontSize: "0.85rem",
+                                    transition: "all 0.2s ease"
+                                }}
+                                className="close-button"
+                            >
+                                <ArrowLeft size={16} />
+                            </button>
+                        </div>
+                    )}
+                </aside>
 
                 <style jsx>{`
                 .nav-link:hover {

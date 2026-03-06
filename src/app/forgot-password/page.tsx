@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Activity, Mail, AlertCircle, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { Mail, AlertCircle, ArrowLeft, CheckCircle2 } from "lucide-react";
 
 export default function ForgotPasswordPage() {
     const [email, setEmail] = useState("");
@@ -51,7 +51,7 @@ export default function ForgotPasswordPage() {
             <main className="content-wrapper">
                 <div className="header">
                     <div className="logo-box">
-                        <Activity size={32} strokeWidth={2.5} />
+                        <img src="/images/logo/logo_icon.svg" alt="Evalco" width={32} height={32} />
                     </div>
                     <h1>Wachtwoord vergeten</h1>
                     <p>Evalco AI Performance Platform</p>
@@ -161,12 +161,7 @@ export default function ForgotPasswordPage() {
                 .header { text-align: center; }
                 .logo-box {
                     display: inline-flex;
-                    padding: 12px;
-                    background: linear-gradient(135deg, #6366f1, #8b5cf6);
-                    border-radius: 16px;
                     margin-bottom: 20px;
-                    box-shadow: 0 8px 32px rgba(99, 102, 241, 0.4);
-                    color: white;
                 }
 
                 h1 {

@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Activity, Lock, AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff } from "lucide-react";
+import { Lock, AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff } from "lucide-react";
 
 function ResetPasswordForm() {
     const router = useRouter();
@@ -75,7 +75,7 @@ function ResetPasswordForm() {
             <main className="content-wrapper">
                 <div className="header">
                     <div className="logo-box">
-                        <Activity size={32} strokeWidth={2.5} />
+                        <img src="/images/logo/logo_icon.svg" alt="Evalco" width={32} height={32} />
                     </div>
                     <h1>Wachtwoord herstellen</h1>
                     <p>Evalco AI Performance Platform</p>
@@ -204,12 +204,7 @@ function ResetPasswordForm() {
                 .header { text-align: center; }
                 .logo-box {
                     display: inline-flex;
-                    padding: 12px;
-                    background: linear-gradient(135deg, #6366f1, #8b5cf6);
-                    border-radius: 16px;
                     margin-bottom: 20px;
-                    box-shadow: 0 8px 32px rgba(99, 102, 241, 0.4);
-                    color: white;
                 }
 
                 h1 {

@@ -25,7 +25,7 @@ export default async function SettingsPage() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 400px", gap: "24px", alignItems: "start" }}>
                 <div style={{ display: "grid", gap: "24px" }}>
                     {/* Profile */}
-                    <ProfileSettings initialName={session.user.name || ""} />
+                    <ProfileSettings initialName={session.user.name || ""} initialEmail={session.user.email || ""} />
 
                     {/* Security (2FA) */}
                     <SecuritySettings is2FAEnabled={user?.twoFactorEnabled || false} />
