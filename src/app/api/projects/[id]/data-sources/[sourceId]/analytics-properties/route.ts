@@ -70,8 +70,8 @@ export async function GET(
         }
 
         return NextResponse.json({ properties });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Error fetching GA properties:", error);
-        return NextResponse.json({ error: error.message || "Failed to fetch properties" }, { status: 500 });
+        return NextResponse.json({ error: error instanceof Error ? error.message : "Onbekende fout" }, { status: 500 });
     }
 }

@@ -76,8 +76,8 @@ export async function POST(req: NextRequest) {
             success: true,
             dataSource: { id: dataSource.id, name: dataSource.name },
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("[api-key] Error creating data source:", error);
-        return NextResponse.json({ error: error.message || "Failed to create data source" }, { status: 500 });
+        return NextResponse.json({ error: error instanceof Error ? error.message : "Onbekende fout" }, { status: 500 });
     }
 }

@@ -17,10 +17,10 @@ export async function POST(
 
     if (!message) return NextResponse.json({ error: "Message required" }, { status: 400 });
 
-    const incident = await (prisma as any).incident.findUnique({ where: { id } });
+    const incident = await prisma.incident.findUnique({ where: { id } });
     if (!incident) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const event = await (prisma as any).incidentEvent.create({
+    const event = await prisma.incidentEvent.create({
         data: {
             incidentId: id,
             type: type || "COMMENT",

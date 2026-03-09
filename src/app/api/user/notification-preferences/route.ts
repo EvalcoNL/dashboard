@@ -10,7 +10,7 @@ export async function GET() {
     const session = await auth();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const preferences = await (prisma as any).userNotificationPreference.findMany({
+    const preferences = await prisma.userNotificationPreference.findMany({
         where: { userId: session.user.id },
         select: { projectId: true, enabled: true }
     });
@@ -49,7 +49,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     // Upsert the preference
-    await (prisma as any).userNotificationPreference.upsert({
+    await prisma.userNotificationPreference.upsert({
         where: {
             userId_projectId: {
                 userId: session.user.id,

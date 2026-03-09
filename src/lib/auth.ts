@@ -107,6 +107,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
                     authLog("Authorized:", credentials.email);
                     auditLog({ userId: user.id, action: 'LOGIN', details: user.email });
+
+                    // Track last login time
+                    prisma.user.update({
+                        where: { id: user.id },
+                        data: { lastLoginAt: new Date() },
+                    }).catch(() => { }); // fire and forget
+
                     return {
                         id: user.id,
                         email: user.email,

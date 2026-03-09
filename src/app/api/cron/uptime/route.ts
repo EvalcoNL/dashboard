@@ -50,12 +50,12 @@ export async function GET(req: NextRequest) {
                         domain: domain.externalId,
                         ...result
                     });
-                } catch (domainError: any) {
-                    console.error(`[CRON] Uptime check failed for ${domain.externalId}:`, domainError?.message || domainError);
+                } catch (domainError: unknown) {
+                    console.error(`[CRON] Uptime check failed for ${domain.externalId}:`, domainError);
                     results.push({
                         domain: domain.externalId,
                         status: "ERROR",
-                        error: domainError?.message || "Unknown error"
+                        error: domainError instanceof Error ? domainError.message : "Unknown error"
                     });
                 }
             }
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
         console.log(`[CRON] Finished uptime checks. Checked ${results.length} domains.`);
         return NextResponse.json({ success: true, checked: results.length, results });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("[CRON] Uptime check failed:", error);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }

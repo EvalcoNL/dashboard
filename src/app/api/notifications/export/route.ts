@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     const where: any = {};
     if (projectId) where.projectId = projectId;
 
-    const notifications = await (prisma as any).notification.findMany({
+    const notifications = await prisma.notification.findMany({
         where,
         orderBy: { createdAt: "desc" },
         take: 1000,

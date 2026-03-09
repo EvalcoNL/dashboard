@@ -17,7 +17,14 @@ export default async function AdminUsersPage() {
     const [users, roles] = await Promise.all([
         prisma.user.findMany({
             orderBy: { createdAt: "desc" },
-            include: {
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                role: true,
+                emailVerified: true,
+                lastLoginAt: true,
+                createdAt: true,
                 projects: {
                     select: { id: true, name: true }
                 }
@@ -30,7 +37,7 @@ export default async function AdminUsersPage() {
     ]);
 
     return (
-        <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
+        <div style={{ maxWidth: "1400px", margin: "0 auto" }}>
             <div style={{ marginBottom: "32px", display: "flex", alignItems: "center", gap: "16px" }}>
                 <div style={{
                     padding: "12px",

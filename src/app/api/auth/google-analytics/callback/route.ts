@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
 
         // Redirect to selection UI
         return NextResponse.redirect(`${origin}/projects/${projectId}/link-analytics?sourceId=${pendingSource.id}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Google Analytics OAuth Callback Error:", error);
         return NextResponse.redirect(`${origin}/projects/${projectId}/data/sources?error=AnalyticsLinkFailed`);
     }

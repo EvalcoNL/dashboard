@@ -67,7 +67,7 @@ export async function POST(req: Request) {
         return NextResponse.json({
             message: "Verificatie-e-mail verzonden naar " + email,
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("[EmailChange] Error:", error);
         return NextResponse.json({ error: "Er is een fout opgetreden" }, { status: 500 });
     }

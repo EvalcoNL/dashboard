@@ -15,7 +15,7 @@ export async function GET(
     const [, authError] = await requireDataSourceAccess(id);
     if (authError) return authError;
 
-    const pages = await (prisma as any).monitoredPage.findMany({
+    const pages = await prisma.monitoredPage.findMany({
         where: { dataSourceId: id },
         orderBy: { url: "asc" }
     });
@@ -49,14 +49,14 @@ export async function POST(
     }
 
     // Check for duplicate URL
-    const existing = await (prisma as any).monitoredPage.findFirst({
+    const existing = await prisma.monitoredPage.findFirst({
         where: { dataSourceId: id, url: body.url }
     });
     if (existing) {
         return NextResponse.json({ error: "Deze URL wordt al gemonitord" }, { status: 409 });
     }
 
-    const page = await (prisma as any).monitoredPage.create({
+    const page = await prisma.monitoredPage.create({
         data: {
             dataSourceId: id,
             url: body.url,
@@ -86,14 +86,14 @@ export async function DELETE(
     }
 
     // Verify the page belongs to THIS data source (prevent IDOR)
-    const page = await (prisma as any).monitoredPage.findFirst({
+    const page = await prisma.monitoredPage.findFirst({
         where: { id: body.pageId, dataSourceId: id }
     });
     if (!page) {
         return NextResponse.json({ error: "Pagina niet gevonden" }, { status: 404 });
     }
 
-    await (prisma as any).monitoredPage.delete({
+    await prisma.monitoredPage.delete({
         where: { id: body.pageId }
     });
 

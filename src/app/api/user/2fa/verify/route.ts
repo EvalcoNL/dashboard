@@ -67,7 +67,7 @@ export async function POST(req: Request) {
             message: "Two-factor authentication enabled successfully",
             backupCodes: plainCodes,
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("2FA verification error:", error);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }

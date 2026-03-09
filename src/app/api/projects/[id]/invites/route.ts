@@ -48,7 +48,7 @@ export async function POST(
         expiresAt.setDate(expiresAt.getDate() + 7);
 
         // Save invite to DB
-        const invite = await (prisma as any).projectInvite.create({
+        const invite = await prisma.projectInvite.create({
             data: {
                 projectId,
                 email,
@@ -86,7 +86,7 @@ export async function DELETE(
             return NextResponse.json({ error: "Invite ID required" }, { status: 400 });
         }
 
-        await (prisma as any).projectInvite.delete({
+        await prisma.projectInvite.delete({
             where: { id: inviteId, projectId } // Ensure it logs to this client
         });
 

@@ -9,7 +9,8 @@ import { LanguageProvider } from "@/lib/i18n/LanguageContext";
 import { NotificationProvider } from "@/components/NotificationProvider";
 import { MobileSidebarProvider } from "@/components/layout/MobileSidebarContext";
 import CommandPalette from "@/components/CommandPalette";
-import OnboardingTour from "@/components/OnboardingTour";
+
+
 
 const SIDEBAR_WIDTH = 64;
 const SUBMENU_WIDTH = 240;
@@ -32,8 +33,8 @@ export default function DashboardLayout({
                 <ThemeProvider>
                     <NotificationProvider>
                         <MobileSidebarProvider>
+
                             <CommandPalette />
-                            <OnboardingTour />
                             <div style={{ minHeight: "100vh", background: "var(--color-surface)" }}>
                                 <Topbar sidebarWidth={sidebarTotalWidth} />
                                 <div style={{ display: "flex" }} className="dashboard-layout">
@@ -50,6 +51,7 @@ export default function DashboardLayout({
                                         }}
                                         className="dashboard-main"
                                     >
+
                                         {children}
                                     </main>
                                 </div>

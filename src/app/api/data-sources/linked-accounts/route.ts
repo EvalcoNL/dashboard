@@ -113,12 +113,12 @@ export async function POST(req: NextRequest) {
                     status: "PENDING",
                 },
             });
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error(`Failed to invite ${email} to ${dsId}:`, error);
             results.push({
                 dataSourceId: dsId,
                 success: false,
-                message: error.message || "Onbekende fout bij het uitnodigen",
+                message: error instanceof Error ? error.message : "Onbekende fout",
             });
         }
     }
@@ -188,11 +188,11 @@ export async function PUT(req: NextRequest) {
             success: true,
             message: `Uitnodiging opnieuw verstuurd naar ${linkedAccount.email}`,
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("[API] Error resending invitation:", error);
         return NextResponse.json({
             success: false,
-            message: error.message || "Fout bij het opnieuw versturen van de uitnodiging",
+            message: error instanceof Error ? error.message : "Onbekende fout",
         }, { status: 500 });
     }
 }
@@ -274,12 +274,12 @@ export async function DELETE(req: Request) {
                         } else {
                             results.push({ id, ...removeResult });
                         }
-                    } catch (providerErr: any) {
+                    } catch (providerErr: unknown) {
                         console.error(`Platform removal failed for ${linkedAccount.email}:`, providerErr);
                         results.push({
                             id,
                             success: false,
-                            message: providerErr.message || "Platform verwijdering mislukt",
+                            message: providerErr instanceof Error ? providerErr.message : "Platform verwijdering mislukt",
                         });
                         continue; // Don't delete locally if platform removal failed
                     }
@@ -293,8 +293,8 @@ export async function DELETE(req: Request) {
 
                 // Delete from local DB
                 await prisma.linkedAccount.delete({ where: { id } });
-            } catch (error: any) {
-                results.push({ id, success: false, message: error.message });
+            } catch (error: unknown) {
+                results.push({ id, success: false, message: error instanceof Error ? error.message : "Onbekende fout" });
             }
         }
 

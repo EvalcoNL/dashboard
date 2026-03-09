@@ -39,10 +39,9 @@ export default function Sidebar({ onSubmenuChange }: { onSubmenuChange?: (open: 
     const [openMenuLabel, setOpenMenuLabel] = useState<string | null>(null);
     const { isOpen: mobileSidebarOpen, close: closeMobileSidebar } = useMobileSidebar();
 
-    // Auto-close mobile sidebar and submenu on route change
+    // Auto-close mobile sidebar on route change; keep submenu open
     useEffect(() => {
         closeMobileSidebar();
-        setOpenMenuLabel(null);
     }, [pathname]);
 
     // Filter admin nav items based on super admin status
@@ -62,15 +61,27 @@ export default function Sidebar({ onSubmenuChange }: { onSubmenuChange?: (open: 
 
     const adminNavItems: NavItem[] = [
         { href: "/", label: t("navigation", "home"), icon: LayoutDashboard },
-        { href: "/incidents", label: t("navigation", "incidents"), icon: AlertTriangle },
+        {
+            label: t("navigation", "incidents"),
+            icon: AlertTriangle,
+            submenu: [
+                { href: "/incidents", label: t("navigation", "overview") },
+            ],
+        },
     ];
 
     if (isSuperAdmin) {
-        adminNavItems.push({
-            href: "/admin/users",
-            label: "Gebruikersoverzicht",
-            icon: ShieldCheck
-        });
+        adminNavItems.push(
+            {
+                label: t("admin", "title"),
+                icon: ShieldCheck,
+                submenu: [
+                    { href: "/admin/users", label: t("admin", "users") },
+                    { href: "/admin/crm", label: t("admin", "crm") },
+                    { href: "/admin/audit-logs", label: t("admin", "auditLog") },
+                ],
+            }
+        );
     }
 
     // Starred dashboards
@@ -92,17 +103,18 @@ export default function Sidebar({ onSubmenuChange }: { onSubmenuChange?: (open: 
     }, [projectId, pathname]); // Refetch on route change to catch star toggles
 
     const clientNavItems: NavItem[] = [
-        { href: `/projects/${projectId}`, label: "Overzicht", icon: LayoutDashboard },
+        { href: `/projects/${projectId}`, label: t("navigation", "overview"), icon: LayoutDashboard },
         {
-            label: "Reports",
+            label: t("navigation", "reports"),
             icon: TrendingUp,
             submenu: [
-                { href: `/projects/${projectId}/reports/dashboards`, label: "Dashboards" },
+                { href: `/projects/${projectId}/reports/dashboards`, label: t("navigation", "dashboards") },
                 ...starredDashboards.map(d => ({
                     href: `/projects/${projectId}/reports/dashboards/${d.id}`,
                     label: d.name,
                 })),
-                { sectionTitle: "AI", href: `/projects/${projectId}/reports/ai`, label: "AI Reports" },
+                { sectionTitle: "AI", href: `/projects/${projectId}/reports/ai`, label: t("navigation", "aiReports") },
+                { href: `/projects/${projectId}/ai-chat`, label: t("navigation", "aiDataChat") },
             ]
         },
         {
@@ -111,7 +123,8 @@ export default function Sidebar({ onSubmenuChange }: { onSubmenuChange?: (open: 
             submenu: [
                 { href: `/projects/${projectId}/monitoring/web`, label: t("navigation", "webMonitoring") },
                 { href: `/projects/${projectId}/monitoring/incidents`, label: t("navigation", "incidents") },
-                { href: `/projects/${projectId}/monitoring/tracking`, label: t("navigation", "dataTrackingMonitoring"), sectionTitle: t("navigation", "dataTrackingMonitoringTitle") }
+                { href: `/projects/${projectId}/monitoring/tracking`, label: t("navigation", "dataTrackingMonitoring"), sectionTitle: t("navigation", "dataTrackingMonitoringTitle") },
+                { href: `/projects/${projectId}/monitoring/tracking/gtm`, label: t("navigation", "gtmMonitoring") },
             ]
         },
         {
@@ -120,12 +133,12 @@ export default function Sidebar({ onSubmenuChange }: { onSubmenuChange?: (open: 
             submenu: [
                 { sectionTitle: "Connect", href: `/projects/${projectId}/data/sources`, label: t("navigation", "dataSources") },
                 { href: `/projects/${projectId}/data/access`, label: t("navigation", "access") },
-                { sectionTitle: "Analyze", href: `/projects/${projectId}/data/explorer`, label: "Data Explorer" },
-                { sectionTitle: "Organize", href: `/projects/${projectId}/data/dimensions`, label: "Dimensies" },
-                { href: `/projects/${projectId}/data/metrics`, label: "Metrics" },
-                { href: `/projects/${projectId}/data/currencies`, label: "Currencies" },
-                { sectionTitle: "Beheer", href: `/projects/${projectId}/data/sync`, label: "Sync & Planning" },
-                { href: `/projects/${projectId}/data/health`, label: "Data Health & Kwaliteit" },
+                { sectionTitle: "Analyze", href: `/projects/${projectId}/data/explorer`, label: t("navigation", "dataExplorer") },
+                { sectionTitle: "Organize", href: `/projects/${projectId}/data/dimensions`, label: t("navigation", "dimensions") },
+                { href: `/projects/${projectId}/data/metrics`, label: t("navigation", "metrics") },
+                { href: `/projects/${projectId}/data/currencies`, label: t("navigation", "currencies") },
+                { sectionTitle: "Manage", href: `/projects/${projectId}/data/sync`, label: t("navigation", "syncPlanning") },
+                { href: `/projects/${projectId}/data/health`, label: t("navigation", "dataHealth") },
             ]
         },
     ];
@@ -186,7 +199,7 @@ export default function Sidebar({ onSubmenuChange }: { onSubmenuChange?: (open: 
                         />
                     </Link>
 
-                    <nav style={{ display: "flex", flexDirection: "column", gap: "12px", width: "100%", alignItems: "center", paddingTop: "16px" }}>
+                    <nav aria-label="Hoofdnavigatie" style={{ display: "flex", flexDirection: "column", gap: "12px", width: "100%", alignItems: "center", paddingTop: "16px" }}>
                         {currentNavItems.map((item, idx) => {
                             const Icon = item.icon;
                             const active = item.href ? isActive(item.href) : (item.submenu?.some(sub => isActive(sub.href)));
@@ -312,7 +325,7 @@ export default function Sidebar({ onSubmenuChange }: { onSubmenuChange?: (open: 
                                     {activeSubmenu.title}
                                 </div>
                             )}
-                            <nav style={{ display: "flex", flexDirection: "column", gap: "4px", flex: 1 }}>
+                            <nav aria-label="Submenu navigatie" style={{ display: "flex", flexDirection: "column", gap: "4px", flex: 1 }}>
                                 {activeSubmenu.items.map((sub, sIdx) => {
                                     const isSiblingPrefix = activeSubmenu.items.some(
                                         (other, oIdx) => oIdx !== sIdx && other.href.startsWith(sub.href + "/")

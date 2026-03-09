@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { User, Mail, Shield, Calendar, Edit2, Trash2, X, Check, AlertTriangle, UserPlus, Eye, EyeOff } from "lucide-react";
+import { useState, useMemo } from "react";
+import { User, Mail, Shield, Calendar, Edit2, Trash2, X, Check, AlertTriangle, UserPlus, Eye, EyeOff, Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Clock } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 interface Project {
@@ -14,9 +14,26 @@ interface UserData {
     name: string;
     email: string;
     role: string;
+    emailVerified?: boolean;
+    lastLoginAt?: Date | string | null;
     createdAt: Date | string;
     projects: Project[];
 }
+
+function timeAgo(dateStr: string | Date | null | undefined): string {
+    if (!dateStr) return "Nooit";
+    const now = new Date();
+    const d = new Date(dateStr);
+    const diff = Math.floor((now.getTime() - d.getTime()) / 1000);
+    if (diff < 60) return "Zojuist";
+    if (diff < 3600) return `${Math.floor(diff / 60)}m geleden`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}u geleden`;
+    if (diff < 604800) return `${Math.floor(diff / 86400)}d geleden`;
+    return d.toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
+}
+
+type SortField = "name" | "email" | "role" | "lastLoginAt" | "createdAt";
+type SortDir = "asc" | "desc";
 
 interface Props {
     initialUsers: UserData[];
@@ -34,6 +51,64 @@ export default function UserManagementTable({ initialUsers, roles }: Props) {
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const router = useRouter();
+
+    // Search, filter, sort, pagination state
+    const [searchQuery, setSearchQuery] = useState("");
+    const [roleFilter, setRoleFilter] = useState("");
+    const [sortField, setSortField] = useState<SortField>("createdAt");
+    const [sortDir, setSortDir] = useState<SortDir>("desc");
+    const [currentPage, setCurrentPage] = useState(1);
+    const perPage = 25;
+
+    const toggleSort = (field: SortField) => {
+        if (sortField === field) {
+            setSortDir(d => d === "asc" ? "desc" : "asc");
+        } else {
+            setSortField(field);
+            setSortDir("asc");
+        }
+        setCurrentPage(1);
+    };
+
+    const filteredAndSorted = useMemo(() => {
+        let result = [...users];
+        // Search
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            result = result.filter(u =>
+                u.name.toLowerCase().includes(q) ||
+                u.email.toLowerCase().includes(q)
+            );
+        }
+        // Role filter
+        if (roleFilter) {
+            result = result.filter(u => u.role === roleFilter);
+        }
+        // Sort
+        result.sort((a, b) => {
+            let aVal: any = a[sortField];
+            let bVal: any = b[sortField];
+            if (sortField === "lastLoginAt" || sortField === "createdAt") {
+                aVal = aVal ? new Date(aVal).getTime() : 0;
+                bVal = bVal ? new Date(bVal).getTime() : 0;
+            } else {
+                aVal = String(aVal || "").toLowerCase();
+                bVal = String(bVal || "").toLowerCase();
+            }
+            if (aVal < bVal) return sortDir === "asc" ? -1 : 1;
+            if (aVal > bVal) return sortDir === "asc" ? 1 : -1;
+            return 0;
+        });
+        return result;
+    }, [users, searchQuery, roleFilter, sortField, sortDir]);
+
+    const totalPages = Math.max(1, Math.ceil(filteredAndSorted.length / perPage));
+    const paginatedUsers = filteredAndSorted.slice((currentPage - 1) * perPage, currentPage * perPage);
+
+    const SortIcon = ({ field }: { field: SortField }) => {
+        if (sortField !== field) return <ChevronUp size={12} style={{ opacity: 0.3 }} />;
+        return sortDir === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />;
+    };
 
     const handleUpdate = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -127,8 +202,39 @@ export default function UserManagementTable({ initialUsers, roles }: Props) {
 
     return (
         <div style={{ position: "relative" }}>
-            {/* Add User Button */}
-            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "16px" }}>
+            {/* Toolbar */}
+            <div style={{ display: "flex", gap: "12px", marginBottom: "16px", flexWrap: "wrap", alignItems: "center" }}>
+                {/* Search */}
+                <div style={{ flex: 1, minWidth: "220px", position: "relative" }}>
+                    <Search size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--color-text-muted)" }} />
+                    <input
+                        type="text"
+                        placeholder="Zoek op naam of email..."
+                        value={searchQuery}
+                        onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                        style={{
+                            width: "100%", padding: "10px 12px 10px 36px",
+                            background: "var(--color-bg-secondary)", border: "1px solid var(--color-border)",
+                            borderRadius: "10px", color: "var(--color-text-primary)", fontSize: "0.875rem"
+                        }}
+                    />
+                </div>
+                {/* Role filter */}
+                <select
+                    value={roleFilter}
+                    onChange={(e) => { setRoleFilter(e.target.value); setCurrentPage(1); }}
+                    style={{
+                        padding: "10px 16px", background: "var(--color-bg-secondary)",
+                        border: "1px solid var(--color-border)", borderRadius: "10px",
+                        color: "var(--color-text-primary)", fontSize: "0.875rem"
+                    }}
+                >
+                    <option value="">Alle rollen</option>
+                    {availableRoles.map(r => (
+                        <option key={r.name} value={r.name}>{r.name}</option>
+                    ))}
+                </select>
+                {/* Add user button */}
                 <button
                     onClick={() => { setCreatingUser(true); setError(null); }}
                     style={{
@@ -143,6 +249,12 @@ export default function UserManagementTable({ initialUsers, roles }: Props) {
                 </button>
             </div>
 
+            {/* Results count */}
+            <div style={{ marginBottom: "8px", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                {filteredAndSorted.length} gebruiker{filteredAndSorted.length !== 1 ? "s" : ""}
+                {searchQuery || roleFilter ? " (gefilterd)" : ""}
+            </div>
+
             <div style={{
                 background: "var(--color-surface-elevated)",
                 border: "1px solid var(--color-border)",
@@ -153,15 +265,27 @@ export default function UserManagementTable({ initialUsers, roles }: Props) {
                     <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
                         <thead>
                             <tr style={{ background: "rgba(255, 255, 255, 0.02)", borderBottom: "1px solid var(--color-border)" }}>
-                                <th style={thStyle}>Gebruiker</th>
-                                <th style={thStyle}>E-mail</th>
-                                <th style={thStyle}>Rol</th>
-                                <th style={thStyle}>Accounts</th>
+                                <th style={{ ...thStyle, cursor: "pointer" }} onClick={() => toggleSort("name")}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>Gebruiker <SortIcon field="name" /></div>
+                                </th>
+                                <th style={{ ...thStyle, cursor: "pointer" }} onClick={() => toggleSort("email")}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>E-mail <SortIcon field="email" /></div>
+                                </th>
+                                <th style={{ ...thStyle, cursor: "pointer" }} onClick={() => toggleSort("role")}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>Rol <SortIcon field="role" /></div>
+                                </th>
+                                <th style={thStyle}>Projecten</th>
+                                <th style={{ ...thStyle, cursor: "pointer" }} onClick={() => toggleSort("lastLoginAt")}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>Laatst actief <SortIcon field="lastLoginAt" /></div>
+                                </th>
+                                <th style={{ ...thStyle, cursor: "pointer" }} onClick={() => toggleSort("createdAt")}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>Aangemaakt <SortIcon field="createdAt" /></div>
+                                </th>
                                 <th style={thStyle}>Acties</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {users.map((user) => (
+                            {paginatedUsers.map((user) => (
                                 <tr key={user.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
                                     <td style={tdStyle}>
                                         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -203,7 +327,18 @@ export default function UserManagementTable({ initialUsers, roles }: Props) {
                                     </td>
                                     <td style={tdStyle}>
                                         <div style={{ color: "var(--color-text-muted)", fontSize: "0.8125rem" }}>
-                                            {user.projects.length} accounts
+                                            {user.projects.length} project{user.projects.length !== 1 ? "en" : ""}
+                                        </div>
+                                    </td>
+                                    <td style={tdStyle}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--color-text-muted)", fontSize: "0.8125rem" }}>
+                                            <Clock size={12} />
+                                            {timeAgo(user.lastLoginAt)}
+                                        </div>
+                                    </td>
+                                    <td style={tdStyle}>
+                                        <div style={{ color: "var(--color-text-muted)", fontSize: "0.8125rem" }}>
+                                            {new Date(user.createdAt).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" })}
                                         </div>
                                     </td>
                                     <td style={tdStyle}>
@@ -230,6 +365,44 @@ export default function UserManagementTable({ initialUsers, roles }: Props) {
                     </table>
                 </div>
             </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+                <div style={{
+                    display: "flex", justifyContent: "flex-end", alignItems: "center",
+                    gap: "12px", marginTop: "16px", padding: "0 4px",
+                }}>
+                    <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                        Pagina {currentPage} van {totalPages}
+                    </span>
+                    <button
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage <= 1}
+                        style={{
+                            padding: "6px", background: "var(--color-bg-secondary)",
+                            border: "1px solid var(--color-border)", borderRadius: "6px",
+                            color: currentPage <= 1 ? "var(--color-text-muted)" : "var(--color-text-primary)",
+                            cursor: currentPage <= 1 ? "not-allowed" : "pointer",
+                            opacity: currentPage <= 1 ? 0.5 : 1,
+                        }}
+                    >
+                        <ChevronLeft size={16} />
+                    </button>
+                    <button
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage >= totalPages}
+                        style={{
+                            padding: "6px", background: "var(--color-bg-secondary)",
+                            border: "1px solid var(--color-border)", borderRadius: "6px",
+                            color: currentPage >= totalPages ? "var(--color-text-muted)" : "var(--color-text-primary)",
+                            cursor: currentPage >= totalPages ? "not-allowed" : "pointer",
+                            opacity: currentPage >= totalPages ? 0.5 : 1,
+                        }}
+                    >
+                        <ChevronRight size={16} />
+                    </button>
+                </div>
+            )}
 
             {/* Edit Modal */}
             {editingUser && (

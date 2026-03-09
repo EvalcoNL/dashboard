@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
             })
         );
         const tokenData = await tokenRes.json();
-        if (tokenData.error) throw new Error(tokenData.error.message);
+        if (tokenData.error) throw new Error(tokenData.error.message || tokenData.error);
 
         // Exchange for long-lived token
         const longLivedRes = await fetch(
@@ -164,7 +164,7 @@ export async function GET(req: NextRequest) {
         );
 
         return NextResponse.redirect(`${origin}/projects/${projectId}/data/sources`);
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Meta OAuth Error:", error);
         return NextResponse.redirect(`${origin}/projects/${projectId}/data/sources?error=MetaLinkFailed`);
     }

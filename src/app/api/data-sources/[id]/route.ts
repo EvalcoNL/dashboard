@@ -27,7 +27,7 @@ export async function PATCH(
         });
 
         return NextResponse.json({ success: true, source: updatedSource });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Failed to update data source:", error);
         return NextResponse.json(
             { error: "Failed to update data source" },
@@ -50,7 +50,7 @@ export async function DELETE(
         });
 
         return NextResponse.json({ success: true });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Failed to delete data source:", error);
         return NextResponse.json(
             { error: "Failed to delete data source" },

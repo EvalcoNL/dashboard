@@ -28,7 +28,6 @@ export async function GET(req: NextRequest) {
         const origin = process.env.NEXTAUTH_URL || new URL(req.url).origin;
         const redirectUri = `${origin}/api/auth/google-ads/callback`;
 
-        console.log(`[OAuth] Processing callback with redirect_uri: ${redirectUri}`);
 
         const refreshToken = await googleAdsService.getRefreshToken(code, redirectUri);
 
@@ -41,7 +40,7 @@ export async function GET(req: NextRequest) {
 
         // Always redirect to selection page to allow user to pick account and see what they are linking
         // We'll pass the refreshToken securely? No, let's create a pending DataSource
-        const pendingSource = await (prisma as any).dataSource.create({
+        const pendingSource = await prisma.dataSource.create({
             data: {
                 projectId: projectId,
                 type: "GOOGLE_ADS",
@@ -55,7 +54,7 @@ export async function GET(req: NextRequest) {
 
         // Redirect to selection UI
         return NextResponse.redirect(`${origin}/projects/${projectId}/link?sourceId=${pendingSource.id}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("OAuth Callback Error:", error);
         return NextResponse.json({ error: "Failed to link Google Ads" }, { status: 500 });
     }

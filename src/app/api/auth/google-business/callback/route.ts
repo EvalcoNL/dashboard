@@ -104,7 +104,7 @@ export async function GET(req: NextRequest) {
         });
 
         return NextResponse.redirect(`${origin}/projects/${projectId}/link-business?sourceId=${pendingSource.id}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Google Business OAuth Error:", error);
         return NextResponse.redirect(`${origin}/projects/${projectId}/data/sources?error=BusinessLinkFailed`);
     }

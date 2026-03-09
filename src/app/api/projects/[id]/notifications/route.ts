@@ -20,7 +20,7 @@ export async function PATCH(
         }
 
         // Update the client with the new notification settings
-        const updatedClient = await (prisma as any).project.update({
+        const updatedClient = await prisma.project.update({
             where: { id: projectId },
             data: {
                 slackWebhookUrl: slackWebhookUrl || null,

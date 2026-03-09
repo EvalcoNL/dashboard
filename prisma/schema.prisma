@@ -17,11 +17,13 @@ model User {
   twoFactorSecret     String?         @map("two_factor_secret")
   backupCodes         Json?           @map("backup_codes")
   dashboardView       String          @default("cards") @map("dashboard_view")
+  lastLoginAt         DateTime?       @map("last_login_at")
   createdAt           DateTime        @default(now()) @map("created_at")
   advisorActions      AdvisorReport[] @relation("reviewedBy")
   projects            Project[]       @relation("ProjectAccess")
   notificationProjects Project[]      @relation("NotificationUsers")
   notificationPreferences UserNotificationPreference[]
+  onboardingProgress OnboardingProgress[]
 
   @@map("users")
 }
@@ -75,6 +77,18 @@ model Project {
   datasets             Dataset[]
   dashboards           Dashboard[]
   personAliases        PersonAlias[]
+  rules                Rule[]
+  contacts             Contact[]
+  invoices             Invoice[]
+  companyName          String?                @map("company_name")
+  address              String?
+  billingEmail         String?                @map("billing_email")
+  kvkNumber            String?                @map("kvk_number")
+  vatNumber            String?                @map("vat_number")
+  contractStart        DateTime?              @map("contract_start")
+  contractEnd          DateTime?              @map("contract_end")
+  monthlyFee           Float?                 @map("monthly_fee")
+  crmNotes             String?                @map("crm_notes")
 
   @@map("projects")
 }
@@ -312,6 +326,9 @@ model Incident {
   cause          String
   causeCode      String?         @map("cause_code")
   status         String          @default("ONGOING")
+  severity       String          @default("P3") // P1 (critical), P2 (high), P3 (medium), P4 (low)
+  type           String          @default("uptime") // uptime, tracking, data, budget, custom
+  assignedTo     String?         @map("assigned_to")
   checkedUrl     String?         @map("checked_url")
   httpMethod     String          @default("GET") @map("http_method")
   statusCode     Int?            @map("status_code")
@@ -329,6 +346,7 @@ model Incident {
 
   @@index([projectId, status])
   @@index([projectId, createdAt])
+  @@index([projectId, severity])
   @@index([dataSourceId])
   @@index([startedAt])
   @@map("incidents")
@@ -346,6 +364,48 @@ model IncidentEvent {
 
   @@index([incidentId, createdAt])
   @@map("incident_events")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// RULE BUILDER ENGINE
+// ═══════════════════════════════════════════════════════════════════
+
+model Rule {
+  id              String          @id @default(cuid())
+  projectId       String          @map("project_id")
+  name            String
+  description     String?
+  category        String?         // "kosten", "conversie", "uptime", "tracking", "custom"
+  enabled         Boolean         @default(true)
+  conditions      Json            // [{ sectionOperator: "AND"|"OR", rules: [{ field, fieldSource, operator, value, valueType }] }]
+  actions         Json            // [{ type: "incident"|"notification"|"email"|"slack", config: {...} }]
+  schedule        String          @default("DAILY") // REALTIME, HOURLY, DAILY
+  cooldownMinutes Int             @default(60) @map("cooldown_minutes")
+  lastEvaluatedAt DateTime?       @map("last_evaluated_at")
+  lastTriggeredAt DateTime?       @map("last_triggered_at")
+  createdBy       String          @map("created_by")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  executions      RuleExecution[]
+
+  @@index([projectId, enabled])
+  @@map("rules")
+}
+
+model RuleExecution {
+  id                String   @id @default(cuid())
+  ruleId            String   @map("rule_id")
+  triggeredAt       DateTime @default(now()) @map("triggered_at")
+  conditionSnapshot Json     @map("condition_snapshot")
+  actionsTaken      Json     @map("actions_taken")
+  resultData        Json?    @map("result_data")
+  success           Boolean  @default(true)
+  errorMessage      String?  @map("error_message")
+  rule              Rule     @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId, triggeredAt])
+  @@map("rule_executions")
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -597,4 +657,71 @@ model UserNotificationPreference {
 
   @@unique([userId, projectId])
   @@map("user_notification_preferences")
+}
+
+// Onboarding progress tracking per user
+model OnboardingProgress {
+  id          String    @id @default(cuid())
+  userId      String    @map("user_id")
+  step        String    // "profile", "project", "sources", "monitoring", "notifications", "team"
+  completed   Boolean   @default(false)
+  skipped     Boolean   @default(false)
+  completedAt DateTime? @map("completed_at")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, step])
+  @@index([userId])
+  @@map("onboarding_progress")
+}
+
+// CRM: Contact persons per project
+model Contact {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  name      String
+  email     String?
+  phone     String?
+  role      String?  // "Beslisser", "Marketing Manager", etc.
+  isPrimary Boolean  @default(false) @map("is_primary")
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("contacts")
+}
+
+// CRM: Invoices per project
+model Invoice {
+  id            String    @id @default(cuid())
+  projectId     String    @map("project_id")
+  invoiceNumber String    @unique @map("invoice_number")
+  amount        Float
+  vatAmount     Float     @default(0) @map("vat_amount")
+  status        String    @default("CONCEPT") // CONCEPT, VERZONDEN, BETAALD, VERLOPEN
+  invoiceDate   DateTime  @map("invoice_date")
+  dueDate       DateTime  @map("due_date")
+  paidAt        DateTime? @map("paid_at")
+  description   String?
+  notes         String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([status])
+  @@map("invoices")
+}
+
+// AI Data Chat sessions
+model AiChatSession {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  projectId String   @map("project_id")
+  title     String   @default("Nieuwe Chat")
+  messages  String   @default("[]") // JSON array of {role, content, timestamp}
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, projectId])
+  @@map("ai_chat_sessions")
 }

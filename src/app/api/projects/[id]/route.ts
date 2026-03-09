@@ -26,7 +26,9 @@ export async function GET(
 
     if (!client) return NextResponse.json({ error: "Project niet gevonden" }, { status: 404 });
 
-    return NextResponse.json(client);
+    const response = NextResponse.json(client);
+    response.headers.set('Cache-Control', 'private, s-maxage=60, stale-while-revalidate=120');
+    return response;
 }
 
 // PUT /api/projects/[id] — Update client
@@ -57,7 +59,7 @@ export async function PUT(
         });
 
         return NextResponse.json(client);
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Error updating client:", error);
         return NextResponse.json({ error: "Fout bij bijwerken project" }, { status: 500 });
     }
@@ -75,7 +77,7 @@ export async function DELETE(
         const { id } = await params;
         await prisma.project.delete({ where: { id } });
         return NextResponse.json({ success: true });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Error deleting client:", error);
         return NextResponse.json({ error: "Fout bij verwijderen project" }, { status: 500 });
     }

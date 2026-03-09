@@ -24,7 +24,7 @@ export async function POST() {
         auditLog({ userId: session.user.id, action: '2FA_DISABLED' });
 
         return NextResponse.json({ message: "Two-factor authentication disabled successfully" });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("2FA disable error:", error);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }

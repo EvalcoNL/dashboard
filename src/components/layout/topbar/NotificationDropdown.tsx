@@ -1,18 +1,34 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
     Bell,
     AlertTriangle,
     AlertCircle,
     Info,
-    CheckCheck
+    CheckCheck,
+    Trash2,
+    Filter
 } from "lucide-react";
+
+interface Notification {
+    id: string;
+    title: string;
+    message: string;
+    severity: "critical" | "warning" | "info";
+    read: boolean;
+    createdAt: string;
+    statusCode?: number;
+    url?: string;
+    projectId?: string;
+    project?: { name: string };
+}
 
 export default function NotificationDropdown() {
     const [isOpen, setIsOpen] = useState(false);
-    const [notifications, setNotifications] = useState<any[]>([]);
+    const [notifications, setNotifications] = useState<Notification[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [typeFilter, setTypeFilter] = useState<string>("all");
     const ref = useRef<HTMLDivElement>(null);
 
     // Click outside to close
@@ -34,9 +50,9 @@ export default function NotificationDropdown() {
     }, []);
 
     // Fetch notifications
-    const fetchNotifications = async () => {
+    const fetchNotifications = useCallback(async () => {
         try {
-            const res = await fetch("/api/notifications?limit=20");
+            const res = await fetch("/api/notifications?limit=30");
             if (res.ok) {
                 const data = await res.json();
                 setNotifications(data.notifications || []);
@@ -45,13 +61,14 @@ export default function NotificationDropdown() {
         } catch (err) {
             console.error("Failed to fetch notifications:", err);
         }
-    };
+    }, []);
 
     useEffect(() => {
         fetchNotifications();
-        const interval = setInterval(fetchNotifications, 30000);
+        // Poll every 15 seconds for more responsive updates
+        const interval = setInterval(fetchNotifications, 15000);
         return () => clearInterval(interval);
-    }, []);
+    }, [fetchNotifications]);
 
     const markAsRead = async (id: string) => {
         await fetch("/api/notifications", {
@@ -72,6 +89,27 @@ export default function NotificationDropdown() {
         setNotifications(prev => prev.map(n => ({ ...n, read: true })));
         setUnreadCount(0);
     };
+
+    const dismissRead = async () => {
+        const readIds = notifications.filter(n => n.read).map(n => n.id);
+        if (readIds.length === 0) return;
+        try {
+            await fetch("/api/notifications", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ids: readIds })
+            });
+            setNotifications(prev => prev.filter(n => !n.read));
+        } catch (err) {
+            console.error("Failed to dismiss notifications:", err);
+        }
+    };
+
+    const filteredNotifications = typeFilter === "all"
+        ? notifications
+        : notifications.filter(n => n.severity === typeFilter);
+
+    const readCount = notifications.filter(n => n.read).length;
 
     const getSeverityIcon = (severity: string) => {
         if (severity === "critical") return <AlertCircle size={16} color="#ef4444" />;
@@ -94,6 +132,8 @@ export default function NotificationDropdown() {
         <div ref={ref} style={{ position: "relative" }}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
+                aria-label={`Notificaties${unreadCount > 0 ? ` (${unreadCount} ongelezen)` : ''}`}
+                aria-expanded={isOpen}
                 style={{
                     background: "none",
                     border: "none",
@@ -156,34 +196,76 @@ export default function NotificationDropdown() {
                         <span style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--color-text-primary)" }}>
                             Notificaties
                         </span>
-                        {unreadCount > 0 && (
+                        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                            {readCount > 0 && (
+                                <button
+                                    onClick={dismissRead}
+                                    title="Gelezen verwijderen"
+                                    style={{
+                                        background: "none", border: "none",
+                                        color: "var(--color-text-muted)", cursor: "pointer",
+                                        fontSize: "0.7rem", fontWeight: 600,
+                                        display: "flex", alignItems: "center", gap: "3px",
+                                        padding: "2px 6px", borderRadius: "4px",
+                                        transition: "all 0.15s"
+                                    }}
+                                    className="hover-bg"
+                                >
+                                    <Trash2 size={12} /> {readCount}
+                                </button>
+                            )}
+                            {unreadCount > 0 && (
+                                <button
+                                    onClick={markAllRead}
+                                    style={{
+                                        background: "none", border: "none",
+                                        color: "var(--color-brand)", cursor: "pointer",
+                                        fontSize: "0.75rem", fontWeight: 600,
+                                        display: "flex", alignItems: "center", gap: "4px"
+                                    }}
+                                >
+                                    <CheckCheck size={14} /> Alles gelezen
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Type filter tabs */}
+                    <div style={{
+                        display: "flex", gap: "2px", padding: "8px 12px",
+                        borderBottom: "1px solid var(--color-border)",
+                        background: "rgba(0,0,0,0.1)"
+                    }}>
+                        {[
+                            { key: "all", label: "Alle" },
+                            { key: "critical", label: "Kritiek", color: "#ef4444" },
+                            { key: "warning", label: "Waarschuwing", color: "#f59e0b" },
+                            { key: "info", label: "Info", color: "#3b82f6" },
+                        ].map(f => (
                             <button
-                                onClick={markAllRead}
+                                key={f.key}
+                                onClick={() => setTypeFilter(f.key)}
                                 style={{
-                                    background: "none",
-                                    border: "none",
-                                    color: "var(--color-brand)",
-                                    cursor: "pointer",
-                                    fontSize: "0.75rem",
-                                    fontWeight: 600,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: "4px"
+                                    background: typeFilter === f.key ? "rgba(99,102,241,0.15)" : "transparent",
+                                    border: "none", borderRadius: "6px",
+                                    padding: "4px 10px", fontSize: "0.7rem", fontWeight: 600,
+                                    color: typeFilter === f.key ? (f.color || "var(--color-brand)") : "var(--color-text-muted)",
+                                    cursor: "pointer", transition: "all 0.15s"
                                 }}
                             >
-                                <CheckCheck size={14} /> Alles gelezen
+                                {f.label}
                             </button>
-                        )}
+                        ))}
                     </div>
 
                     <div style={{ maxHeight: "400px", overflowY: "auto" }}>
-                        {notifications.length === 0 ? (
+                        {filteredNotifications.length === 0 ? (
                             <div style={{ padding: "40px 16px", textAlign: "center", color: "var(--color-text-muted)", fontSize: "0.875rem" }}>
                                 <Bell size={24} style={{ marginBottom: "8px", opacity: 0.3 }} />
                                 <div>Geen notificaties</div>
                             </div>
                         ) : (
-                            notifications.map((notif: any) => (
+                            filteredNotifications.map((notif) => (
                                 <div
                                     key={notif.id}
                                     style={{

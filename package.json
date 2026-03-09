@@ -12,7 +12,10 @@
     "db:studio": "npx prisma studio",
     "postinstall": "prisma generate",
     "worker:dev": "npx tsx src/worker-entry.ts",
-    "worker:start": "node dist/worker-entry.js"
+    "worker:start": "node dist/worker-entry.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
@@ -34,7 +37,6 @@
     "google-auth-library": "^10.6.1",
     "google-gax": "^5.0.6",
     "is-stream": "^4.0.1",
-    "jsdom": "^28.1.0",
     "lucide-react": "^0.575.0",
     "next": "16.1.6",
     "next-auth": "^5.0.0-beta.30",
@@ -53,6 +55,8 @@
     "through2": "^4.0.2"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.19.33",
     "@types/react": "^19",
@@ -60,7 +64,9 @@
     "dotenv": "^17.3.1",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "jsdom": "^28.1.0",
     "tsx": "^4.21.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.0.18"
   }
 }

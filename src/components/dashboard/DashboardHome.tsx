@@ -33,6 +33,7 @@ import {
 import SummaryCard from "@/components/ui/SummaryCard";
 import DateRangePicker, { type DateRange } from "@/components/ui/DateRangePicker";
 import { useNotification } from "@/components/NotificationProvider";
+import OnboardingChecklist from "@/components/OnboardingChecklist";
 
 interface ProjectWithData {
     id: string;
@@ -337,6 +338,9 @@ export default function DashboardHome({
                     Performance overzicht van al je projecten
                 </p>
             </div>
+
+            {/* Onboarding Checklist */}
+            <OnboardingChecklist />
 
             {/* Summary Cards */}
             <div

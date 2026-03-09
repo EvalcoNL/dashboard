@@ -40,8 +40,8 @@ export async function POST(
         });
 
         return NextResponse.json(savedAdvice);
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Advice Generation Failed:", error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: error instanceof Error ? error.message : "Onbekende fout" }, { status: 500 });
     }
 }

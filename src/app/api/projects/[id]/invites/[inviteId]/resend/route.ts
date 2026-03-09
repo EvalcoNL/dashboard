@@ -15,7 +15,7 @@ export async function POST(
         const { id, inviteId } = await context.params;
 
         // Verify the invite exists and belongs to the client
-        const invite = await (prisma as any).projectInvite.findUnique({
+        const invite = await prisma.projectInvite.findUnique({
             where: { id: inviteId },
             include: { project: true }
         });
@@ -32,7 +32,7 @@ export async function POST(
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 7);
 
-        await (prisma as any).projectInvite.update({
+        await prisma.projectInvite.update({
             where: { id: inviteId },
             data: { expiresAt }
         });
@@ -48,8 +48,8 @@ export async function POST(
 
         return NextResponse.json({ success: true, message: "Invite resent." });
 
-    } catch (error: any) {
-        console.error("[POST /api/projects/[id]/invites/[inviteId]/resend] Error:", error.message || error);
+    } catch (error: unknown) {
+        console.error("[POST /api/projects/[id]/invites/[inviteId]/resend] Error:", error instanceof Error ? error.message : "Onbekende fout");
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }

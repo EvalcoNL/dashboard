@@ -35,5 +35,7 @@ export default async function AIReportsPage({
         campaignMetrics: hasData ? [{}] : [],
     };
 
-    return <ReportClient project={clientWithMetrics} userRole={session.user.role} />;
+    return (
+        <ReportClient project={clientWithMetrics} userRole={session.user.role} />
+    );
 }

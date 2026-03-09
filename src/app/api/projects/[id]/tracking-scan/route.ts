@@ -114,7 +114,7 @@ export async function POST(
             results,
             domain: domain.externalId,
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("[TrackingScan] Error:", error);
         return NextResponse.json({ error: "Scan mislukt" }, { status: 500 });
     }

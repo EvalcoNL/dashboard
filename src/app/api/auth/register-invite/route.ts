@@ -10,7 +10,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Vul alle velden geldig in (wachtwoord > 6 karakters)." }, { status: 400 });
         }
 
-        const invite = await (prisma as any).projectInvite.findUnique({
+        const invite = await prisma.projectInvite.findUnique({
             where: { token },
             include: { project: true }
         });
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
         }
 
         // Mark invite as accepted
-        await (prisma as any).projectInvite.update({
+        await prisma.projectInvite.update({
             where: { id: invite.id },
             data: { status: "ACCEPTED" }
         });

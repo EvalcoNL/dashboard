@@ -25,7 +25,6 @@ export async function GET(req: NextRequest) {
     const origin = process.env.NEXTAUTH_URL || new URL(req.url).origin;
     const redirectUri = `${origin}/api/auth/google-ads/callback`;
 
-    console.log(`[OAuth] Initiating link with redirect_uri: ${redirectUri}`);
 
     const authUrl = await googleAdsService.getAuthUrl(redirectUri);
 

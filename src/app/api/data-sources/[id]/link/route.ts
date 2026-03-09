@@ -125,8 +125,8 @@ export async function PATCH(
         );
 
         return NextResponse.json(source);
-    } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error: unknown) {
+        return NextResponse.json({ error: error instanceof Error ? error.message : "Onbekende fout" }, { status: 500 });
     }
 }
 
@@ -158,7 +158,7 @@ export async function DELETE(
             where: { id: sourceId },
         });
         return NextResponse.json({ success: true });
-    } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error: unknown) {
+        return NextResponse.json({ error: error instanceof Error ? error.message : "Onbekende fout" }, { status: 500 });
     }
 }

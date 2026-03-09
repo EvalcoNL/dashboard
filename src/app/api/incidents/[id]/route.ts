@@ -15,7 +15,7 @@ export async function GET(
 
     const { id } = await params;
 
-    const incident = await (prisma as any).incident.findUnique({
+    const incident = await prisma.incident.findUnique({
         where: { id },
         include: {
             project: { select: { id: true, name: true } },
@@ -41,7 +41,7 @@ export async function PATCH(
     const body = await req.json();
     const { action } = body; // "acknowledge" | "resolve" | "reopen"
 
-    const incident = await (prisma as any).incident.findUnique({ where: { id } });
+    const incident = await prisma.incident.findUnique({ where: { id } });
     if (!incident) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const userName = session.user?.name || "Onbekend";
@@ -67,7 +67,7 @@ export async function PATCH(
         return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
 
-    const updated = await (prisma as any).incident.update({
+    const updated = await prisma.incident.update({
         where: { id },
         data: {
             ...updateData,
@@ -124,7 +124,7 @@ export async function PATCH(
             }
 
             if (notifiedChannels.length > 0) {
-                await (prisma as any).incidentEvent.create({
+                await prisma.incidentEvent.create({
                     data: {
                         incidentId: id,
                         type: "NOTIFICATION_SENT",

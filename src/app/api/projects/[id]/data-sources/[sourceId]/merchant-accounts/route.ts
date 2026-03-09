@@ -171,8 +171,8 @@ export async function GET(
 
         console.log(`[GMC] Returning ${accounts.length} accounts`);
         return NextResponse.json({ accounts });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Error fetching GMC accounts:", error);
-        return NextResponse.json({ error: error.message || "Failed to fetch accounts" }, { status: 500 });
+        return NextResponse.json({ error: error instanceof Error ? error.message : "Onbekende fout" }, { status: 500 });
     }
 }

@@ -26,7 +26,7 @@ export async function PATCH(
         });
 
         // Update the client's assigned users
-        const updatedClient = await (prisma as any).project.update({
+        const updatedClient = await prisma.project.update({
             where: { id: projectId },
             data: {
                 users: {

@@ -92,11 +92,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             channels: results
         });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("[Monitor Test Notification] Error:", error);
         return NextResponse.json({
             error: "Interne serverfout",
-            details: error?.message || String(error)
+            details: error instanceof Error ? error.message : String(error)
         }, { status: 500 });
     }
 }

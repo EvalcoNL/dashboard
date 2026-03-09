@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     if (projectId) where.projectId = projectId;
     if (unreadOnly) where.read = false;
 
-    const notifications = await (prisma as any).notification.findMany({
+    const notifications = await prisma.notification.findMany({
         where,
         orderBy: { createdAt: "desc" },
         take: Math.min(limit, 100),
@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
         }
     });
 
-    const unreadCount = await (prisma as any).notification.count({
+    const unreadCount = await prisma.notification.count({
         where: { ...where, read: false }
     });
 
@@ -52,7 +52,7 @@ export async function PUT(req: NextRequest) {
         const where: any = { read: false };
         if (body.projectId) where.projectId = body.projectId;
 
-        await (prisma as any).notification.updateMany({
+        await prisma.notification.updateMany({
             where,
             data: { read: true }
         });
@@ -61,7 +61,7 @@ export async function PUT(req: NextRequest) {
     }
 
     if (body.ids && Array.isArray(body.ids)) {
-        await (prisma as any).notification.updateMany({
+        await prisma.notification.updateMany({
             where: { id: { in: body.ids } },
             data: { read: true }
         });
@@ -70,4 +70,38 @@ export async function PUT(req: NextRequest) {
     }
 
     return NextResponse.json({ error: "Missing ids or all parameter" }, { status: 400 });
+}
+
+/**
+ * DELETE /api/notifications
+ * Delete (dismiss) notifications by IDs.
+ * Body: { ids: string[] }
+ */
+export async function DELETE(req: NextRequest) {
+    const session = await auth();
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    try {
+        const body = await req.json();
+
+        if (!body.ids || !Array.isArray(body.ids) || body.ids.length === 0) {
+            return NextResponse.json({ error: "Missing or empty ids array" }, { status: 400 });
+        }
+
+        // Limit batch size to prevent abuse
+        const ids = body.ids.slice(0, 100);
+
+        const result = await prisma.notification.deleteMany({
+            where: { id: { in: ids } },
+        });
+
+        return NextResponse.json({
+            success: true,
+            deleted: result.count,
+            message: `${result.count} notificatie(s) verwijderd`,
+        });
+    } catch (error) {
+        console.error("[DELETE /api/notifications]", error);
+        return NextResponse.json({ error: "Failed to delete notifications" }, { status: 500 });
+    }
 }

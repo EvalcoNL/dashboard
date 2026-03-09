@@ -82,7 +82,7 @@ export async function POST(req: Request) {
         const token = randomUUID();
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-        await (prisma as any).emailVerificationToken.create({
+        await prisma.emailVerificationToken.create({
             data: {
                 email: normalizedEmail,
                 token,
@@ -97,7 +97,7 @@ export async function POST(req: Request) {
             success: true,
             message: "Account aangemaakt. Controleer je e-mail voor de verificatie link.",
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("[POST /api/auth/register]", error);
         return NextResponse.json(
             { error: "Er is een fout opgetreden. Probeer het opnieuw." },

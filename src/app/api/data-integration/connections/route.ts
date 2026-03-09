@@ -46,7 +46,7 @@ export async function GET(request: Request) {
                 // MC data lives in merchant_center_health, not ClickHouse
                 // Show product count from latest snapshot, not number of snapshots
                 try {
-                    merchantHealth = await (prisma as any).merchantCenterHealth.findFirst({
+                    merchantHealth = await prisma.merchantCenterHealth.findFirst({
                         where: { dataSourceId: source.id },
                         orderBy: { date: 'desc' },
                         select: {

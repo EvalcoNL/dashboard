@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import {
     Filter, Download, BarChart3, LineChart, Table2,
     X, Plus, Loader2, Database, Columns3, RefreshCw,
+    Save, Star, Clock, Trash2,
 } from "lucide-react";
 import DateRangePicker, { type CompareConfig } from "@/components/ui/DateRangePicker";
 import FieldPicker, { type FieldDef } from "@/components/data/FieldPicker";
@@ -33,6 +34,51 @@ function getDateString(daysOffset: number): string {
     const d = new Date();
     d.setDate(d.getDate() + daysOffset);
     return d.toISOString().split("T")[0];
+}
+
+// ─── Saved Queries ───
+
+interface SavedQuery {
+    id: string;
+    name: string;
+    dimensions: string[];
+    metrics: string[];
+    filters: FilterConfig[];
+    currency: string;
+    chartType: ChartType;
+    savedAt: string;
+}
+
+const SAVED_QUERIES_KEY = "evalco_data_explorer_queries";
+const QUERY_HISTORY_KEY = "evalco_data_explorer_history";
+
+function loadSavedQueries(): SavedQuery[] {
+    try {
+        return JSON.parse(localStorage.getItem(SAVED_QUERIES_KEY) || "[]");
+    } catch { return []; }
+}
+
+function saveSavedQueries(queries: SavedQuery[]) {
+    localStorage.setItem(SAVED_QUERIES_KEY, JSON.stringify(queries));
+}
+
+function loadQueryHistory(): SavedQuery[] {
+    try {
+        return JSON.parse(localStorage.getItem(QUERY_HISTORY_KEY) || "[]");
+    } catch { return []; }
+}
+
+function addToHistory(entry: Omit<SavedQuery, "id" | "savedAt">) {
+    const history = loadQueryHistory();
+    const newEntry: SavedQuery = {
+        ...entry,
+        id: crypto.randomUUID(),
+        name: `Query ${new Date().toLocaleTimeString("nl-NL")}`,
+        savedAt: new Date().toISOString(),
+    };
+    history.unshift(newEntry);
+    // Keep last 10
+    localStorage.setItem(QUERY_HISTORY_KEY, JSON.stringify(history.slice(0, 10)));
 }
 
 // ─── Simple Chart ───
@@ -136,12 +182,45 @@ export default function DataExplorerClient() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    // Saved queries
+    const [savedQueries, setSavedQueries] = useState<SavedQuery[]>([]);
+    const [queryHistory, setQueryHistory] = useState<SavedQuery[]>([]);
+    const [showSavedMenu, setShowSavedMenu] = useState<"saved" | "history" | null>(null);
+    const [saveName, setSaveName] = useState("");
+    const [showSaveInput, setShowSaveInput] = useState(false);
+    const savedMenuRef = useRef<HTMLDivElement>(null);
+
     // Ref to track pending date reload
     const pendingDateReload = useRef(false);
+
+    // Click-outside handler for saved queries dropdown
+    useEffect(() => {
+        if (!showSavedMenu) return;
+        const handleClick = (e: MouseEvent) => {
+            if (savedMenuRef.current && !savedMenuRef.current.contains(e.target as Node)) {
+                setShowSavedMenu(null);
+            }
+        };
+        const handleEscape = (e: KeyboardEvent) => {
+            if (e.key === "Escape") setShowSavedMenu(null);
+        };
+        document.addEventListener("mousedown", handleClick);
+        document.addEventListener("keydown", handleEscape);
+        return () => {
+            document.removeEventListener("mousedown", handleClick);
+            document.removeEventListener("keydown", handleEscape);
+        };
+    }, [showSavedMenu]);
 
     // Sources
     const [connections, setConnections] = useState<{ id: string; name: string; connectorName: string }[]>([]);
     const [selectedSources, setSelectedSources] = useState<string[]>([]);
+
+    // Load saved queries from localStorage
+    useEffect(() => {
+        setSavedQueries(loadSavedQueries());
+        setQueryHistory(loadQueryHistory());
+    }, []);
 
     // ─── Fetch fields ───
     useEffect(() => {
@@ -284,6 +363,40 @@ export default function DataExplorerClient() {
         URL.revokeObjectURL(url);
     }, [result, selectedDimensions, selectedMetrics, dateRange]);
 
+    const saveCurrentQuery = useCallback((name: string) => {
+        if (!name.trim() || selectedDimensions.length === 0) return;
+        const newQuery: SavedQuery = {
+            id: crypto.randomUUID(),
+            name: name.trim(),
+            dimensions: selectedDimensions,
+            metrics: selectedMetrics,
+            filters,
+            currency,
+            chartType,
+            savedAt: new Date().toISOString(),
+        };
+        const updated = [newQuery, ...savedQueries];
+        saveSavedQueries(updated);
+        setSavedQueries(updated);
+        setShowSaveInput(false);
+        setSaveName("");
+    }, [selectedDimensions, selectedMetrics, filters, currency, chartType, savedQueries]);
+
+    const loadQuery = useCallback((query: SavedQuery) => {
+        setSelectedDimensions(query.dimensions);
+        setSelectedMetrics(query.metrics);
+        setFilters(query.filters);
+        setCurrency(query.currency);
+        setChartType(query.chartType);
+        setShowSavedMenu(null);
+    }, []);
+
+    const deleteSavedQuery = useCallback((id: string) => {
+        const updated = savedQueries.filter(q => q.id !== id);
+        saveSavedQueries(updated);
+        setSavedQueries(updated);
+    }, [savedQueries]);
+
     const totalSelected = selectedDimensions.length + selectedMetrics.length;
 
     // ─── Render ───
@@ -418,6 +531,108 @@ export default function DataExplorerClient() {
                         <Download size={14} />
                     </button>
                 )}
+
+                {/* Save Query */}
+                {totalSelected > 0 && (
+                    <div style={{ position: "relative" }}>
+                        {showSaveInput ? (
+                            <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+                                <input
+                                    type="text"
+                                    value={saveName}
+                                    onChange={e => setSaveName(e.target.value)}
+                                    onKeyDown={e => e.key === "Enter" && saveCurrentQuery(saveName)}
+                                    placeholder="Query naam..."
+                                    autoFocus
+                                    style={{
+                                        padding: "6px 10px", borderRadius: "6px", border: "1px solid var(--color-border)",
+                                        background: "var(--color-surface)", color: "var(--color-text-primary)",
+                                        fontSize: "0.8rem", width: "140px", outline: "none",
+                                    }}
+                                />
+                                <button onClick={() => saveCurrentQuery(saveName)} style={{ ...btnStyle(false), padding: "6px 10px" }}>
+                                    <Save size={12} />
+                                </button>
+                                <button onClick={() => { setShowSaveInput(false); setSaveName(""); }} style={{ ...btnStyle(false), padding: "6px 8px" }}>
+                                    <X size={12} />
+                                </button>
+                            </div>
+                        ) : (
+                            <button onClick={() => setShowSaveInput(true)} style={btnStyle(false)} title="Query opslaan">
+                                <Save size={14} />
+                            </button>
+                        )}
+                    </div>
+                )}
+
+                {/* Saved Queries & History */}
+                <div ref={savedMenuRef} style={{ position: "relative" }}>
+                    <div style={{ display: "flex", gap: "2px" }}>
+                        <button
+                            onClick={() => setShowSavedMenu(showSavedMenu === "saved" ? null : "saved")}
+                            style={btnStyle(showSavedMenu === "saved")}
+                            title="Opgeslagen queries"
+                        >
+                            <Star size={14} />
+                            {savedQueries.length > 0 && (
+                                <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "var(--color-brand)" }}>{savedQueries.length}</span>
+                            )}
+                        </button>
+                        <button
+                            onClick={() => setShowSavedMenu(showSavedMenu === "history" ? null : "history")}
+                            style={btnStyle(showSavedMenu === "history")}
+                            title="Querygeschiedenis"
+                        >
+                            <Clock size={14} />
+                        </button>
+                    </div>
+
+                    {/* Dropdown */}
+                    {showSavedMenu && (
+                        <div style={{
+                            position: "absolute", top: "100%", right: 0, marginTop: "8px",
+                            width: "300px", maxHeight: "320px", overflowY: "auto",
+                            background: "var(--color-surface-elevated)", border: "1px solid var(--color-border)",
+                            borderRadius: "10px", boxShadow: "0 8px 20px rgba(0,0,0,0.3)", zIndex: 100,
+                        }}>
+                            <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--color-border)", fontWeight: 700, fontSize: "0.8rem", color: "var(--color-text-primary)" }}>
+                                {showSavedMenu === "saved" ? "Opgeslagen Queries" : "Recente Queries"}
+                            </div>
+                            {(showSavedMenu === "saved" ? savedQueries : queryHistory).map(q => (
+                                <div key={q.id} style={{
+                                    display: "flex", alignItems: "center", gap: "10px",
+                                    padding: "10px 14px", cursor: "pointer",
+                                    borderBottom: "1px solid rgba(255,255,255,0.03)",
+                                    transition: "background 0.15s",
+                                }}
+                                    onClick={() => loadQuery(q)}
+                                    onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.03)"}
+                                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                                >
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
+                                            {q.name}
+                                        </div>
+                                        <div style={{ fontSize: "0.65rem", color: "var(--color-text-muted)", marginTop: "2px" }}>
+                                            {q.dimensions.length} dim · {q.metrics.length} metrics
+                                        </div>
+                                    </div>
+                                    {showSavedMenu === "saved" && (
+                                        <button onClick={(e) => { e.stopPropagation(); deleteSavedQuery(q.id); }}
+                                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-muted)", padding: "4px" }}>
+                                            <Trash2 size={12} />
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                            {(showSavedMenu === "saved" ? savedQueries : queryHistory).length === 0 && (
+                                <div style={{ padding: "24px", textAlign: "center", color: "var(--color-text-muted)", fontSize: "0.8rem" }}>
+                                    {showSavedMenu === "saved" ? "Geen opgeslagen queries" : "Geen recente queries"}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Filter Panel */}

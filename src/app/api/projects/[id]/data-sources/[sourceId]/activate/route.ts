@@ -106,9 +106,9 @@ export async function POST(
         }
 
         return NextResponse.json({ success: true });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Error activating data source:", error);
-        return NextResponse.json({ error: error.message || "Failed to activate source" }, { status: 500 });
+        return NextResponse.json({ error: error instanceof Error ? error.message : "Onbekende fout" }, { status: 500 });
     }
 }
 

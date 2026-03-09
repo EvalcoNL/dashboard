@@ -350,3 +350,127 @@ export async function sendEmailChangeVerification(newEmail: string, token: strin
     }
 }
 
+// ──────────────────────────────────────────────────────────────
+// Weekly Digest Email
+// ──────────────────────────────────────────────────────────────
+
+export interface WeeklyDigestPayload {
+    recipientEmail: string;
+    recipientName: string;
+    projects: {
+        name: string;
+        targetCPA: number | null;
+        incidentsThisWeek: number;
+        openIncidents: number;
+        activeRules: number;
+    }[];
+    periodStart: Date;
+    periodEnd: Date;
+}
+
+export async function sendWeeklyDigestEmail(payload: WeeklyDigestPayload) {
+    const { recipientEmail, recipientName, projects, periodStart, periodEnd } = payload;
+
+    if (!process.env.RESEND_API_KEY) {
+        console.log(`[EmailService] Mocking Weekly Digest to ${recipientEmail}`);
+        return { success: true, mocked: true };
+    }
+
+    const formatDate = (d: Date) => d.toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
+    const period = `${formatDate(periodStart)} — ${formatDate(periodEnd)}`;
+
+    const totalIncidents = projects.reduce((sum, p) => sum + p.incidentsThisWeek, 0);
+    const totalOpen = projects.reduce((sum, p) => sum + p.openIncidents, 0);
+    const totalRules = projects.reduce((sum, p) => sum + p.activeRules, 0);
+
+    // Build projects table rows
+    const projectRows = projects.map(p => {
+        const statusColor = p.openIncidents > 0 ? "#ef4444" : "#10b981";
+        const statusLabel = p.openIncidents > 0 ? `${p.openIncidents} open` : "✓ OK";
+        return `
+            <tr>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; font-weight: 500;">
+                    ${p.name}
+                </td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; text-align: center;">
+                    ${p.incidentsThisWeek}
+                </td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; text-align: center;">
+                    <span style="color: ${statusColor}; font-weight: 600;">${statusLabel}</span>
+                </td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; text-align: center;">
+                    ${p.activeRules}
+                </td>
+            </tr>
+        `;
+    }).join("\n");
+
+    try {
+        const html = renderEmailTemplate(
+            "Wekelijks Performance Overzicht",
+            `
+                <p>Hallo <strong>${recipientName}</strong>,</p>
+                <p>Hier is je wekelijkse samenvatting voor de periode <strong>${period}</strong>.</p>
+                
+                <!-- Summary Stats -->
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin: 24px 0; border-radius: 8px; overflow: hidden;">
+                    <tr>
+                        <td style="background: #6366f1; color: white; padding: 16px; text-align: center; width: 33%;">
+                            <div style="font-size: 1.5rem; font-weight: 700;">${projects.length}</div>
+                            <div style="font-size: 0.75rem; opacity: 0.9; text-transform: uppercase;">Projecten</div>
+                        </td>
+                        <td style="background: ${totalOpen > 0 ? "#ef4444" : "#10b981"}; color: white; padding: 16px; text-align: center; width: 33%;">
+                            <div style="font-size: 1.5rem; font-weight: 700;">${totalIncidents}</div>
+                            <div style="font-size: 0.75rem; opacity: 0.9; text-transform: uppercase;">Incidenten</div>
+                        </td>
+                        <td style="background: #0ea5e9; color: white; padding: 16px; text-align: center; width: 34%;">
+                            <div style="font-size: 1.5rem; font-weight: 700;">${totalRules}</div>
+                            <div style="font-size: 0.75rem; opacity: 0.9; text-transform: uppercase;">Actieve Regels</div>
+                        </td>
+                    </tr>
+                </table>
+                
+                <!-- Projects Table -->
+                <table width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; margin: 24px 0;">
+                    <thead>
+                        <tr style="background-color: #f8fafc;">
+                            <th style="padding: 12px 16px; text-align: left; font-size: 0.75rem; text-transform: uppercase; color: #64748b; font-weight: 600;">Project</th>
+                            <th style="padding: 12px 16px; text-align: center; font-size: 0.75rem; text-transform: uppercase; color: #64748b; font-weight: 600;">Incidenten</th>
+                            <th style="padding: 12px 16px; text-align: center; font-size: 0.75rem; text-transform: uppercase; color: #64748b; font-weight: 600;">Status</th>
+                            <th style="padding: 12px 16px; text-align: center; font-size: 0.75rem; text-transform: uppercase; color: #64748b; font-weight: 600;">Regels</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${projectRows}
+                    </tbody>
+                </table>
+                
+                ${totalOpen > 0 ? `
+                    <div class="alert-box">
+                        <p style="margin: 0;"><strong>Let op:</strong> Er ${totalOpen === 1 ? "is" : "zijn"} ${totalOpen} open incident${totalOpen !== 1 ? "en" : ""} die aandacht vereist${totalOpen !== 1 ? "en" : ""}.</p>
+                    </div>
+                ` : `
+                    <div class="success-box">
+                        <p style="margin: 0;">✅ Alle projecten draaien zonder openstaande incidenten. Goed bezig!</p>
+                    </div>
+                `}
+                
+                <div style="text-align: center;">
+                    <a href="${process.env.NEXTAUTH_URL || "http://localhost:3000"}/" class="button">Open Dashboard</a>
+                </div>
+            `
+        );
+
+        const data = await resend.emails.send({
+            from: FROM_EMAIL,
+            to: [recipientEmail],
+            subject: `📊 Wekelijks Overzicht — ${period}`,
+            html,
+        });
+
+        return { success: true, data };
+    } catch (error) {
+        console.error("[EmailService] Error sending weekly digest:", error);
+        return { success: false, error };
+    }
+}

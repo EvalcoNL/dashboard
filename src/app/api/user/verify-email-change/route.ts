@@ -50,7 +50,7 @@ export async function GET(req: Request) {
         await prisma.emailVerificationToken.delete({ where: { id: verificationToken.id } });
 
         return redirectWithMessage("/settings", "success", "E-mailadres succesvol gewijzigd");
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("[VerifyEmailChange] Error:", error);
         return redirectWithMessage("/settings", "error", "Er is een fout opgetreden");
     }

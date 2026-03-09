@@ -17,7 +17,7 @@ export async function POST(
     const { id } = await params;
 
     // Verify client exists
-    const client = await (prisma as any).project.findUnique({ where: { id } });
+    const client = await prisma.project.findUnique({ where: { id } });
     if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
 
     const body = await request.json();
@@ -30,7 +30,7 @@ export async function POST(
     const displayName = name || cleanUrl;
 
     // Create a DOMAIN data source with uptime + SSL monitoring enabled
-    const dataSource = await (prisma as any).dataSource.create({
+    const dataSource = await prisma.dataSource.create({
         data: {
             projectId: id,
             type: "DOMAIN",

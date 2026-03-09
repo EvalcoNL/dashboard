@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
         }
 
         return NextResponse.json(client, { status: 201 });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Error creating client:", error);
         return NextResponse.json({ error: "Fout bij aanmaken project" }, { status: 500 });
     }

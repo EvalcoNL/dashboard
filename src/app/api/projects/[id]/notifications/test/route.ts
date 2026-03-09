@@ -71,12 +71,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             channels: results
         });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("[Test Notification] Error:", error);
         return NextResponse.json({
             error: "Internal Server Error",
-            details: error?.message || String(error),
-            stack: error?.stack
+            details: error instanceof Error ? error.message : String(error),
+
         }, { status: 500 });
     }
 }

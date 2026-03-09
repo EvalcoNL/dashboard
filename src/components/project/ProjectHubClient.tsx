@@ -1,5 +1,7 @@
 "use client";
 
+import React from "react";
+
 import Link from "next/link";
 import {
     TrendingUp,
@@ -14,6 +16,7 @@ import {
     FileText
 } from "lucide-react";
 import { formatCurrency, formatNumber } from "@/lib/services/kpi-engine";
+import ProjectOnboarding from "@/components/OnboardingTour";
 
 interface ProjectHubClientProps {
     project: any;
@@ -46,6 +49,8 @@ export default function ProjectHubClient({
 
     return (
         <div style={{ padding: "32px", maxWidth: "1200px", margin: "0 auto" }}>
+            {/* Onboarding Widget */}
+            <ProjectOnboarding projectId={project.id} />
             {/* Header */}
             <div style={{ marginBottom: "40px" }}>
                 <h1 style={{ fontSize: "2.2rem", fontWeight: 800, color: "var(--color-text-primary)", margin: 0 }}>
@@ -209,7 +214,7 @@ export default function ProjectHubClient({
     );
 }
 
-function QuickStat({ icon, label, value }: { icon: any, label: string, value: any }) {
+const QuickStat = React.memo(function QuickStat({ icon, label, value }: { icon: any, label: string, value: any }) {
     return (
         <div className="glass-card" style={{ padding: "16px", display: "flex", alignItems: "center", gap: "12px", border: "1px solid var(--color-border)" }}>
             <div style={{ color: "var(--color-brand)" }}>{icon}</div>
@@ -219,4 +224,4 @@ function QuickStat({ icon, label, value }: { icon: any, label: string, value: an
             </div>
         </div>
     );
-}
+});

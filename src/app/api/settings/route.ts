@@ -9,15 +9,15 @@ export async function GET() {
     }
 
     try {
-        const settings = await (prisma as any).globalSetting.findMany();
+        const settings = await prisma.globalSetting.findMany();
         const settingsMap = settings.reduce((acc: Record<string, string>, s: any) => {
             acc[s.key] = s.value;
             return acc;
         }, {} as Record<string, string>);
 
         return NextResponse.json(settingsMap);
-    } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error: unknown) {
+        return NextResponse.json({ error: error instanceof Error ? error.message : "Onbekende fout" }, { status: 500 });
     }
 }
 
@@ -35,14 +35,14 @@ export async function PATCH(req: NextRequest) {
             return NextResponse.json({ error: "Missing key" }, { status: 400 });
         }
 
-        const setting = await (prisma as any).globalSetting.upsert({
+        const setting = await prisma.globalSetting.upsert({
             where: { key },
             update: { value },
             create: { key, value },
         });
 
         return NextResponse.json(setting);
-    } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error: unknown) {
+        return NextResponse.json({ error: error instanceof Error ? error.message : "Onbekende fout" }, { status: 500 });
     }
 }

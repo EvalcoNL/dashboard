@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
 
         // Redirect to selection UI
         return NextResponse.redirect(`${origin}/projects/${projectId}/link-merchant?sourceId=${pendingSource.id}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Google Merchant OAuth Callback Error:", error);
         return NextResponse.redirect(`${origin}/projects/${projectId}/data/sources?error=MerchantLinkFailed`);
     }

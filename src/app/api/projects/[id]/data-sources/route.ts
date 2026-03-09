@@ -61,7 +61,7 @@ export async function POST(
         });
 
         return NextResponse.json(newSource, { status: 201 });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Failed to create DOMAIN data source:", error);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }

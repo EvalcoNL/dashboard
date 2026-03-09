@@ -48,10 +48,10 @@ export async function GET(req: NextRequest) {
             results,
             timestamp: new Date().toISOString(),
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("[CRON] Merchant Center sync failed:", error);
         return NextResponse.json(
-            { success: false, error: error.message || "Merchant health sync failed" },
+            { success: false, error: error instanceof Error ? error.message : "Onbekende fout" },
             { status: 500 }
         );
     }

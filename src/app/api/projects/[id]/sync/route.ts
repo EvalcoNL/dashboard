@@ -14,8 +14,8 @@ export async function POST(
         const { id } = await params;
         const result = await syncService.syncProjectData(id);
         return NextResponse.json(result);
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Sync Error:", error);
-        return NextResponse.json({ error: error.message || "Fout bij synchronisatie" }, { status: 500 });
+        return NextResponse.json({ error: error instanceof Error ? error.message : "Onbekende fout" }, { status: 500 });
     }
 }

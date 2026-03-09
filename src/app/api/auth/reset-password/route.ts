@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Token en wachtwoord zijn verplicht" }, { status: 400 });
         }
 
-        const resetToken = await (prisma as any).passwordResetToken.findUnique({
+        const resetToken = await prisma.passwordResetToken.findUnique({
             where: { token },
         });
 
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
         }
 
         if (resetToken.expiresAt < new Date()) {
-            await (prisma as any).passwordResetToken.delete({ where: { token } });
+            await prisma.passwordResetToken.delete({ where: { token } });
             return NextResponse.json({ error: "Token is verlopen" }, { status: 400 });
         }
 
@@ -40,13 +40,13 @@ export async function POST(req: NextRequest) {
                 where: { email: resetToken.email },
                 data: { passwordHash },
             }),
-            (prisma as any).passwordResetToken.delete({
+            prisma.passwordResetToken.delete({
                 where: { token },
             }),
         ]);
 
         return NextResponse.json({ success: true });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Reset password API error:", error);
         return NextResponse.json({ error: "Interne serverfout" }, { status: 500 });
     }

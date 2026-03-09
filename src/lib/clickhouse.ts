@@ -95,6 +95,37 @@ export async function healthCheck(): Promise<boolean> {
     }
 }
 
+// ─── Cached DESCRIBE TABLE ───
+
+/**
+ * Cache for DESCRIBE TABLE results.
+ * Schema metadata rarely changes, so we cache for 5 minutes.
+ */
+const describeCache = new Map<string, { data: any[]; expiresAt: number }>();
+const DESCRIBE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Get table schema (cached).
+ * Avoids repeated DESCRIBE TABLE calls which are unnecessary when schema is stable.
+ */
+export async function describeTable<T = { name: string; type: string }>(
+    table: string
+): Promise<T[]> {
+    const cached = describeCache.get(table);
+    if (cached && Date.now() < cached.expiresAt) {
+        return cached.data as T[];
+    }
+
+    const result = await query<T>(`DESCRIBE TABLE ${table}`);
+    describeCache.set(table, { data: result, expiresAt: Date.now() + DESCRIBE_CACHE_TTL });
+    return result;
+}
+
+/** Clear the describe cache (e.g. after schema migration). */
+export function clearDescribeCache() {
+    describeCache.clear();
+}
+
 // ─── Exports ───
 
 export const clickhouse = {
@@ -104,4 +135,6 @@ export const clickhouse = {
     command,
     healthCheck,
     getClient,
+    describeTable,
+    clearDescribeCache,
 };

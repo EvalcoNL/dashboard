@@ -30,12 +30,12 @@ export async function POST(req: NextRequest) {
         const expiresAt = new Date(Date.now() + 3600000); // 1 hour from now
 
         // Delete any existing tokens for this email
-        await (prisma as any).passwordResetToken.deleteMany({
+        await prisma.passwordResetToken.deleteMany({
             where: { email },
         });
 
         // Save new token
-        await (prisma as any).passwordResetToken.create({
+        await prisma.passwordResetToken.create({
             data: {
                 email,
                 token,
@@ -47,12 +47,11 @@ export async function POST(req: NextRequest) {
         await sendPasswordResetEmail(email, token);
 
         return NextResponse.json({ success: true });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Forgot password API error:", error);
-        // Log more details to server console
-        if (error.code) console.error("[Prisma Error Code]:", error.code);
-        if (error.meta) console.error("[Prisma Error Meta]:", error.meta);
-        if (error.stack) console.error("[Stack Trace]:", error.stack);
+        if (error instanceof Error) {
+            console.error("[Stack Trace]:", error.stack);
+        }
 
         return NextResponse.json({ error: "Interne serverfout bij het verwerken van de aanvraag." }, { status: 500 });
     }

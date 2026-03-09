@@ -94,9 +94,9 @@ export async function GET(req: NextRequest) {
             },
         });
         return NextResponse.redirect(`${origin}/projects/${projectId}/link-gtm?sourceId=${pendingSource.id}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("GTM OAuth Error:", error);
-        return NextResponse.redirect(`${origin}/projects/${projectId}/data/sources?error=GTMLinkFailed&message=${encodeURIComponent(error.message || "")}`);
+        return NextResponse.redirect(`${origin}/projects/${projectId}/data/sources?error=GTMLinkFailed&message=${encodeURIComponent(error instanceof Error ? error.message : "Onbekende fout")}`);
     }
 }
 

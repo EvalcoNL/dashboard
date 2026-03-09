@@ -141,7 +141,7 @@ export async function GET(req: NextRequest) {
         );
 
         return NextResponse.redirect(`${origin}/projects/${projectId}/data/sources`);
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("LinkedIn OAuth Error:", error);
         return NextResponse.redirect(`${origin}/projects/${projectId}/data/sources?error=LinkedInLinkFailed`);
     }

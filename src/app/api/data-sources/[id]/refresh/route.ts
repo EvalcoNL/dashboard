@@ -18,10 +18,10 @@ export async function GET(
         const result = await performUptimeCheck(id);
 
         return NextResponse.json({ success: true, result });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Failed to manually sync domain:", error);
         return NextResponse.json(
-            { error: error.message || "Failed to sync domain" },
+            { error: error instanceof Error ? error.message : "Onbekende fout" },
             { status: 500 }
         );
     }

@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     if (projectId) where.projectId = projectId;
     if (status) where.status = status;
 
-    const incidents = await (prisma as any).incident.findMany({
+    const incidents = await prisma.incident.findMany({
         where,
         orderBy: { startedAt: "desc" },
         take: limit,
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    const incident = await (prisma as any).incident.create({
+    const incident = await prisma.incident.create({
         data: {
             projectId,
             dataSourceId: dataSourceId || null,

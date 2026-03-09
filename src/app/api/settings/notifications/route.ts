@@ -18,7 +18,7 @@ export async function GET() {
         const globalSettings = await getGlobalNotificationSettings();
 
         // Get all clients with their notification mode
-        const clients = await (prisma as any).project.findMany({
+        const clients = await prisma.project.findMany({
             select: {
                 id: true,
                 name: true,
@@ -30,7 +30,7 @@ export async function GET() {
         });
 
         // Get all users for the user picker
-        const allUsers = await (prisma as any).user.findMany({
+        const allUsers = await prisma.user.findMany({
             select: { id: true, name: true, email: true },
             orderBy: { name: "asc" }
         });
