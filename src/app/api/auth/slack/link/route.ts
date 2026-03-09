@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     const scopes = ["incoming-webhook"];
 
     const authUrl = new URL("https://slack.com/oauth/v2/authorize");
-    authUrl.searchParams.set("project_id", slackClientId);
+    authUrl.searchParams.set("client_id", slackClientId);
     authUrl.searchParams.set("scope", scopes.join(","));
     authUrl.searchParams.set("redirect_uri", redirectUri);
     // Use CSRF-protected state: "__global__" for global settings, encoded projectId for project-level

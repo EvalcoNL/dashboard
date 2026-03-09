@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
                 "Content-Type": "application/x-www-form-urlencoded",
             },
             body: new URLSearchParams({
-                project_id: slackClientId,
+                client_id: slackClientId,
                 client_secret: slackClientSecret,
                 code,
                 redirect_uri: redirectUri,
