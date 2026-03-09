@@ -7,8 +7,9 @@ import { encrypt } from "@/lib/encryption";
 import { saveGlobalNotificationSettings, getGlobalNotificationSettings } from "@/lib/services/notification-resolver";
 
 export async function GET(req: NextRequest) {
+    const origin = process.env.NEXTAUTH_URL || new URL(req.url).origin;
     const session = await auth();
-    if (!session) return NextResponse.redirect(new URL("/login", req.url));
+    if (!session) return NextResponse.redirect(new URL("/login", origin));
 
     const { searchParams } = new URL(req.url);
     const code = searchParams.get("code");
@@ -22,11 +23,11 @@ export async function GET(req: NextRequest) {
 
     if (error) {
         console.error("[Slack OAuth] User denied permission or error occurred:", error);
-        return NextResponse.redirect(new URL(`${redirectBase}?error=slack_denied&tab=settings`, req.url));
+        return NextResponse.redirect(new URL(`${redirectBase}?error=slack_denied&tab=settings`, origin));
     }
 
     if (!code || (!projectId && !isGlobal)) {
-        return NextResponse.redirect(new URL("/", req.url));
+        return NextResponse.redirect(new URL("/", origin));
     }
 
     const slackClientId = process.env.SLACK_CLIENT_ID;
@@ -34,10 +35,10 @@ export async function GET(req: NextRequest) {
 
     if (!slackClientId || !slackClientSecret) {
         console.error("Slack OAuth credentials missing");
-        return NextResponse.redirect(new URL(`${redirectBase}?error=slack_config_missing&tab=settings`, req.url));
+        return NextResponse.redirect(new URL(`${redirectBase}?error=slack_config_missing&tab=settings`, origin));
     }
 
-    const origin = process.env.NEXTAUTH_URL || new URL(req.url).origin;
+    // origin already defined at top of function
     const redirectUri = `${origin}/api/auth/slack/callback`;
 
     try {
@@ -59,13 +60,13 @@ export async function GET(req: NextRequest) {
 
         if (!data.ok) {
             console.error("[Slack OAuth] Error trading code:", data.error);
-            return NextResponse.redirect(new URL(`${redirectBase}?error=slack_auth_failed&tab=settings`, req.url));
+            return NextResponse.redirect(new URL(`${redirectBase}?error=slack_auth_failed&tab=settings`, origin));
         }
 
         // Validate that we got an incoming webhook
         if (!data.incoming_webhook || !data.incoming_webhook.url) {
             console.error("[Slack OAuth] Missing incoming_webhook in response:", data);
-            return NextResponse.redirect(new URL(`${redirectBase}?error=slack_webhook_missing&tab=settings`, req.url));
+            return NextResponse.redirect(new URL(`${redirectBase}?error=slack_webhook_missing&tab=settings`, origin));
         }
 
         const webhookUrl = data.incoming_webhook.url;
@@ -79,7 +80,7 @@ export async function GET(req: NextRequest) {
                 slackWebhookUrl: webhookUrl,
             });
 
-            return NextResponse.redirect(new URL(`/incidents?tab=settings`, req.url));
+            return NextResponse.redirect(new URL(`/incidents?tab=settings`, origin));
         }
 
         // ─── Project-level Settings ───
@@ -93,7 +94,7 @@ export async function GET(req: NextRequest) {
         });
 
         if (!projectAccess && session.user.role !== "ADMIN") {
-            return NextResponse.redirect(new URL(`/projects`, req.url));
+            return NextResponse.redirect(new URL(`/projects`, origin));
         }
 
         // Save the webhook URL to the Client record
@@ -135,10 +136,10 @@ export async function GET(req: NextRequest) {
         }
 
         // Redirect back to incidents page
-        return NextResponse.redirect(new URL(`/projects/${projectId}/monitoring/incidents`, req.url));
+        return NextResponse.redirect(new URL(`/projects/${projectId}/monitoring/incidents`, origin));
 
     } catch (e) {
         console.error("[Slack OAuth] Caught error:", e);
-        return NextResponse.redirect(new URL(`${redirectBase}?error=slack_server_error&tab=settings`, req.url));
+        return NextResponse.redirect(new URL(`${redirectBase}?error=slack_server_error&tab=settings`, origin));
     }
 }
