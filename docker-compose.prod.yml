@@ -136,7 +136,8 @@ services:
       test: [ "CMD", "clickhouse-client", "--user", "evalco", "--password", "${CLICKHOUSE_PASSWORD:-evalco_prod}", "--query", "SELECT 1" ]
       interval: 10s
       timeout: 5s
-      retries: 3
+      retries: 5
+      start_period: 30s
     networks:
       - evalco-net
 
