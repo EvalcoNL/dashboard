@@ -57,6 +57,20 @@ interface CompareResult {
  */
 export class DatasetQueryEngine {
 
+    // ─── Static cache for derived metric definitions (60s TTL) ───
+    private static _derivedMetricsCache: { data: any[]; expiry: number } | null = null;
+    private static readonly DERIVED_CACHE_TTL = 60_000; // 60 seconds
+
+    static async getCachedDerivedMetrics() {
+        const now = Date.now();
+        if (DatasetQueryEngine._derivedMetricsCache && DatasetQueryEngine._derivedMetricsCache.expiry > now) {
+            return DatasetQueryEngine._derivedMetricsCache.data;
+        }
+        const data = await prisma.derivedMetricDefinition.findMany();
+        DatasetQueryEngine._derivedMetricsCache = { data, expiry: now + DatasetQueryEngine.DERIVED_CACHE_TTL };
+        return data;
+    }
+
     // ─── Main Query ───
 
     async query(query: DatasetQuery): Promise<DatasetResult> {
@@ -108,21 +122,49 @@ export class DatasetQueryEngine {
             if (wf) selectCols.add(getColumnName(wf));
         }
 
-        const selectClause = Array.from(selectCols).join(', ');
-
         // Build level filter: IN clause for multiple levels (ads + analytics)
         const levelPlaceholders = queryLevels.map((_, i) => `{lvl${i}:String}`).join(', ');
         queryLevels.forEach((lvl, i) => { params[`lvl${i}`] = lvl; });
 
-        const rawData = await chQuery<Record<string, string | number>>(`
-            SELECT ${selectClause}
-            FROM metrics_data
-            WHERE data_source_id IN (${placeholders})
-              AND date >= {dateFrom:Date}
-              AND date <= {dateTo:Date}
-              AND level IN (${levelPlaceholders})
-            ORDER BY date ASC
-        `, params);
+        // ── Server-side vs client-side aggregation decision ──
+        // Use ClickHouse GROUP BY when possible (SUM-only metrics, no built-in dims)
+        const hasAvgMetrics = baseMetrics.some(m => {
+            const agg = getAggregationType(m);
+            return agg === 'AVG' || agg === 'WEIGHTED_AVG';
+        });
+        const canServerAggregate = builtinDims.length === 0 && !hasAvgMetrics;
+
+        let rawData: Record<string, string | number>[];
+
+        if (canServerAggregate && storageDims.length > 0) {
+            // ── Server-side aggregation: GROUP BY in ClickHouse ──
+            const groupCols = [...storageDims.map(d => getColumnName(d)), 'date', 'connector_slug'];
+            const metricAggs = baseMetrics.map(m => `sum(${getColumnName(m)}) AS ${getColumnName(m)}`);
+            const selectParts = [...groupCols, ...metricAggs, `'__agg__' AS data_source_id`];
+
+            rawData = await chQuery<Record<string, string | number>>(`
+                SELECT ${selectParts.join(', ')}
+                FROM metrics_data FINAL
+                WHERE data_source_id IN (${placeholders})
+                  AND date >= {dateFrom:Date}
+                  AND date <= {dateTo:Date}
+                  AND level IN (${levelPlaceholders})
+                GROUP BY ${groupCols.join(', ')}
+                ORDER BY date ASC
+            `, params);
+        } else {
+            // ── Client-side aggregation: fetch raw rows ──
+            const selectClause = Array.from(selectCols).join(', ');
+            rawData = await chQuery<Record<string, string | number>>(`
+                SELECT ${selectClause}
+                FROM metrics_data FINAL
+                WHERE data_source_id IN (${placeholders})
+                  AND date >= {dateFrom:Date}
+                  AND date <= {dateTo:Date}
+                  AND level IN (${levelPlaceholders})
+                ORDER BY date ASC
+            `, params);
+        }
 
         // Pipeline: compute built-ins → aggregate → filter → derive → sort → paginate
         // 1. Compute built-in dimension values on raw rows before aggregation
@@ -147,7 +189,10 @@ export class DatasetQueryEngine {
         }
 
         // 2. Aggregate using ALL dimensions (storage + built-in)
-        let rows = this.aggregate(rawData, query.dimensions, query.metrics);
+        // Skip client-side aggregation if server already did it (and no built-in dims)
+        let rows = canServerAggregate && storageDims.length > 0
+            ? rawData
+            : this.aggregate(rawData, query.dimensions, query.metrics);
         if (query.filters?.length) rows = this.applyFilters(rows, query.filters);
         rows = await this.applyDerivedMetrics(rows, query.metrics);
         if (query.orderBy?.length) rows = this.applySort(rows, query.orderBy);
@@ -192,7 +237,7 @@ export class DatasetQueryEngine {
 
             const rawRows = await chQuery<Record<string, string | number>>(`
                 SELECT ${blendSelectClause}
-                FROM metrics_data
+                FROM metrics_data FINAL
                 WHERE data_source_id = {connId:String}
                   AND date >= {dateFrom:Date}
                   AND date <= {dateTo:Date}
@@ -578,8 +623,8 @@ export class DatasetQueryEngine {
             video_view_rate: { formula: 'video_views / impressions * 100', inputs: ['video_views', 'impressions'] },
         };
 
-        // Load custom formulas from database
-        const dbFormulas = await prisma.derivedMetricDefinition.findMany();
+        // Load custom formulas from database (cached 60s)
+        const dbFormulas = await DatasetQueryEngine.getCachedDerivedMetrics();
         for (const dbFormula of dbFormulas) {
             const inputs = dbFormula.inputMetrics as string[];
             builtinFormulas[dbFormula.slug] = {

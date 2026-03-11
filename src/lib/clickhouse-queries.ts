@@ -60,7 +60,7 @@ export interface ConnectorBreakdown {
  */
 export async function hasData(projectId: string): Promise<boolean> {
     const result = await queryOne<{ cnt: string }>(
-        `SELECT count() AS cnt FROM metrics_data WHERE client_id = {projectId:String} LIMIT 1`,
+        `SELECT count() AS cnt FROM metrics_data FINAL WHERE client_id = {projectId:String} LIMIT 1`,
         { projectId }
     );
     return Number(result?.cnt || 0) > 0;
@@ -71,7 +71,7 @@ export async function hasData(projectId: string): Promise<boolean> {
  */
 export async function countRecords(projectId: string): Promise<number> {
     const result = await queryOne<{ cnt: string }>(
-        `SELECT count() AS cnt FROM metrics_data WHERE client_id = {projectId:String}`,
+        `SELECT count() AS cnt FROM metrics_data FINAL WHERE client_id = {projectId:String}`,
         { projectId }
     );
     return Number(result?.cnt || 0);
@@ -105,8 +105,8 @@ export async function aggregateMetrics(
             sum(conversion_value)   AS conversion_value,
             sum(video_views)        AS video_views,
             sum(sessions)           AS sessions,
-            count()                 AS record_count
-        FROM metrics_data
+            sum(record_count)       AS record_count
+        FROM daily_rollup
         WHERE client_id = {projectId:String}
           AND ${dateFilter}
     `, params);
@@ -142,7 +142,7 @@ export async function dailyMetrics(
             sum(video_views)        AS video_views,
             sum(sessions)           AS sessions,
             sum(page_views)         AS page_views
-        FROM metrics_data
+        FROM daily_rollup
         WHERE client_id = {projectId:String}
           AND date >= toDate({dateFrom:String})
           AND date <= toDate({dateTo:String})
@@ -187,7 +187,7 @@ export async function dailyMetricsByConnector(
             sum(video_views)        AS video_views,
             sum(sessions)           AS sessions,
             sum(page_views)         AS page_views
-        FROM metrics_data
+        FROM daily_rollup
         WHERE client_id = {projectId:String}
           AND date >= toDate({dateFrom:String})
           AND date <= toDate({dateTo:String})
@@ -228,8 +228,8 @@ export async function metricsByConnector(
             sum(cost)               AS cost,
             sum(conversions)        AS conversions,
             sum(conversion_value)   AS conversion_value,
-            count()                 AS record_count
-        FROM metrics_data
+            sum(record_count)       AS record_count
+        FROM daily_rollup
         WHERE client_id = {projectId:String}
           AND date >= toDate({dateFrom:String})
           AND date <= toDate({dateTo:String})
@@ -288,7 +288,7 @@ export async function campaignMetrics(
             sum(conversions)        AS conversions,
             sum(conversion_value)   AS conversion_value,
             any(campaign_status)    AS status
-        FROM metrics_data
+        FROM metrics_data FINAL
         WHERE client_id = {projectId:String}
           AND ${dateFilter}
           AND campaign_id IS NOT NULL
@@ -334,7 +334,7 @@ export async function distinctDimensionValues(
 
     const rows = await query<{ value: string }>(`
         SELECT DISTINCT ${dimension} AS value
-        FROM metrics_data
+        FROM metrics_data FINAL
         WHERE client_id = {projectId:String}
           AND ${dimension} IS NOT NULL
           AND ${dimension} != ''
@@ -355,7 +355,7 @@ export async function dateRange(
         SELECT
             toString(min(date)) AS earliest,
             toString(max(date)) AS latest
-        FROM metrics_data
+        FROM metrics_data FINAL
         WHERE client_id = {projectId:String}
     `, { projectId });
 

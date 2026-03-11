@@ -14,49 +14,48 @@
 
 import { createSyncWorker } from '@/lib/data-integration/sync-worker';
 import { getSyncQueue, getQueueHealth, isQueueAvailable } from '@/lib/data-integration/sync-queue';
+import { workerLogger } from '@/lib/logger';
 
 // Register all connectors so sync-engine can find them
 import '@/lib/data-integration/connectors';
 
 async function main() {
-    console.log('');
-    console.log('════════════════════════════════════════════');
-    console.log('  Evalco Sync Worker');
-    console.log('════════════════════════════════════════════');
-    console.log('');
+    workerLogger.info('════════════════════════════════════════════');
+    workerLogger.info('  Evalco Sync Worker starting');
+    workerLogger.info('════════════════════════════════════════════');
 
     // Verify Redis
     if (!process.env.REDIS_URL) {
-        console.error('[Worker] ❌ REDIS_URL environment variable is not set');
+        workerLogger.fatal('REDIS_URL environment variable is not set');
         process.exit(1);
     }
 
     const available = await isQueueAvailable();
     if (!available) {
-        console.error('[Worker] ❌ Cannot connect to Redis. Check REDIS_URL.');
+        workerLogger.fatal('Cannot connect to Redis — check REDIS_URL');
         process.exit(1);
     }
-    console.log('[Worker] Redis connected ✅');
+    workerLogger.info('Redis connected');
 
     // Show queue state
     const health = await getQueueHealth();
-    console.log(`[Worker] Queue state: ${health.waiting} waiting, ${health.active} active, ${health.failed} failed`);
+    workerLogger.info({ waiting: health.waiting, active: health.active, failed: health.failed }, 'Queue state');
 
     // Start the worker
     const worker = createSyncWorker();
 
     // Graceful shutdown
     const shutdown = async (signal: string) => {
-        console.log(`\n[Worker] ${signal} received — shutting down gracefully...`);
+        workerLogger.info({ signal }, 'Graceful shutdown initiated');
 
         // Close worker (waits for active jobs to finish)
         await worker.close();
-        console.log('[Worker] Worker closed');
+        workerLogger.info('Worker closed');
 
         // Close queue connection
         const queue = getSyncQueue();
         await queue.close();
-        console.log('[Worker] Queue closed');
+        workerLogger.info('Queue closed');
 
         process.exit(0);
     };
@@ -69,16 +68,15 @@ async function main() {
         try {
             const h = await getQueueHealth();
             if (h.waiting > 0 || h.active > 0) {
-                console.log(`[Worker] Health: ${h.waiting} waiting, ${h.active} active, ${h.completed} completed, ${h.failed} failed`);
+                workerLogger.info({ waiting: h.waiting, active: h.active, completed: h.completed, failed: h.failed }, 'Health check');
             }
         } catch { /* ignore */ }
     }, 60_000); // Log every minute
 
-    console.log('[Worker] Ready — waiting for jobs...');
-    console.log('');
+    workerLogger.info('Ready — waiting for jobs');
 }
 
 main().catch((err) => {
-    console.error('[Worker] Fatal error:', err);
+    workerLogger.fatal({ err }, 'Fatal error');
     process.exit(1);
 });

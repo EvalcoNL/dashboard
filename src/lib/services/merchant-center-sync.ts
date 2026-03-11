@@ -492,6 +492,8 @@ async function createDisapprovalIncident(opts: {
             clientName: client.name,
             startedAt: new Date(),
             recipients: notifConfig.recipients,
+            incidentId: incident.id,
+            projectId: opts.projectId,
         };
 
         const notifiedChannels: string[] = [];
@@ -568,6 +570,8 @@ async function autoResolveMerchantIncidents(dataSourceId: string) {
                 startedAt: new Date(incident.startedAt),
                 recipients: notifConfig.recipients,
                 duration,
+                incidentId: incident.id,
+                projectId: incident.projectId,
             };
 
             if (payload.recipients.length > 0) {

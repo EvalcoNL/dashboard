@@ -453,7 +453,9 @@ async function autoCreateIncident(opts: {
             incidentCause: `Status ${causeCode}`,
             clientName: client.name,
             startedAt: new Date(),
-            recipients: notifConfig.recipients
+            recipients: notifConfig.recipients,
+            incidentId: incident.id,
+            projectId: opts.projectId,
         };
 
         const notifiedChannels = [];
@@ -536,7 +538,9 @@ export async function autoResolveIncidents(dataSourceId: string, checkedUrl: str
                 clientName: client.name,
                 startedAt: inc.startedAt,
                 duration: duration,
-                recipients: notifConfig.recipients
+                recipients: notifConfig.recipients,
+                incidentId: inc.id,
+                projectId: dataSource.projectId,
             };
 
             const notifiedChannels = [];

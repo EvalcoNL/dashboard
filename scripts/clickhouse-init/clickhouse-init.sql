@@ -227,3 +227,101 @@ AS SELECT
     count()                     AS record_count
 FROM evalco.metrics_data
 GROUP BY client_id, connector_slug, toStartOfMonth(date);
+
+
+-- ═══════════════════════════════════════════════════════════════════
+-- E-commerce: order_data table
+-- Stores normalized e-commerce order and line-item records.
+-- ═══════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS evalco.order_data (
+    -- Identifiers
+    order_hash          String,
+    data_source_id      String,
+    client_id           String,
+    connector_slug      LowCardinality(String),
+    record_type         LowCardinality(String),
+
+    -- ─── Order dimensions ───
+    order_id            Nullable(String),
+    order_number        Nullable(String),
+    order_date          Nullable(DateTime),
+    order_updated_at    Nullable(DateTime),
+    order_status        LowCardinality(Nullable(String)),
+    order_state         LowCardinality(Nullable(String)),
+    payment_method      LowCardinality(Nullable(String)),
+    currency            LowCardinality(Nullable(String)),
+
+    -- Store
+    store_id            Nullable(String),
+    store_name          Nullable(String),
+    sales_channel       LowCardinality(Nullable(String)),
+
+    -- Geographic
+    billing_country     LowCardinality(Nullable(String)),
+    billing_city        Nullable(String),
+    shipping_country    LowCardinality(Nullable(String)),
+    shipping_city       Nullable(String),
+
+    -- Customer
+    customer_id         Nullable(String),
+    customer_group      LowCardinality(Nullable(String)),
+
+    -- PII (optional, may be stripped by normalization)
+    customer_email      Nullable(String),
+    customer_first_name Nullable(String),
+    customer_last_name  Nullable(String),
+
+    -- Other
+    discount_code       Nullable(String),
+    tags                Nullable(String),
+
+    -- Line item dimensions
+    line_item_id        Nullable(String),
+    line_item_name      Nullable(String),
+    product_id          Nullable(String),
+    product_sku         Nullable(String),
+    product_type        LowCardinality(Nullable(String)),
+    variant_id          Nullable(String),
+    variant_title       Nullable(String),
+
+    -- Extra dimensions (JSON for connector-specific fields)
+    extra_dimensions    String DEFAULT '{}',
+
+    -- ─── Order metrics ───
+    order_grand_total       Decimal(18,2)   DEFAULT 0,
+    order_subtotal          Decimal(18,2)   DEFAULT 0,
+    order_tax_amount        Decimal(18,2)   DEFAULT 0,
+    order_shipping_amount   Decimal(18,2)   DEFAULT 0,
+    order_shipping_tax      Decimal(18,2)   DEFAULT 0,
+    order_discount_amount   Decimal(18,2)   DEFAULT 0,
+    order_refund_amount     Decimal(18,2)   DEFAULT 0,
+    order_count             UInt32          DEFAULT 0,
+
+    -- Line item metrics
+    line_item_quantity          UInt32          DEFAULT 0,
+    line_item_price             Decimal(18,2)   DEFAULT 0,
+    line_item_total             Decimal(18,2)   DEFAULT 0,
+    line_item_total_incl_tax    Decimal(18,2)   DEFAULT 0,
+    line_item_tax_amount        Decimal(18,2)   DEFAULT 0,
+    line_item_discount_amount   Decimal(18,2)   DEFAULT 0,
+    line_item_refund_amount     Decimal(18,2)   DEFAULT 0,
+    line_item_original_price    Decimal(18,2)   DEFAULT 0,
+    items_sold                  UInt32          DEFAULT 0,
+
+    -- Extra metrics (JSON for connector-specific fields)
+    extra_metrics       String DEFAULT '{}',
+
+    -- Metadata
+    created_at          DateTime        DEFAULT now(),
+    updated_at          DateTime        DEFAULT now()
+)
+ENGINE = ReplacingMergeTree(updated_at)
+PARTITION BY toYYYYMM(coalesce(order_date, now()))
+ORDER BY (client_id, connector_slug, record_type, order_hash)
+SETTINGS index_granularity = 8192;
+
+-- Data skipping indexes for order_data
+ALTER TABLE evalco.order_data ADD INDEX IF NOT EXISTS idx_order_client client_id TYPE set(0) GRANULARITY 4;
+ALTER TABLE evalco.order_data ADD INDEX IF NOT EXISTS idx_order_ds data_source_id TYPE set(0) GRANULARITY 4;
+ALTER TABLE evalco.order_data ADD INDEX IF NOT EXISTS idx_order_status order_status TYPE set(0) GRANULARITY 4;

@@ -1,9 +1,15 @@
 // ═══════════════════════════════════════════════════════════════════
 // ClickHouse Client — Analytical Data Store
-// Singleton client for all ClickHouse operations
+// Singleton client with retry logic and structured logging
 // ═══════════════════════════════════════════════════════════════════
 
 import { createClient } from '@clickhouse/client';
+import { clickhouseLogger } from '@/lib/logger';
+
+// ─── Retry Configuration ───
+
+const MAX_RETRIES = 3;
+const RETRY_BASE_DELAY_MS = 500;
 
 // ─── Singleton Client ───
 
@@ -16,9 +22,57 @@ function getClient() {
             username: process.env.CLICKHOUSE_USER || 'evalco',
             password: process.env.CLICKHOUSE_PASSWORD || 'evalco_dev',
             database: process.env.CLICKHOUSE_DATABASE || 'evalco',
+            request_timeout: 30_000,
+            max_open_connections: 10,
+            keep_alive: {
+                enabled: true,
+            },
         });
     }
     return _client;
+}
+
+/**
+ * Retry a function with exponential backoff for transient errors.
+ */
+async function withRetry<T>(fn: () => Promise<T>, context?: string): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+            return await fn();
+        } catch (error) {
+            lastError = error;
+            const isTransient = isTransientError(error);
+            if (!isTransient || attempt === MAX_RETRIES) {
+                if (attempt > 1) {
+                    clickhouseLogger.error({ err: error, attempt, context }, 'Query failed after retries');
+                }
+                throw error;
+            }
+            const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+            clickhouseLogger.warn({ attempt, delay, context }, 'Transient error, retrying');
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    }
+    throw lastError;
+}
+
+/**
+ * Check if an error is transient (network/timeout) and worth retrying.
+ */
+function isTransientError(error: unknown): boolean {
+    if (error instanceof Error) {
+        const msg = error.message.toLowerCase();
+        return (
+            msg.includes('econnreset') ||
+            msg.includes('econnrefused') ||
+            msg.includes('etimedout') ||
+            msg.includes('socket hang up') ||
+            msg.includes('timeout') ||
+            msg.includes('network')
+        );
+    }
+    return false;
 }
 
 // ─── Query Helper ───
@@ -30,13 +84,15 @@ export async function query<T = Record<string, unknown>>(
     sql: string,
     params?: Record<string, unknown>
 ): Promise<T[]> {
-    const client = getClient();
-    const result = await client.query({
-        query: sql,
-        query_params: params,
-        format: 'JSONEachRow',
-    });
-    return result.json<T>();
+    return withRetry(async () => {
+        const client = getClient();
+        const result = await client.query({
+            query: sql,
+            query_params: params,
+            format: 'JSONEachRow',
+        });
+        return result.json<T>();
+    }, 'query');
 }
 
 /**
@@ -62,12 +118,14 @@ export async function insert(
 ): Promise<void> {
     if (rows.length === 0) return;
 
-    const client = getClient();
-    await client.insert({
-        table,
-        values: rows,
-        format: 'JSONEachRow',
-    });
+    return withRetry(async () => {
+        const client = getClient();
+        await client.insert({
+            table,
+            values: rows,
+            format: 'JSONEachRow',
+        });
+    }, `insert:${table}`);
 }
 
 // ─── Command Helper ───
@@ -90,7 +148,7 @@ export async function healthCheck(): Promise<boolean> {
         const result = await queryOne<{ ok: number }>('SELECT 1 AS ok');
         return result?.ok === 1;
     } catch (error) {
-        console.error('[ClickHouse] Health check failed:', error);
+        clickhouseLogger.error({ err: error }, 'Health check failed');
         return false;
     }
 }

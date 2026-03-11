@@ -10,7 +10,9 @@ import {
     AlertTriangle,
     CheckCircle,
     Clock,
-
+    ChevronUp,
+    ChevronDown,
+    ChevronsUpDown,
     Users,
     Activity,
     BarChart3,
@@ -81,6 +83,8 @@ export default function DashboardHome({
 }) {
     const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
     const [contextMenu, setContextMenu] = useState<string | null>(null);
+    const [sortColumn, setSortColumn] = useState<"health" | "status" | "deviation" | "spend" | "name">("health");
+    const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
     // Date range state — default last 7 days
     const [dateRange, setDateRange] = useState<DateRange>(() => {
@@ -295,15 +299,67 @@ export default function DashboardHome({
         return { client, kpi, latestReport, advisorStatus };
     });
 
-    // Sort by health score (lowest first = most urgent)
-    const sorted = [...clientKPIs].sort((a, b) => a.kpi.healthScore - b.kpi.healthScore);
+    // Sort projects — no-data last only for health/status columns
+    const sorted = [...clientKPIs].sort((a, b) => {
+        // Pin no-data projects to bottom only for health-related sorts
+        if (sortColumn === "health" || sortColumn === "status") {
+            if (a.kpi.hasData && !b.kpi.hasData) return -1;
+            if (!a.kpi.hasData && b.kpi.hasData) return 1;
+        }
+        const dir = sortDirection === "asc" ? 1 : -1;
+        switch (sortColumn) {
+            case "name":
+                return dir * a.client.name.localeCompare(b.client.name);
+            case "health":
+                return dir * (a.kpi.healthScore - b.kpi.healthScore);
+            case "status": {
+                const statusOrder: Record<string, number> = { critical: 0, warning: 1, on_track: 2 };
+                return dir * ((statusOrder[a.kpi.targetStatus] ?? 3) - (statusOrder[b.kpi.targetStatus] ?? 3));
+            }
+            case "deviation":
+                return dir * (a.kpi.targetDeviation - b.kpi.targetDeviation);
+            case "spend":
+                return dir * (a.kpi.currentPeriod.totalSpend - b.kpi.currentPeriod.totalSpend);
+            default:
+                return dir * (a.kpi.healthScore - b.kpi.healthScore);
+        }
+    });
 
-    // Stats summary
-    const avgHealth = clientKPIs.length > 0
-        ? Math.round(clientKPIs.reduce((sum, c) => sum + c.kpi.healthScore, 0) / clientKPIs.length)
+    const handleSort = (col: typeof sortColumn) => {
+        if (sortColumn === col) {
+            setSortDirection(d => d === "asc" ? "desc" : "asc");
+        } else {
+            setSortColumn(col);
+            setSortDirection(col === "name" ? "asc" : "desc");
+        }
+    };
+
+    const SortIcon = ({ col }: { col: typeof sortColumn }) => {
+        if (sortColumn !== col) return <ChevronsUpDown size={12} style={{ opacity: 0.4 }} />;
+        return sortDirection === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />;
+    };
+
+    const sortableThStyle = (align: string = "left"): React.CSSProperties => ({
+        padding: "14px 16px",
+        color: "var(--color-text-muted)",
+        fontWeight: 500,
+        fontSize: "0.75rem",
+        textTransform: "uppercase" as const,
+        letterSpacing: "0.05em",
+        textAlign: align as "left" | "center" | "right",
+        cursor: "pointer",
+        userSelect: "none",
+        transition: "color 0.15s ease",
+    });
+
+    // Stats summary — only include projects with data
+    const projectsWithData = clientKPIs.filter(c => c.kpi.hasData);
+    const avgHealth = projectsWithData.length > 0
+        ? Math.round(projectsWithData.reduce((sum, c) => sum + c.kpi.healthScore, 0) / projectsWithData.length)
         : 0;
-    const criticalCount = clientKPIs.filter((c) => c.kpi.healthScore < 50).length;
+    const criticalCount = projectsWithData.filter((c) => c.kpi.healthScore < 50).length;
     const totalSpend = clientKPIs.reduce((sum, c) => sum + c.kpi.currentPeriod.totalSpend, 0);
+    const hasAnyData = projectsWithData.length > 0;
 
     const getTrendIcon = (direction: string) => {
         switch (direction) {
@@ -360,8 +416,8 @@ export default function DashboardHome({
                 <SummaryCard
                     icon={<Activity size={20} />}
                     label="Gem. Health Score"
-                    value={avgHealth.toString()}
-                    color={getHealthColor(avgHealth)}
+                    value={hasAnyData ? avgHealth.toString() : "—"}
+                    color={hasAnyData ? getHealthColor(avgHealth) : "#64748b"}
                 />
                 <SummaryCard
                     icon={<AlertTriangle size={20} />}
@@ -536,18 +592,20 @@ export default function DashboardHome({
                                                 stroke="rgba(51, 65, 85, 0.4)"
                                                 strokeWidth="6"
                                             />
-                                            <circle
-                                                cx="32"
-                                                cy="32"
-                                                r="26"
-                                                fill="none"
-                                                stroke={getHealthColor(kpi.healthScore)}
-                                                strokeWidth="6"
-                                                strokeLinecap="round"
-                                                strokeDasharray={`${(kpi.healthScore / 100) * 163.36} 163.36`}
-                                                transform="rotate(-90 32 32)"
-                                                style={{ transition: "all 0.6s ease" }}
-                                            />
+                                            {kpi.hasData && (
+                                                <circle
+                                                    cx="32"
+                                                    cy="32"
+                                                    r="26"
+                                                    fill="none"
+                                                    stroke={getHealthColor(kpi.healthScore, kpi.hasData)}
+                                                    strokeWidth="6"
+                                                    strokeLinecap="round"
+                                                    strokeDasharray={`${(kpi.healthScore / 100) * 163.36} 163.36`}
+                                                    transform="rotate(-90 32 32)"
+                                                    style={{ transition: "all 0.6s ease" }}
+                                                />
+                                            )}
                                         </svg>
                                         <div
                                             style={{
@@ -556,61 +614,69 @@ export default function DashboardHome({
                                                 display: "flex",
                                                 alignItems: "center",
                                                 justifyContent: "center",
-                                                fontSize: "1rem",
+                                                fontSize: kpi.hasData ? "1rem" : "1.1rem",
                                                 fontWeight: 700,
-                                                color: getHealthColor(kpi.healthScore),
+                                                color: getHealthColor(kpi.healthScore, kpi.hasData),
                                             }}
                                         >
-                                            {kpi.healthScore}
+                                            {kpi.hasData ? kpi.healthScore : "—"}
                                         </div>
                                     </div>
 
                                     <div style={{ flex: 1 }}>
                                         <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
                                             <span style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)" }}>
-                                                {getHealthLabel(kpi.healthScore)}
+                                                {getHealthLabel(kpi.healthScore, kpi.hasData)}
                                             </span>
-                                            <span style={{ color: getTrendColor(kpi.trendDirection) }}>
-                                                {getTrendIcon(kpi.trendDirection)}
-                                            </span>
+                                            {kpi.hasData && (
+                                                <span style={{ color: getTrendColor(kpi.trendDirection) }}>
+                                                    {getTrendIcon(kpi.trendDirection)}
+                                                </span>
+                                            )}
                                         </div>
 
-                                        <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
-                                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
-                                                <span>Target ({client.targetType})</span>
-                                                <span style={{ color: "var(--color-text-primary)", fontWeight: 500 }}>
-                                                    {client.targetType === "CPA"
-                                                        ? formatCurrency(Number(client.targetValue))
-                                                        : formatNumber(Number(client.targetValue), 2)}
-                                                </span>
+                                        {kpi.hasData ? (
+                                            <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
+                                                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
+                                                    <span>Target ({client.targetType})</span>
+                                                    <span style={{ color: "var(--color-text-primary)", fontWeight: 500 }}>
+                                                        {client.targetType === "CPA"
+                                                            ? formatCurrency(Number(client.targetValue))
+                                                            : formatNumber(Number(client.targetValue), 2)}
+                                                    </span>
+                                                </div>
+                                                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
+                                                    <span>Behaald</span>
+                                                    <span style={{
+                                                        color: kpi.targetDeviation > 0 ? "#f87171" : "#34d399",
+                                                        fontWeight: 600,
+                                                    }}>
+                                                        {client.targetType === "CPA"
+                                                            ? formatCurrency(kpi.blendedKPI)
+                                                            : formatNumber(kpi.blendedKPI, 2)}
+                                                    </span>
+                                                </div>
+                                                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
+                                                    <span>Deviation</span>
+                                                    <span style={{
+                                                        color: kpi.targetDeviation > 0 ? "#f87171" : "#34d399",
+                                                        fontWeight: 600,
+                                                    }}>
+                                                        {formatPercent(kpi.targetDeviation)}
+                                                    </span>
+                                                </div>
+                                                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                                    <span>Spend</span>
+                                                    <span style={{ color: "var(--color-text-primary)", fontWeight: 500 }}>
+                                                        {formatCurrency(kpi.currentPeriod.totalSpend)}
+                                                    </span>
+                                                </div>
                                             </div>
-                                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
-                                                <span>Behaald</span>
-                                                <span style={{
-                                                    color: kpi.targetDeviation > 0 ? "#f87171" : "#34d399",
-                                                    fontWeight: 600,
-                                                }}>
-                                                    {client.targetType === "CPA"
-                                                        ? formatCurrency(kpi.blendedKPI)
-                                                        : formatNumber(kpi.blendedKPI, 2)}
-                                                </span>
+                                        ) : (
+                                            <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", marginTop: "4px" }}>
+                                                Er is nog geen data beschikbaar voor dit project in de geselecteerde periode.
                                             </div>
-                                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
-                                                <span>Deviation</span>
-                                                <span style={{
-                                                    color: kpi.targetDeviation > 0 ? "#f87171" : "#34d399",
-                                                    fontWeight: 600,
-                                                }}>
-                                                    {formatPercent(kpi.targetDeviation)}
-                                                </span>
-                                            </div>
-                                            <div style={{ display: "flex", justifyContent: "space-between" }}>
-                                                <span>Spend</span>
-                                                <span style={{ color: "var(--color-text-primary)", fontWeight: 500 }}>
-                                                    {formatCurrency(kpi.currentPeriod.totalSpend)}
-                                                </span>
-                                            </div>
-                                        </div>
+                                        )}
                                     </div>
                                 </div>
 
@@ -625,20 +691,35 @@ export default function DashboardHome({
                                     }}
                                 >
                                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                        {kpi.targetStatus === "critical" ? (
-                                            <AlertTriangle size={14} color="#ef4444" />
+                                        {!kpi.hasData ? (
+                                            <>
+                                                <Minus size={14} color="#64748b" />
+                                                <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                                                    Geen data
+                                                </span>
+                                            </>
+                                        ) : kpi.targetStatus === "critical" ? (
+                                            <>
+                                                <AlertTriangle size={14} color="#ef4444" />
+                                                <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                                                    Kritiek
+                                                </span>
+                                            </>
                                         ) : kpi.targetStatus === "warning" ? (
-                                            <Clock size={14} color="#f59e0b" />
+                                            <>
+                                                <Clock size={14} color="#f59e0b" />
+                                                <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                                                    Waarschuwing
+                                                </span>
+                                            </>
                                         ) : (
-                                            <CheckCircle size={14} color="#10b981" />
+                                            <>
+                                                <CheckCircle size={14} color="#10b981" />
+                                                <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                                                    Op Target
+                                                </span>
+                                            </>
                                         )}
-                                        <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-                                            {kpi.targetStatus === "critical"
-                                                ? "Kritiek"
-                                                : kpi.targetStatus === "warning"
-                                                    ? "Waarschuwing"
-                                                    : "Op Target"}
-                                        </span>
                                     </div>
                                     {advisorStatus && getStatusBadge(advisorStatus)}
                                 </div>
@@ -663,17 +744,17 @@ export default function DashboardHome({
                                     textAlign: "left",
                                 }}
                             >
-                                <th style={{ padding: "14px 20px", color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                                    Project
+                                <th onClick={() => handleSort("name")} style={{ ...sortableThStyle(), padding: "14px 20px", color: sortColumn === "name" ? "var(--color-brand-light)" : "var(--color-text-muted)" }}>
+                                    <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>Project <SortIcon col="name" /></span>
                                 </th>
                                 <th style={{ padding: "14px 16px", color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                                     Branche
                                 </th>
-                                <th style={{ padding: "14px 16px", color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "center" }}>
-                                    Health
+                                <th onClick={() => handleSort("health")} style={{ ...sortableThStyle("center"), color: sortColumn === "health" ? "var(--color-brand-light)" : "var(--color-text-muted)" }}>
+                                    <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", justifyContent: "center" }}>Health <SortIcon col="health" /></span>
                                 </th>
-                                <th style={{ padding: "14px 16px", color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                                    Status
+                                <th onClick={() => handleSort("status")} style={{ ...sortableThStyle(), color: sortColumn === "status" ? "var(--color-brand-light)" : "var(--color-text-muted)" }}>
+                                    <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>Status <SortIcon col="status" /></span>
                                 </th>
                                 <th style={{ padding: "14px 16px", color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "right" }}>
                                     Target
@@ -684,11 +765,11 @@ export default function DashboardHome({
                                 <th style={{ padding: "14px 16px", color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "center" }}>
                                     Trend
                                 </th>
-                                <th style={{ padding: "14px 16px", color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "right" }}>
-                                    Deviation
+                                <th onClick={() => handleSort("deviation")} style={{ ...sortableThStyle("right"), color: sortColumn === "deviation" ? "var(--color-brand-light)" : "var(--color-text-muted)" }}>
+                                    <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", justifyContent: "flex-end", width: "100%" }}>Deviation <SortIcon col="deviation" /></span>
                                 </th>
-                                <th style={{ padding: "14px 16px", color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "right" }}>
-                                    Spend
+                                <th onClick={() => handleSort("spend")} style={{ ...sortableThStyle("right"), color: sortColumn === "spend" ? "var(--color-brand-light)" : "var(--color-text-muted)" }}>
+                                    <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", justifyContent: "flex-end", width: "100%" }}>Spend <SortIcon col="spend" /></span>
                                 </th>
                                 <th style={{ padding: "14px 20px", width: "32px" }}></th>
                             </tr>
@@ -733,15 +814,17 @@ export default function DashboardHome({
                                             <div style={{ position: "relative", width: "32px", height: "32px" }}>
                                                 <svg width="32" height="32" viewBox="0 0 32 32">
                                                     <circle cx="16" cy="16" r="12" fill="none" stroke="rgba(51, 65, 85, 0.4)" strokeWidth="3" />
-                                                    <circle
-                                                        cx="16" cy="16" r="12"
-                                                        fill="none"
-                                                        stroke={getHealthColor(kpi.healthScore)}
-                                                        strokeWidth="3"
-                                                        strokeLinecap="round"
-                                                        strokeDasharray={`${(kpi.healthScore / 100) * 75.4} 75.4`}
-                                                        transform="rotate(-90 16 16)"
-                                                    />
+                                                    {kpi.hasData && (
+                                                        <circle
+                                                            cx="16" cy="16" r="12"
+                                                            fill="none"
+                                                            stroke={getHealthColor(kpi.healthScore, kpi.hasData)}
+                                                            strokeWidth="3"
+                                                            strokeLinecap="round"
+                                                            strokeDasharray={`${(kpi.healthScore / 100) * 75.4} 75.4`}
+                                                            transform="rotate(-90 16 16)"
+                                                        />
+                                                    )}
                                                 </svg>
                                                 <span style={{
                                                     position: "absolute",
@@ -749,11 +832,11 @@ export default function DashboardHome({
                                                     display: "flex",
                                                     alignItems: "center",
                                                     justifyContent: "center",
-                                                    fontSize: "0.55rem",
+                                                    fontSize: kpi.hasData ? "0.55rem" : "0.7rem",
                                                     fontWeight: 700,
-                                                    color: getHealthColor(kpi.healthScore),
+                                                    color: getHealthColor(kpi.healthScore, kpi.hasData),
                                                 }}>
-                                                    {kpi.healthScore}
+                                                    {kpi.hasData ? kpi.healthScore : "—"}
                                                 </span>
                                             </div>
                                         </div>
@@ -762,7 +845,9 @@ export default function DashboardHome({
                                     {/* Status */}
                                     <td style={{ padding: "14px 16px" }}>
                                         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                            {kpi.targetStatus === "critical" ? (
+                                            {!kpi.hasData ? (
+                                                <Minus size={13} color="#64748b" />
+                                            ) : kpi.targetStatus === "critical" ? (
                                                 <AlertTriangle size={13} color="#ef4444" />
                                             ) : kpi.targetStatus === "warning" ? (
                                                 <Clock size={13} color="#f59e0b" />
@@ -770,11 +855,13 @@ export default function DashboardHome({
                                                 <CheckCircle size={13} color="#10b981" />
                                             )}
                                             <span style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)" }}>
-                                                {kpi.targetStatus === "critical"
-                                                    ? "Kritiek"
-                                                    : kpi.targetStatus === "warning"
-                                                        ? "Waarschuwing"
-                                                        : "Op Target"}
+                                                {!kpi.hasData
+                                                    ? "Geen data"
+                                                    : kpi.targetStatus === "critical"
+                                                        ? "Kritiek"
+                                                        : kpi.targetStatus === "warning"
+                                                            ? "Waarschuwing"
+                                                            : "Op Target"}
                                             </span>
                                         </div>
                                     </td>

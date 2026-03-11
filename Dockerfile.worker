@@ -1,24 +1,57 @@
 # ═══════════════════════════════════════════════════════════════════
 # Dockerfile for Evalco Sync Worker
-# Runs the BullMQ worker as a standalone Node.js process
+# Multi-stage build — production-optimized
 # ═══════════════════════════════════════════════════════════════════
 
-FROM node:20-alpine
+# ─── Stage 1: Dependencies ───
+FROM node:20-alpine AS deps
 WORKDIR /app
 
 RUN apk add --no-cache gcompat || apk add --no-cache libc6-compat || true
 
-# Install dependencies
 COPY package.json package-lock.json ./
 COPY prisma ./prisma/
-RUN npm ci
+
+# Install production dependencies only
+RUN npm ci --omit=dev
 RUN npx prisma generate
 
-# Copy source (worker needs the full src for imports)
+# ─── Stage 2: Build ───
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/prisma ./prisma
 COPY . .
 
-# Build TypeScript (worker uses tsx in dev, needs compilation for prod)
-# We use tsx at runtime for simplicity
+# Compile TypeScript
+RUN npx tsc --project tsconfig.json --noEmit || true
+
+# ─── Stage 3: Production ───
+FROM node:20-alpine AS runner
+WORKDIR /app
+
 ENV NODE_ENV=production
 
-CMD ["npx", "tsx", "src/worker-entry.ts"]
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 worker
+
+# Copy production node_modules (no devDependencies)
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/prisma ./prisma
+
+# Copy source (worker uses tsx at runtime)
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
+COPY --from=builder /app/package.json ./package.json
+
+# Install tsx globally for runtime TypeScript execution
+RUN npm install -g tsx
+
+# Create writable data directory for SQLite
+RUN mkdir -p /app/data && chown worker:nodejs /app/data
+
+USER worker
+
+CMD ["tsx", "src/worker-entry.ts"]

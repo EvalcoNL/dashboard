@@ -1,7 +1,8 @@
 import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY || "dummy_key_for_build");
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "alert@evalco.nl";
+const FROM_ALERT = "Evalco Alert <alert@evalco.nl>";
+const FROM_SUPPORT = "Evalco <support@evalco.nl>";
 
 export interface IncidentAlertPayload {
     incidentTitle: string;
@@ -10,6 +11,17 @@ export interface IncidentAlertPayload {
     startedAt: Date;
     recipients: string[];
     duration?: string;
+    incidentId?: string;
+    projectId?: string;
+}
+
+/** Build a deep link to a specific incident, or fall back to homepage */
+function buildIncidentUrl(projectId?: string, incidentId?: string): string {
+    const base = process.env.NEXTAUTH_URL || "http://localhost:3000";
+    if (projectId && incidentId) {
+        return `${base}/projects/${projectId}/monitoring/incidents/${incidentId}`;
+    }
+    return `${base}/incidents`;
 }
 
 /**
@@ -74,7 +86,9 @@ export async function sendIncidentAlertEmail({
     incidentCause,
     clientName,
     startedAt,
-    recipients
+    recipients,
+    incidentId,
+    projectId
 }: IncidentAlertPayload) {
     if (!recipients || recipients.length === 0) return;
 
@@ -84,6 +98,7 @@ export async function sendIncidentAlertEmail({
     }
 
     try {
+        const incidentUrl = buildIncidentUrl(projectId, incidentId);
         const html = renderEmailTemplate(
             "Nieuw Incident Gedetecteerd",
             `
@@ -95,14 +110,16 @@ export async function sendIncidentAlertEmail({
                     <p style="margin-bottom: 0;"><strong>Tijdstip:</strong> ${startedAt.toLocaleString("nl-NL")}</p>
                 </div>
                 
-                <p>Log in op het Evalco dashboard voor meer details en om dit incident af te handelen.</p>
+                <p>Bekijk het incident in het Evalco dashboard voor meer details en om het af te handelen.</p>
                 
-                <a href="${process.env.NEXTAUTH_URL || "http://localhost:3000"}/" class="button">Open Dashboard</a>
+                <div style="text-align: center;">
+                    <a href="${incidentUrl}" class="button">Incident Bekijken</a>
+                </div>
             `
         );
 
         const data = await resend.emails.send({
-            from: FROM_EMAIL,
+            from: FROM_ALERT,
             to: recipients,
             subject: `🚨 [Incident Alert] ${clientName} - ${incidentTitle}`,
             html,
@@ -121,7 +138,9 @@ export async function sendIncidentResolvedEmail({
     clientName,
     startedAt,
     recipients,
-    duration
+    duration,
+    incidentId,
+    projectId
 }: IncidentAlertPayload) {
     if (!recipients || recipients.length === 0) return;
 
@@ -131,6 +150,7 @@ export async function sendIncidentResolvedEmail({
     }
 
     try {
+        const incidentUrl = buildIncidentUrl(projectId, incidentId);
         const html = renderEmailTemplate(
             "Incident Opgelost",
             `
@@ -139,18 +159,21 @@ export async function sendIncidentResolvedEmail({
                 <div class="success-box">
                     <h3 style="margin-top: 0; color: #166534;">${incidentTitle}</h3>
                     <p style="margin-bottom: 4px;"><strong>Oorspronkelijke oorzaak:</strong> ${incidentCause}</p>
+                    <p style="margin-bottom: 4px;"><strong>Gestart op:</strong> ${startedAt.toLocaleString("nl-NL")}</p>
                     <p style="margin-bottom: 4px;"><strong>Opgelost op:</strong> ${new Date().toLocaleString("nl-NL")}</p>
-                    ${duration ? `<p style="margin-bottom: 0;"><strong>Totale duur:</strong> ${duration}</p>` : ""}
+                    <p style="margin-bottom: 0;"><strong>Totale duur:</strong> ${duration || "Onbekend"}</p>
                 </div>
 
                 <p>De monitoring blijft actief om de stabiliteit te waarborgen.</p>
                 
-                <a href="${process.env.NEXTAUTH_URL || "http://localhost:3000"}/" class="button">Bekijk Rapportages</a>
+                <div style="text-align: center;">
+                    <a href="${incidentUrl}" class="button">Incident Bekijken</a>
+                </div>
             `
         );
 
         const data = await resend.emails.send({
-            from: FROM_EMAIL,
+            from: FROM_ALERT,
             to: recipients,
             subject: `✅ [Incident Opgelost] ${clientName} - ${incidentTitle}`,
             html,
@@ -163,44 +186,58 @@ export async function sendIncidentResolvedEmail({
     }
 }
 
+/**
+ * Send a Slack webhook with retry logic.
+ * Retries up to 3 times with exponential backoff (1s, 2s, 4s).
+ */
+async function sendSlackWithRetry(webhookUrl: string, body: object, label: string): Promise<void> {
+    const maxRetries = 3;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const res = await fetch(webhookUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+            });
+
+            if (res.ok) return;
+
+            // Slack rate limit (429) or server error (5xx) → retry
+            if (res.status === 429 || res.status >= 500) {
+                console.warn(`[SlackService] ${label} attempt ${attempt}/${maxRetries} failed (${res.status})`);
+                if (attempt < maxRetries) {
+                    await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+                    continue;
+                }
+            }
+
+            console.error(`[SlackService] ${label} failed after ${attempt} attempt(s): ${res.status} ${res.statusText}`);
+            return;
+        } catch (error) {
+            console.error(`[SlackService] ${label} attempt ${attempt}/${maxRetries} error:`, error);
+            if (attempt < maxRetries) {
+                await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+            }
+        }
+    }
+}
+
 export async function sendSlackAlert(webhookUrl: string, payload: IncidentAlertPayload) {
     if (!webhookUrl) return;
 
-    try {
-        const res = await fetch(webhookUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                text: `🚨 *Nieuw Incident voor ${payload.clientName}*\n*${payload.incidentTitle}*\n> Oorzaak: _${payload.incidentCause}_\n> Tijd: _${payload.startedAt.toLocaleString('nl-NL')}_`
-            })
-        });
-
-        if (!res.ok) {
-            console.error("[SlackService] Failed to send to Slack:", res.statusText);
-        }
-    } catch (error) {
-        console.error("[SlackService] Error sending to Slack:", error);
-    }
+    const incidentUrl = buildIncidentUrl(payload.projectId, payload.incidentId);
+    await sendSlackWithRetry(webhookUrl, {
+        text: `🚨 *Nieuw Incident voor ${payload.clientName}*\n*${payload.incidentTitle}*\n> Oorzaak: _${payload.incidentCause}_\n> Tijd: _${payload.startedAt.toLocaleString('nl-NL')}_\n\n<${incidentUrl}|Incident Bekijken>`
+    }, "Alert");
 }
 
 export async function sendSlackResolvedAlert(webhookUrl: string, payload: IncidentAlertPayload) {
     if (!webhookUrl) return;
 
-    try {
-        const res = await fetch(webhookUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                text: `✅ *Incident Opgelost voor ${payload.clientName}*\n*${payload.incidentTitle}*\n> De site is weer bereikbaar.${payload.duration ? `\n> Totale duur: _${payload.duration}_` : ''}`
-            })
-        });
-
-        if (!res.ok) {
-            console.error("[SlackService] Failed to send resolution to Slack:", res.statusText);
-        }
-    } catch (error) {
-        console.error("[SlackService] Error sending resolution to Slack:", error);
-    }
+    const incidentUrl = buildIncidentUrl(payload.projectId, payload.incidentId);
+    await sendSlackWithRetry(webhookUrl, {
+        text: `✅ *Incident Opgelost voor ${payload.clientName}*\n*${payload.incidentTitle}*\n> De site is weer bereikbaar.\n> Totale duur: _${payload.duration || 'Onbekend'}_\n\n<${incidentUrl}|Incident Bekijken>`
+    }, "Resolved");
 }
 
 export async function sendProjectInviteEmail(email: string, clientName: string, token: string, userExists: boolean = false) {
@@ -244,7 +281,7 @@ export async function sendProjectInviteEmail(email: string, clientName: string, 
         );
 
         const { data, error } = await resend.emails.send({
-            from: FROM_EMAIL,
+            from: FROM_SUPPORT,
             to: [email],
             subject: subjectText,
             html,
@@ -288,7 +325,7 @@ export async function sendPasswordResetEmail(email: string, token: string) {
         );
 
         const { data, error } = await resend.emails.send({
-            from: FROM_EMAIL,
+            from: FROM_SUPPORT,
             to: [email],
             subject: "🔐 Wachtwoord herstellen - Evalco Dashboard",
             html,
@@ -332,7 +369,7 @@ export async function sendEmailChangeVerification(newEmail: string, token: strin
         );
 
         const { data, error } = await resend.emails.send({
-            from: FROM_EMAIL,
+            from: FROM_SUPPORT,
             to: [newEmail],
             subject: "📧 E-mailadres bevestigen - Evalco Dashboard",
             html,
@@ -351,25 +388,40 @@ export async function sendEmailChangeVerification(newEmail: string, token: strin
 }
 
 // ──────────────────────────────────────────────────────────────
-// Weekly Digest Email
+// Weekly Incident Digest Email
 // ──────────────────────────────────────────────────────────────
 
 export interface WeeklyDigestPayload {
     recipientEmail: string;
     recipientName: string;
-    projects: {
-        name: string;
-        targetCPA: number | null;
-        incidentsThisWeek: number;
-        openIncidents: number;
-        activeRules: number;
-    }[];
     periodStart: Date;
     periodEnd: Date;
+    totalIncidents: number;
+    resolvedIncidents: number;
+    openIncidents: number;
+    previousWeekIncidents: number;
+    monitors: {
+        name: string;
+        projectName: string;
+        /** 7 booleans, Mon-Sun: true = up, false = had downtime */
+        dailyStatus: boolean[];
+        uptimePct: string;
+    }[];
+    longestIncidents: {
+        title: string;
+        cause: string;
+        duration: string;
+        projectId?: string;
+        incidentId?: string;
+    }[];
 }
 
 export async function sendWeeklyDigestEmail(payload: WeeklyDigestPayload) {
-    const { recipientEmail, recipientName, projects, periodStart, periodEnd } = payload;
+    const {
+        recipientEmail, recipientName, periodStart, periodEnd,
+        totalIncidents, resolvedIncidents, openIncidents,
+        previousWeekIncidents, monitors, longestIncidents
+    } = payload;
 
     if (!process.env.RESEND_API_KEY) {
         console.log(`[EmailService] Mocking Weekly Digest to ${recipientEmail}`);
@@ -378,93 +430,144 @@ export async function sendWeeklyDigestEmail(payload: WeeklyDigestPayload) {
 
     const formatDate = (d: Date) => d.toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
     const period = `${formatDate(periodStart)} — ${formatDate(periodEnd)}`;
+    const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
 
-    const totalIncidents = projects.reduce((sum, p) => sum + p.incidentsThisWeek, 0);
-    const totalOpen = projects.reduce((sum, p) => sum + p.openIncidents, 0);
-    const totalRules = projects.reduce((sum, p) => sum + p.activeRules, 0);
+    // Delta vs previous week
+    const delta = totalIncidents - previousWeekIncidents;
+    const deltaStr = delta > 0 ? `+${delta}` : delta === 0 ? "0" : `${delta}`;
+    const deltaColor = delta > 0 ? "#ef4444" : delta < 0 ? "#10b981" : "#64748b";
 
-    // Build projects table rows
-    const projectRows = projects.map(p => {
-        const statusColor = p.openIncidents > 0 ? "#ef4444" : "#10b981";
-        const statusLabel = p.openIncidents > 0 ? `${p.openIncidents} open` : "✓ OK";
+    // Build monitor rows with daily dots
+    const dayLabels = ["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"];
+    const monitorRows = monitors.map(m => {
+        const dots = m.dailyStatus.map((up, i) => {
+            const color = up ? "#10b981" : "#ef4444";
+            const bgColor = up ? "#d1fae5" : "#fee2e2";
+            return `<td style="padding: 4px 6px; text-align: center;">
+                <div style="width: 24px; height: 24px; border-radius: 6px; background: ${bgColor}; margin: 0 auto; display: flex; align-items: center; justify-content: center;">
+                    <div style="width: 10px; height: 10px; border-radius: 50%; background: ${color};"></div>
+                </div>
+            </td>`;
+        }).join("");
+
+        const uptimeColor = parseFloat(m.uptimePct) >= 99.9 ? "#10b981" : parseFloat(m.uptimePct) >= 95 ? "#f59e0b" : "#ef4444";
         return `
-            <tr>
-                <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; font-weight: 500;">
-                    ${p.name}
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 12px 16px; font-weight: 500; font-size: 0.875rem;">
+                    ${m.name}
+                    <div style="font-size: 0.7rem; color: #94a3b8; font-weight: 400;">${m.projectName}</div>
                 </td>
-                <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; text-align: center;">
-                    ${p.incidentsThisWeek}
-                </td>
-                <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; text-align: center;">
-                    <span style="color: ${statusColor}; font-weight: 600;">${statusLabel}</span>
-                </td>
-                <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; text-align: center;">
-                    ${p.activeRules}
+                ${dots}
+                <td style="padding: 12px 8px; text-align: right;">
+                    <span style="color: ${uptimeColor}; font-weight: 600; font-size: 0.8125rem;">${m.uptimePct}%</span>
                 </td>
             </tr>
         `;
-    }).join("\n");
+    }).join("");
+
+    // Build longest incidents rows
+    const longestRows = longestIncidents.map(inc => {
+        const url = inc.projectId && inc.incidentId
+            ? `${baseUrl}/projects/${inc.projectId}/monitoring/incidents/${inc.incidentId}`
+            : null;
+        const titleHtml = url
+            ? `<a href="${url}" style="color: #6366f1; text-decoration: none; font-weight: 500;">${inc.title}</a>`
+            : `<span style="font-weight: 500;">${inc.title}</span>`;
+        return `
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 10px 16px; font-size: 0.875rem;">${titleHtml}</td>
+                <td style="padding: 10px 16px; font-size: 0.8125rem; color: #64748b;">${inc.cause}</td>
+                <td style="padding: 10px 16px; text-align: right; font-size: 0.8125rem; font-weight: 600; white-space: nowrap;">${inc.duration}</td>
+            </tr>
+        `;
+    }).join("");
 
     try {
         const html = renderEmailTemplate(
-            "Wekelijks Performance Overzicht",
+            "Wekelijks Incident Rapport",
             `
-                <p>Hallo <strong>${recipientName}</strong>,</p>
-                <p>Hier is je wekelijkse samenvatting voor de periode <strong>${period}</strong>.</p>
-                
-                <!-- Summary Stats -->
-                <table width="100%" cellpadding="0" cellspacing="0" style="margin: 24px 0; border-radius: 8px; overflow: hidden;">
-                    <tr>
-                        <td style="background: #6366f1; color: white; padding: 16px; text-align: center; width: 33%;">
-                            <div style="font-size: 1.5rem; font-weight: 700;">${projects.length}</div>
-                            <div style="font-size: 0.75rem; opacity: 0.9; text-transform: uppercase;">Projecten</div>
-                        </td>
-                        <td style="background: ${totalOpen > 0 ? "#ef4444" : "#10b981"}; color: white; padding: 16px; text-align: center; width: 33%;">
-                            <div style="font-size: 1.5rem; font-weight: 700;">${totalIncidents}</div>
-                            <div style="font-size: 0.75rem; opacity: 0.9; text-transform: uppercase;">Incidenten</div>
-                        </td>
-                        <td style="background: #0ea5e9; color: white; padding: 16px; text-align: center; width: 34%;">
-                            <div style="font-size: 1.5rem; font-weight: 700;">${totalRules}</div>
-                            <div style="font-size: 0.75rem; opacity: 0.9; text-transform: uppercase;">Actieve Regels</div>
-                        </td>
-                    </tr>
-                </table>
-                
-                <!-- Projects Table -->
-                <table width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; margin: 24px 0;">
-                    <thead>
-                        <tr style="background-color: #f8fafc;">
-                            <th style="padding: 12px 16px; text-align: left; font-size: 0.75rem; text-transform: uppercase; color: #64748b; font-weight: 600;">Project</th>
-                            <th style="padding: 12px 16px; text-align: center; font-size: 0.75rem; text-transform: uppercase; color: #64748b; font-weight: 600;">Incidenten</th>
-                            <th style="padding: 12px 16px; text-align: center; font-size: 0.75rem; text-transform: uppercase; color: #64748b; font-weight: 600;">Status</th>
-                            <th style="padding: 12px 16px; text-align: center; font-size: 0.75rem; text-transform: uppercase; color: #64748b; font-weight: 600;">Regels</th>
+                <p style="color: #64748b; margin-top: 0;">${period}</p>
+
+                <!-- Overview Box -->
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; margin: 24px 0;">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <div style="font-size: 2rem; font-weight: 800; color: #0f172a;">${totalIncidents} incident${totalIncidents !== 1 ? "en" : ""}</div>
+                            <div style="font-size: 0.875rem; color: ${deltaColor}; font-weight: 600; margin-top: 4px;">
+                                ${deltaStr} incident${Math.abs(delta) !== 1 ? "en" : ""} t.o.v. vorige week
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Stats Row -->
+                    <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 16px;">
+                        <tr>
+                            <td style="padding: 8px 0;">
+                                <span style="color: #10b981; font-weight: 700;">${resolvedIncidents}</span>
+                                <span style="color: #64748b; font-size: 0.8125rem;"> opgelost</span>
+                            </td>
+                            <td style="padding: 8px 0;">
+                                <span style="color: ${openIncidents > 0 ? "#ef4444" : "#10b981"}; font-weight: 700;">${openIncidents}</span>
+                                <span style="color: #64748b; font-size: 0.8125rem;"> nog open</span>
+                            </td>
                         </tr>
-                    </thead>
-                    <tbody>
-                        ${projectRows}
-                    </tbody>
-                </table>
-                
-                ${totalOpen > 0 ? `
+                    </table>
+                </div>
+
+                ${monitors.length > 0 ? `
+                    <!-- Monitors Table -->
+                    <h3 style="color: #0f172a; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em; margin: 32px 0 12px; font-weight: 600;">Monitors</h3>
+                    <table width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+                        <thead>
+                            <tr style="background: #f8fafc;">
+                                <th style="padding: 8px 16px; text-align: left; font-size: 0.7rem; text-transform: uppercase; color: #94a3b8; font-weight: 600;">Monitor</th>
+                                ${dayLabels.map(d => `<th style="padding: 8px 6px; text-align: center; font-size: 0.7rem; text-transform: uppercase; color: #94a3b8; font-weight: 600;">${d}</th>`).join("")}
+                                <th style="padding: 8px 8px; text-align: right; font-size: 0.7rem; text-transform: uppercase; color: #94a3b8; font-weight: 600;">Uptime</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${monitorRows}
+                        </tbody>
+                    </table>
+                ` : ""}
+
+                ${longestIncidents.length > 0 ? `
+                    <!-- Longest Incidents -->
+                    <h3 style="color: #0f172a; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em; margin: 32px 0 12px; font-weight: 600;">Langste incidenten</h3>
+                    <table width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+                        <thead>
+                            <tr style="background: #f8fafc;">
+                                <th style="padding: 8px 16px; text-align: left; font-size: 0.7rem; text-transform: uppercase; color: #94a3b8; font-weight: 600;">Incident</th>
+                                <th style="padding: 8px 16px; text-align: left; font-size: 0.7rem; text-transform: uppercase; color: #94a3b8; font-weight: 600;">Oorzaak</th>
+                                <th style="padding: 8px 16px; text-align: right; font-size: 0.7rem; text-transform: uppercase; color: #94a3b8; font-weight: 600;">Duur</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${longestRows}
+                        </tbody>
+                    </table>
+                ` : ""}
+
+                ${openIncidents > 0 ? `
                     <div class="alert-box">
-                        <p style="margin: 0;"><strong>Let op:</strong> Er ${totalOpen === 1 ? "is" : "zijn"} ${totalOpen} open incident${totalOpen !== 1 ? "en" : ""} die aandacht vereist${totalOpen !== 1 ? "en" : ""}.</p>
+                        <p style="margin: 0;"><strong>Let op:</strong> Er ${openIncidents === 1 ? "is" : "zijn"} ${openIncidents} open incident${openIncidents !== 1 ? "en" : ""} die aandacht vereist${openIncidents !== 1 ? "en" : ""}.</p>
                     </div>
                 ` : `
                     <div class="success-box">
-                        <p style="margin: 0;">✅ Alle projecten draaien zonder openstaande incidenten. Goed bezig!</p>
+                        <p style="margin: 0;">✅ Alle incidenten van deze week zijn opgelost.</p>
                     </div>
                 `}
-                
+
                 <div style="text-align: center;">
-                    <a href="${process.env.NEXTAUTH_URL || "http://localhost:3000"}/" class="button">Open Dashboard</a>
+                    <a href="${baseUrl}/incidents" class="button">Alle Incidenten Bekijken</a>
                 </div>
             `
         );
 
         const data = await resend.emails.send({
-            from: FROM_EMAIL,
+            from: FROM_ALERT,
             to: [recipientEmail],
-            subject: `📊 Wekelijks Overzicht — ${period}`,
+            subject: `📊 Wekelijks Rapport — ${totalIncidents} incident${totalIncidents !== 1 ? "en" : ""} — ${period}`,
             html,
         });
 

@@ -25,19 +25,34 @@ export async function POST(request: NextRequest) {
         select: { id: true, name: true },
     });
 
-    const results = [];
+    const results: any[] = [];
     let totalEvaluated = 0;
     let totalTriggered = 0;
 
-    for (const project of projects) {
-        const projectResult = await evaluateProjectRules(project.id);
-        totalEvaluated += projectResult.evaluated;
-        totalTriggered += projectResult.triggered;
-        results.push({
-            projectId: project.id,
-            projectName: project.name,
-            ...projectResult,
-        });
+    // Evaluate rules in parallel with concurrency limit
+    const CONCURRENCY = 5;
+    for (let i = 0; i < projects.length; i += CONCURRENCY) {
+        const batch = projects.slice(i, i + CONCURRENCY);
+        const batchResults = await Promise.allSettled(
+            batch.map(async (project) => {
+                const projectResult = await evaluateProjectRules(project.id);
+                return {
+                    projectId: project.id,
+                    projectName: project.name,
+                    ...projectResult,
+                };
+            })
+        );
+
+        for (const result of batchResults) {
+            if (result.status === 'fulfilled') {
+                totalEvaluated += result.value.evaluated;
+                totalTriggered += result.value.triggered;
+                results.push(result.value);
+            } else {
+                console.error('[RuleEval] Project evaluation failed:', result.reason);
+            }
+        }
     }
 
     return NextResponse.json({

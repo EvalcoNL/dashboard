@@ -144,7 +144,8 @@ export async function POST(request: Request) {
 
         // 6. Remove existing sample data from ClickHouse
         try {
-            await command(`ALTER TABLE metrics_data DELETE WHERE data_source_id = '${source.id}'`);
+            const safeDsId = source.id.replace(/'/g, '');
+            await command(`ALTER TABLE metrics_data DELETE WHERE data_source_id = '${safeDsId}'`);
         } catch {
             // ClickHouse might not be ready yet during first run
         }
@@ -191,7 +192,7 @@ export async function POST(request: Request) {
                 records.push({
                     canonical_hash: canonicalHash,
                     data_source_id: source.id,
-                    project_id: projectId,
+                    client_id: projectId,
                     connector_slug: 'google-ads',
                     date: dateStr,
                     level: 'campaign',
@@ -253,7 +254,8 @@ export async function DELETE(request: Request) {
                 { dsId: source.id }
             );
             deleted = Number(countResult[0]?.cnt || 0);
-            await command(`ALTER TABLE metrics_data DELETE WHERE data_source_id = '${source.id}'`);
+            const safeDsId = source.id.replace(/'/g, '');
+            await command(`ALTER TABLE metrics_data DELETE WHERE data_source_id = '${safeDsId}'`);
         } catch {
             // ClickHouse might not be available
         }

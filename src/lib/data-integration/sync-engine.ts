@@ -10,6 +10,8 @@ import { ecomNormalizationService } from './ecommerce-normalization-service';
 import { command } from '@/lib/clickhouse';
 import '@/lib/data-integration/connectors'; // Auto-registers all connectors
 import { decrypt } from '@/lib/encryption';
+import { invalidateCacheByPrefix } from '@/lib/cache';
+import { syncLogger } from '@/lib/logger';
 import type { SyncJobStatus } from '@/types/data-integration';
 
 export type SyncMode = 'INCREMENTAL' | 'FULL' | 'DELTA';
@@ -284,7 +286,7 @@ export class SyncEngine {
                         const shortMsg = `[${level.name}] Account ${account.name || account.externalId}: ${errorMsg}`;
                         levelErrors.push(shortMsg);
                         await this.log(syncJob.id, 'ERROR', shortMsg);
-                        console.error(`[SyncEngine] [ERROR] Full error for ${level.name}:`, error);
+                        syncLogger.error({ err: error, level: level.name, dataSourceId: dataSource.id }, 'Sync error for level');
                     }
                 }
             }
@@ -313,6 +315,9 @@ export class SyncEngine {
                 where: { id: dataSource.id },
                 data: { lastSyncedAt: new Date() },
             });
+
+            // Invalidate dashboard cache so fresh data appears
+            invalidateCacheByPrefix(`dashboard:metrics:${dataSource.projectId}`);
 
             await this.log(syncJob.id, 'INFO',
                 `[${mode}] Sync completed: ${totalFetched} fetched, ${totalNew} new, ` +
@@ -397,14 +402,14 @@ export class SyncEngine {
             }
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
-        console.warn('[SyncEngine] Mutation wait timeout (30s), proceeding');
+        syncLogger.warn('Mutation wait timeout (30s), proceeding');
     }
 
     /**
      * Log a sync event
      */
     private async log(jobId: string, level: string, message: string): Promise<void> {
-        console.log(`[SyncEngine] [${level}] ${message}`);
+        syncLogger[level === 'ERROR' ? 'error' : 'info']({ jobId, logLevel: level }, message);
         try {
             await prisma.syncLog.create({
                 data: { jobId, level, message },

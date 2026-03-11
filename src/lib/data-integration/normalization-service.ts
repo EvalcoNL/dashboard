@@ -188,14 +188,15 @@ export class NormalizationService {
                 } else {
                     // ═══ INCREMENTAL / DELTA MODE: Compare with existing data ═══
 
-                    // 1. Fetch existing rows for this source + date
+                    // 1. Fetch existing rows for this source + date (parameterized)
+                    const syncParams = { dsId: config.dataSourceId, syncDate: dateStr, lvl: config.level };
                     const existingQuery = config.enableChecksumComparison
                         ? `SELECT canonical_hash, sipHash64(*) as data_checksum FROM metrics_data FINAL
-                           WHERE data_source_id = '${config.dataSourceId}' AND date = '${dateStr}' AND level = '${config.level}'`
+                           WHERE data_source_id = {dsId:String} AND date = {syncDate:String} AND level = {lvl:String}`
                         : `SELECT canonical_hash FROM metrics_data FINAL
-                           WHERE data_source_id = '${config.dataSourceId}' AND date = '${dateStr}' AND level = '${config.level}'`;
+                           WHERE data_source_id = {dsId:String} AND date = {syncDate:String} AND level = {lvl:String}`;
 
-                    const existingRows = await query<{ canonical_hash: string; data_checksum?: string }>(existingQuery);
+                    const existingRows = await query<{ canonical_hash: string; data_checksum?: string }>(existingQuery, syncParams);
                     const existingHashes = new Set(existingRows.map(r => r.canonical_hash));
 
                     // For DELTA: build a map of hash → checksum
@@ -245,16 +246,22 @@ export class NormalizationService {
                     }
 
                     if (staleHashes.length > 0) {
-                        const hashList = staleHashes.map(h => `'${h}'`).join(',');
-                        await command(`
-                            ALTER TABLE metrics_data DELETE
-                            WHERE data_source_id = '${config.dataSourceId}'
-                              AND date = '${dateStr}'
-                              AND level = '${config.level}'
-                              AND canonical_hash IN (${hashList})
-                        `);
-                        await this.waitForMutations();
-                        deletedRows = staleHashes.length;
+                        // Sanitize SHA-256 hashes — only allow hex characters
+                        const safeHashes = staleHashes.filter(h => /^[a-f0-9]+$/i.test(h));
+                        if (safeHashes.length > 0) {
+                            const hashList = safeHashes.map(h => `'${h}'`).join(',');
+                            const safeDsId = config.dataSourceId.replace(/'/g, '');
+                            const safeLevel = config.level.replace(/'/g, '');
+                            await command(`
+                                ALTER TABLE metrics_data DELETE
+                                WHERE data_source_id = '${safeDsId}'
+                                  AND date = '${dateStr}'
+                                  AND level = '${safeLevel}'
+                                  AND canonical_hash IN (${hashList})
+                            `);
+                            await this.waitForMutations();
+                        }
+                        deletedRows = safeHashes.length;
                     }
 
                     // 5. Insert rows in chunks

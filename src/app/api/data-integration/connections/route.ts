@@ -37,64 +37,86 @@ export async function GET(request: Request) {
             orderBy: { linkedAt: 'asc' },
         });
 
-        const enriched = await Promise.all(sources.map(async (source) => {
-            // Count records — different strategy for Merchant Center vs other sources
+        // ── Batch: record counts from ClickHouse (one query for all sources) ──
+        const allSourceIds = sources.map(s => s.id);
+        const merchantSources = sources.filter(s => s.type === 'GOOGLE_MERCHANT');
+        const regularSourceIds = allSourceIds.filter(id => !merchantSources.some(m => m.id === id));
+
+        // Batch ClickHouse count per regular source
+        const countsBySource = new Map<string, number>();
+        if (regularSourceIds.length > 0) {
+            try {
+                const countPlaceholders = regularSourceIds.map((_, i) => `{sid${i}:String}`).join(', ');
+                const countParams: Record<string, string> = {};
+                regularSourceIds.forEach((id, i) => { countParams[`sid${i}`] = id; });
+                const countRows = await chQuery<{ data_source_id: string; cnt: string }>(
+                    `SELECT data_source_id, count() AS cnt FROM metrics_data FINAL WHERE data_source_id IN (${countPlaceholders}) GROUP BY data_source_id`,
+                    countParams
+                );
+                for (const row of countRows) countsBySource.set(row.data_source_id, Number(row.cnt));
+            } catch { /* ClickHouse unavailable */ }
+        }
+
+        // Batch Merchant Center health
+        const merchantHealthBySource = new Map<string, any>();
+        if (merchantSources.length > 0) {
+            const merchantIds = merchantSources.map(m => m.id);
+            try {
+                const healthRows = await prisma.merchantCenterHealth.findMany({
+                    where: { dataSourceId: { in: merchantIds } },
+                    orderBy: { date: 'desc' },
+                    select: { dataSourceId: true, date: true, totalItems: true, disapprovedItems: true, disapprovedPct: true, topReasons: true },
+                    distinct: ['dataSourceId'],
+                });
+                for (const h of healthRows) {
+                    if (h.dataSourceId) merchantHealthBySource.set(h.dataSourceId, h);
+                }
+            } catch { /* ignore */ }
+        }
+
+        // Batch: recent sync jobs for all sources
+        const allRecentJobs = await prisma.syncJob.findMany({
+            where: { dataSourceId: { in: allSourceIds } },
+            orderBy: { createdAt: 'desc' },
+            select: {
+                id: true,
+                dataSourceId: true,
+                status: true,
+                syncMode: true,
+                level: true,
+                recordsFetched: true,
+                recordsStored: true,
+                recordsNew: true,
+                recordsUpdated: true,
+                recordsDeleted: true,
+                recordsSkipped: true,
+                startedAt: true,
+                completedAt: true,
+                errorMessage: true,
+                createdAt: true,
+            },
+        });
+
+        // Group jobs by source and take top 5 per source
+        const jobsBySource = new Map<string, typeof allRecentJobs>();
+        for (const job of allRecentJobs) {
+            const list = jobsBySource.get(job.dataSourceId) || [];
+            if (list.length < 5) list.push(job);
+            jobsBySource.set(job.dataSourceId, list);
+        }
+
+        const enriched = sources.map((source) => {
             let recordCount = 0;
             let merchantHealth: any = null;
 
             if (source.type === 'GOOGLE_MERCHANT') {
-                // MC data lives in merchant_center_health, not ClickHouse
-                // Show product count from latest snapshot, not number of snapshots
-                try {
-                    merchantHealth = await prisma.merchantCenterHealth.findFirst({
-                        where: { dataSourceId: source.id },
-                        orderBy: { date: 'desc' },
-                        select: {
-                            date: true,
-                            totalItems: true,
-                            disapprovedItems: true,
-                            disapprovedPct: true,
-                            topReasons: true,
-                        },
-                    });
-                    recordCount = merchantHealth?.totalItems || 0;
-                } catch {
-                    recordCount = 0;
-                }
+                merchantHealth = merchantHealthBySource.get(source.id) || null;
+                recordCount = merchantHealth?.totalItems || 0;
             } else {
-                // Standard sources: count from ClickHouse
-                try {
-                    const result = await chQuery<{ cnt: string }>(
-                        `SELECT count() AS cnt FROM metrics_data FINAL WHERE data_source_id = {dsId:String}`,
-                        { dsId: source.id }
-                    );
-                    recordCount = Number(result[0]?.cnt || 0);
-                } catch {
-                    recordCount = 0;
-                }
+                recordCount = countsBySource.get(source.id) || 0;
             }
 
-            const recentJobs = await prisma.syncJob.findMany({
-                where: { dataSourceId: source.id },
-                orderBy: { createdAt: 'desc' },
-                take: 5,
-                select: {
-                    id: true,
-                    status: true,
-                    syncMode: true,
-                    level: true,
-                    recordsFetched: true,
-                    recordsStored: true,
-                    recordsNew: true,
-                    recordsUpdated: true,
-                    recordsDeleted: true,
-                    recordsSkipped: true,
-                    startedAt: true,
-                    completedAt: true,
-                    errorMessage: true,
-                    createdAt: true,
-                },
-            });
+            const recentJobs = jobsBySource.get(source.id) || [];
 
             // Calculate next sync time
             const nextSyncAt = source.lastSyncedAt
@@ -115,7 +137,7 @@ export async function GET(request: Request) {
                 selectedDimensions: (source.config as { selectedDimensions?: string[] })?.selectedDimensions || [],
                 selectedMetrics: (source.config as { selectedMetrics?: string[] })?.selectedMetrics || [],
             };
-        }));
+        });
 
         return NextResponse.json({ success: true, connections: enriched });
     } catch (error) {

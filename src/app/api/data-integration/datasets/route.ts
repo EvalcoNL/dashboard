@@ -34,47 +34,50 @@ export async function GET(request: Request) {
             orderBy: { createdAt: 'asc' },
         });
 
-        const enriched = await Promise.all(datasets.map(async (ds) => {
+        // ── Batch: load all data sources needed across all datasets ──
+        const allSourceIds = [...new Set(datasets.flatMap(ds => ds.sources.map(s => s.dataSourceId)))];
+        const allDataSources = allSourceIds.length > 0
+            ? await prisma.dataSource.findMany({
+                where: { id: { in: allSourceIds } },
+                include: { connector: { select: { slug: true, name: true } } },
+            })
+            : [];
+        const dataSourceMap = new Map(allDataSources.map(s => [s.id, s]));
+
+        // ── Batch: record counts from ClickHouse ──
+        const countBySourceGroup = new Map<string, number>();
+        if (allSourceIds.length > 0) {
+            try {
+                const placeholders = allSourceIds.map((_, i) => `{id${i}:String}`).join(', ');
+                const params: Record<string, string> = {};
+                allSourceIds.forEach((id, i) => { params[`id${i}`] = id; });
+                const countRows = await chQuery<{ data_source_id: string; cnt: string }>(
+                    `SELECT data_source_id, count() AS cnt FROM metrics_data FINAL WHERE data_source_id IN (${placeholders}) GROUP BY data_source_id`,
+                    params
+                );
+                for (const row of countRows) countBySourceGroup.set(row.data_source_id, Number(row.cnt));
+            } catch { /* ClickHouse unavailable */ }
+        }
+
+        const enriched = datasets.map((ds) => {
             const sourceIds = ds.sources.map(s => s.dataSourceId);
-
-            const dataSources = sourceIds.length > 0
-                ? await prisma.dataSource.findMany({
-                    where: { id: { in: sourceIds } },
-                    include: { connector: { select: { slug: true, name: true } } },
-                })
-                : [];
-
-            let recordCount = 0;
-            if (sourceIds.length > 0) {
-                try {
-                    const placeholders = sourceIds.map((_, i) => `{id${i}:String}`).join(', ');
-                    const params: Record<string, string> = {};
-                    sourceIds.forEach((id, i) => { params[`id${i}`] = id; });
-                    const result = await chQuery<{ cnt: string }>(
-                        `SELECT count() AS cnt FROM metrics_data FINAL WHERE data_source_id IN (${placeholders})`,
-                        params
-                    );
-                    recordCount = Number(result[0]?.cnt || 0);
-                } catch {
-                    recordCount = 0;
-                }
-            }
-
+            const dataSources = sourceIds.map(id => dataSourceMap.get(id)).filter(Boolean);
+            const recordCount = sourceIds.reduce((sum, id) => sum + (countBySourceGroup.get(id) || 0), 0);
             const config = ds.config as { selectedDimensions?: string[]; selectedMetrics?: string[] } | null;
 
             return {
                 ...ds,
                 connections: dataSources.map(s => ({
-                    id: s.id,
-                    name: s.name,
-                    connectorSlug: s.connector?.slug || s.type,
-                    connectorName: s.connector?.name || s.type,
+                    id: s!.id,
+                    name: s!.name,
+                    connectorSlug: s!.connector?.slug || s!.type,
+                    connectorName: s!.connector?.name || s!.type,
                 })),
                 recordCount,
                 dimensionCount: config?.selectedDimensions?.length || 0,
                 metricCount: config?.selectedMetrics?.length || 0,
             };
-        }));
+        });
 
         return NextResponse.json({ success: true, datasets: enriched, total: enriched.length });
     } catch (error) {
@@ -150,15 +153,13 @@ export async function POST(request: Request) {
                 },
             });
 
-            for (const source of matchingSources) {
-                await prisma.datasetSource.create({
-                    data: {
-                        datasetId: dataset.id,
-                        dataSourceId: source.id,
-                        level: 'campaign',
-                    },
-                });
-            }
+            await prisma.datasetSource.createMany({
+                data: matchingSources.map(source => ({
+                    datasetId: dataset.id,
+                    dataSourceId: source.id,
+                    level: 'campaign',
+                })),
+            });
 
             created.push(def.slug);
         }

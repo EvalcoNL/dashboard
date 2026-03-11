@@ -4,12 +4,12 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import DashboardHome from "@/components/dashboard/DashboardHome";
 import { queryNormalizedMetrics } from "@/lib/normalized-helpers";
+import { cached } from "@/lib/cache";
 
 export default async function DashboardPage() {
     const session = await auth();
     if (!session) redirect("/login");
 
-    // eslint-disable-next-line react-hooks/purity
     const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
 
     const isAdmin = session.user.role === "ADMIN";
@@ -32,10 +32,14 @@ export default async function DashboardPage() {
         orderBy: { name: "asc" },
     });
 
-    // Fetch normalized metrics for each client
+    // Fetch normalized metrics for each client (cached for 5 minutes)
     const clientsWithMetrics = await Promise.all(
         clients.map(async (client) => {
-            const campaignMetrics = await queryNormalizedMetrics(client.id, fourteenDaysAgo);
+            const campaignMetrics = await cached(
+                `dashboard:metrics:${client.id}`,
+                () => queryNormalizedMetrics(client.id, fourteenDaysAgo),
+                5 * 60 * 1000 // 5 min TTL
+            );
             return { ...client, campaignMetrics };
         })
     );

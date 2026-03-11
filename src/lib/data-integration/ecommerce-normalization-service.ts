@@ -88,11 +88,11 @@ export class EcomNormalizationService {
 
         if (clickhouseRows.length > 0) {
             try {
-                // Fetch existing hashes for this data source
-                const existingRows = await query<{ order_hash: string }>(`
-                    SELECT order_hash FROM order_data FINAL
-                    WHERE data_source_id = '${config.dataSourceId}'
-                `);
+                // Fetch existing hashes for this data source (parameterized)
+                const existingRows = await query<{ order_hash: string }>(
+                    `SELECT order_hash FROM order_data FINAL WHERE data_source_id = {dsId:String}`,
+                    { dsId: config.dataSourceId }
+                );
                 const existingHashes = new Set(existingRows.map(r => r.order_hash));
 
                 const incomingHashes = new Set(clickhouseRows.map(r => String(r.order_hash)));
@@ -113,12 +113,17 @@ export class EcomNormalizationService {
                     if (!incomingHashes.has(hash)) staleHashes.push(hash);
                 }
                 if (staleHashes.length > 0) {
-                    const hashList = staleHashes.map(h => `'${h}'`).join(',');
-                    await command(`
-                        ALTER TABLE order_data DELETE
-                        WHERE data_source_id = '${config.dataSourceId}'
-                          AND order_hash IN (${hashList})
-                    `);
+                    // Sanitize SHA-256 hashes — only allow hex characters
+                    const safeHashes = staleHashes.filter(h => /^[a-f0-9]+$/i.test(h));
+                    if (safeHashes.length > 0) {
+                        const hashList = safeHashes.map(h => `'${h}'`).join(',');
+                        const safeDsId = config.dataSourceId.replace(/'/g, '');
+                        await command(`
+                            ALTER TABLE order_data DELETE
+                            WHERE data_source_id = '${safeDsId}'
+                              AND order_hash IN (${hashList})
+                        `);
+                    }
                 }
 
                 // Insert all rows (ReplacingMergeTree handles dedup by update_at)

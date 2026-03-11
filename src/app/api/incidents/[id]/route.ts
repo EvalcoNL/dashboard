@@ -4,6 +4,8 @@ import { auth } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { sendIncidentResolvedEmail, sendSlackResolvedAlert } from "@/lib/services/email-service";
 import { resolveNotificationConfig } from "@/lib/services/notification-resolver";
+import { formatDistanceStrict } from "date-fns";
+import { nl } from "date-fns/locale";
 
 // GET /api/incidents/[id] — get single incident with events
 export async function GET(
@@ -103,12 +105,16 @@ export async function PATCH(
         const notifConfig = await resolveNotificationConfig(client.id);
 
         if (notifConfig.enabled) {
+            const duration = formatDistanceStrict(updated.startedAt, new Date(), { locale: nl });
             const payload = {
                 incidentTitle: updated.dataSource.name || updated.dataSource.externalId,
                 incidentCause: updated.cause,
                 clientName: client.name,
                 startedAt: updated.startedAt,
-                recipients: notifConfig.recipients
+                recipients: notifConfig.recipients,
+                duration,
+                incidentId: id,
+                projectId: client.id,
             };
 
             const notifiedChannels = [];

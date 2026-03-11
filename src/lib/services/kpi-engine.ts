@@ -41,6 +41,7 @@ export interface KPIResult {
         kpiDelta: number;
     };
     healthScore: number;
+    hasData: boolean;
     healthBreakdown: {
         target: number;
         disapprovals: number;
@@ -135,6 +136,8 @@ export function calculateKPI(
     disapprovalCount: number = 0,
     merchantDisapprovalPct: number = 0
 ): KPIResult {
+    // Check if there is any actual data to calculate from
+    const hasData = currentPeriod.totalSpend > 0 || currentPeriod.totalConversions > 0 || currentPeriod.totalClicks > 0;
     // Calculate blended KPI
     let blendedKPI: number;
     if (targetType === "CPA") {
@@ -253,15 +256,17 @@ export function calculateKPI(
         previousPeriod,
         blendedKPI,
         targetDeviation,
-        targetStatus,
+        targetStatus: hasData ? targetStatus : 'on_track',
         wow,
         healthScore,
         healthBreakdown,
         trendDirection,
+        hasData,
     };
 }
 
-export function getHealthColor(score: number): string {
+export function getHealthColor(score: number, hasData: boolean = true): string {
+    if (!hasData) return "#64748b"; // slate-500 grey
     if (score >= 85) return "#10b981";
     if (score >= 70) return "#34d399";
     if (score >= 50) return "#f59e0b";
@@ -269,7 +274,8 @@ export function getHealthColor(score: number): string {
     return "#dc2626";
 }
 
-export function getHealthLabel(score: number): string {
+export function getHealthLabel(score: number, hasData: boolean = true): string {
+    if (!hasData) return "Geen data";
     if (score >= 85) return "Excellent";
     if (score >= 70) return "Good";
     if (score >= 50) return "Warning";

@@ -301,6 +301,7 @@ model Notification {
 
   @@index([projectId, read, createdAt])
   @@index([projectId, url, statusCode, read])
+  @@index([createdAt])
   @@map("notifications")
 }
 
@@ -612,6 +613,7 @@ model SyncJob {
 
   @@index([dataSourceId])
   @@index([dataSourceId, status])
+  @@index([status, createdAt])
   @@index([createdAt])
   @@map("sync_jobs")
 }
