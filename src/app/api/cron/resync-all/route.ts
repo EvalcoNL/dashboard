@@ -31,7 +31,7 @@ export async function POST(request: Request) {
                 connector: { select: { slug: true } },
                 project: { select: { name: true } },
             },
-            orderBy: { createdAt: 'asc' },
+            orderBy: { linkedAt: 'asc' },
         });
 
         if (sources.length === 0) {
