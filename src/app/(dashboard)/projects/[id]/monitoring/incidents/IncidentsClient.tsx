@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, ShieldAlert, Shield, ShieldCheck, MessageSquare, Mail, ToggleLeft, ToggleRight, BellRing, BookOpen } from "lucide-react";
+import { Search, ShieldAlert, Shield, ShieldCheck, MessageSquare, Mail, ToggleLeft, ToggleRight, BellRing, BookOpen, ChevronDown, ChevronRight } from "lucide-react";
 import { useState, lazy, Suspense } from "react";
 import { useNotification } from "@/components/NotificationProvider";
 
@@ -71,7 +71,8 @@ export default function IncidentsClient({
 
     const [search, setSearch] = useState("");
     const initialTab = searchParams.get("tab") === "rules" ? "rules" : "overview";
-    const [activeTab, setActiveTab] = useState<"overview" | "settings" | "rules">(initialTab);
+    const [activeTab, setActiveTab] = useState<"overview" | "rules">(initialTab);
+    const [showNotificationSettings, setShowNotificationSettings] = useState(false);
 
     // Notification state
     const [optedIn, setOptedIn] = useState(userOptedIn);
@@ -173,18 +174,6 @@ export default function IncidentsClient({
                     <ShieldAlert size={16} /> Overzicht
                 </button>
                 <button
-                    onClick={() => setActiveTab("settings")}
-                    style={{
-                        background: "none", border: "none", outline: "none", cursor: "pointer",
-                        padding: "0 4px 12px 4px", fontSize: "0.9rem", fontWeight: 600,
-                        color: activeTab === "settings" ? "var(--color-brand)" : "var(--color-text-muted)",
-                        borderBottom: activeTab === "settings" ? "2px solid var(--color-brand)" : "2px solid transparent",
-                        transition: "all 0.15s", display: "flex", alignItems: "center", gap: "8px"
-                    }}
-                >
-                    <BellRing size={16} /> Meldingen
-                </button>
-                <button
                     onClick={() => setActiveTab("rules")}
                     style={{
                         background: "none", border: "none", outline: "none", cursor: "pointer",
@@ -199,14 +188,184 @@ export default function IncidentsClient({
             </div>
 
             {activeTab === "rules" ? (
-                <Suspense fallback={
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "60px", color: "var(--color-text-muted)" }}>
-                        Regels laden...
+                <>
+                    {/* Notification Settings — collapsible section */}
+                    <div style={{
+                        background: "var(--color-surface-elevated)",
+                        borderRadius: "10px",
+                        border: "1px solid var(--color-border)",
+                        marginBottom: "24px",
+                        overflow: "hidden"
+                    }}>
+                        <button
+                            onClick={() => setShowNotificationSettings(!showNotificationSettings)}
+                            style={{
+                                display: "flex", alignItems: "center", justifyContent: "space-between",
+                                width: "100%", padding: "16px 24px",
+                                background: "none", border: "none", cursor: "pointer",
+                                color: "var(--color-text-primary)"
+                            }}
+                        >
+                            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                <BellRing size={18} color="var(--color-brand)" />
+                                <div style={{ textAlign: "left" }}>
+                                    <div style={{ fontSize: "0.95rem", fontWeight: 600 }}>Notificaties</div>
+                                    <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", marginTop: "2px" }}>
+                                        E-mail en Slack instellingen voor incidenten
+                                    </div>
+                                </div>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                <span style={{
+                                    fontSize: "0.75rem", fontWeight: 600, padding: "4px 10px",
+                                    borderRadius: "99px",
+                                    background: optedIn ? "rgba(16, 185, 129, 0.1)" : "rgba(255,255,255,0.05)",
+                                    color: optedIn ? "#10b981" : "var(--color-text-muted)",
+                                    border: `1px solid ${optedIn ? "rgba(16, 185, 129, 0.2)" : "var(--color-border)"}`
+                                }}>
+                                    E-mail {optedIn ? "aan" : "uit"}
+                                </span>
+                                {showNotificationSettings ? <ChevronDown size={16} color="var(--color-text-muted)" /> : <ChevronRight size={16} color="var(--color-text-muted)" />}
+                            </div>
+                        </button>
+
+                        {showNotificationSettings && (
+                            <div style={{ padding: "0 24px 24px 24px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                                <div style={{ height: "1px", background: "var(--color-border)" }} />
+
+                                {/* Email toggle */}
+                                <div style={{
+                                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                                    padding: "16px", background: "rgba(0,0,0,0.1)", borderRadius: "8px",
+                                    border: `1px solid ${optedIn ? "rgba(16, 185, 129, 0.2)" : "rgba(255,255,255,0.05)"}`
+                                }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                        <div style={{
+                                            width: "36px", height: "36px", borderRadius: "8px",
+                                            background: optedIn ? "rgba(16, 185, 129, 0.1)" : "rgba(99,102,241,0.1)",
+                                            display: "flex", alignItems: "center", justifyContent: "center",
+                                            color: optedIn ? "#10b981" : "var(--color-text-muted)",
+                                            transition: "all 0.2s"
+                                        }}>
+                                            <Mail size={16} />
+                                        </div>
+                                        <div>
+                                            <div style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
+                                                E-mail Meldingen
+                                            </div>
+                                            <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", marginTop: "2px" }}>
+                                                {optedIn
+                                                    ? "Je ontvangt een e-mail bij elk nieuw incident."
+                                                    : "Je ontvangt momenteel geen meldingen voor dit project."
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={handleToggleOptIn}
+                                        disabled={togglingOptIn}
+                                        style={{
+                                            display: "flex", alignItems: "center", gap: "6px",
+                                            padding: "8px 16px", borderRadius: "8px",
+                                            background: optedIn ? "rgba(16, 185, 129, 0.1)" : "var(--color-surface-hover)",
+                                            border: `1px solid ${optedIn ? "rgba(16, 185, 129, 0.3)" : "var(--color-border)"}`,
+                                            color: optedIn ? "#10b981" : "var(--color-text-muted)",
+                                            fontSize: "0.85rem", fontWeight: 600,
+                                            cursor: togglingOptIn ? "not-allowed" : "pointer",
+                                            opacity: togglingOptIn ? 0.6 : 1,
+                                            transition: "all 0.2s"
+                                        }}
+                                    >
+                                        {optedIn ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
+                                        {togglingOptIn ? "..." : optedIn ? "Aan" : "Uit"}
+                                    </button>
+                                </div>
+
+                                {/* Slack — admin only */}
+                                {isAdmin && (
+                                    <div style={{
+                                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                                        padding: "16px", background: "rgba(0,0,0,0.1)", borderRadius: "8px",
+                                        border: `1px solid ${slackEnabled ? "rgba(16, 185, 129, 0.2)" : "rgba(255,255,255,0.05)"}`
+                                    }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                            <div style={{
+                                                width: "36px", height: "36px", borderRadius: "8px",
+                                                background: slackEnabled ? "rgba(16, 185, 129, 0.1)" : "rgba(99,102,241,0.1)",
+                                                display: "flex", alignItems: "center", justifyContent: "center",
+                                                color: slackEnabled ? "#10b981" : "var(--color-text-muted)",
+                                                transition: "all 0.2s"
+                                            }}>
+                                                <MessageSquare size={16} />
+                                            </div>
+                                            <div>
+                                                <div style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
+                                                    Slack Integratie
+                                                </div>
+                                                <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", marginTop: "2px" }}>
+                                                    {slackEnabled ? "Verbonden met Slack Webhook" : "Koppel Slack om meldingen te ontvangen."}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {slackEnabled ? (
+                                            <button
+                                                onClick={async () => {
+                                                    const confirmed = await confirm({
+                                                        title: "Slack ontkoppelen",
+                                                        message: "Weet je zeker dat je Slack wilt ontkoppelen?",
+                                                        confirmLabel: "Ja, ontkoppelen",
+                                                        type: "danger"
+                                                    });
+                                                    if (confirmed) {
+                                                        setSlackUrl("");
+                                                    }
+                                                }}
+                                                style={{
+                                                    padding: "8px 16px", borderRadius: "8px", background: "rgba(239, 68, 68, 0.1)",
+                                                    border: "1px solid rgba(239, 68, 68, 0.2)", color: "#ef4444",
+                                                    fontSize: "0.85rem", fontWeight: 600, cursor: "pointer", transition: "all 0.15s"
+                                                }}
+                                                className="hover-opacity"
+                                            >
+                                                Ontkoppelen
+                                            </button>
+                                        ) : (
+                                            <div>
+                                                <button
+                                                    onClick={() => router.push(`/api/auth/slack/link?projectId=${projectId}`)}
+                                                    style={{
+                                                        display: "inline-flex", alignItems: "center", gap: "6px",
+                                                        padding: "8px 16px", borderRadius: "8px", background: "var(--color-surface-hover)",
+                                                        border: "1px solid var(--color-border)", color: "var(--color-text-primary)",
+                                                        fontSize: "0.85rem", fontWeight: 600, cursor: "pointer", transition: "all 0.15s"
+                                                    }}
+                                                    className="hover-bg-int"
+                                                >
+                                                    Slack Koppelen
+                                                </button>
+                                                {slackError && (
+                                                    <div style={{ marginTop: "8px", fontSize: "0.75rem", color: "#ef4444", fontWeight: 500 }}>
+                                                        Kan Slack niet koppelen: {slackError.replace(/_/g, " ")}.
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
-                }>
-                    <RuleBuilderPage projectId={projectId} projectName={clientName} />
-                </Suspense>
-            ) : activeTab === "overview" ? (
+
+                    {/* Rule Builder */}
+                    <Suspense fallback={
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "60px", color: "var(--color-text-muted)" }}>
+                            Regels laden...
+                        </div>
+                    }>
+                        <RuleBuilderPage projectId={projectId} projectName={clientName} />
+                    </Suspense>
+                </>
+            ) : (
                 <>
                     {/* 30-Day Trend & Stats */}
                     <IncidentTrend incidents={incidents} />
@@ -297,157 +456,6 @@ export default function IncidentsClient({
                         </div>
                     )}
                 </>
-            ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-                    {/* Personal opt-in toggle */}
-                    <div style={{
-                        background: "var(--color-surface-elevated)",
-                        borderRadius: "10px",
-                        border: "1px solid var(--color-border)",
-                        padding: "32px"
-                    }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "24px" }}>
-                            <BellRing size={24} color="var(--color-brand)" />
-                            <div>
-                                <h2 style={{ fontSize: "1.2rem", fontWeight: 600, margin: 0, color: "var(--color-text-primary)" }}>
-                                    Mijn Meldingen
-                                </h2>
-                                <p style={{ fontSize: "0.85rem", color: "var(--color-text-muted)", margin: "4px 0 0 0" }}>
-                                    Ontvang e-mailmeldingen bij incidenten voor dit project.
-                                </p>
-                            </div>
-                        </div>
-
-                        <div style={{
-                            display: "flex", alignItems: "center", justifyContent: "space-between",
-                            padding: "20px", background: "rgba(0,0,0,0.1)", borderRadius: "8px",
-                            border: `1px solid ${optedIn ? "rgba(16, 185, 129, 0.2)" : "rgba(255,255,255,0.05)"}`
-                        }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-                                <div style={{
-                                    width: "40px", height: "40px", borderRadius: "8px",
-                                    background: optedIn ? "rgba(16, 185, 129, 0.1)" : "rgba(99,102,241,0.1)",
-                                    display: "flex", alignItems: "center", justifyContent: "center",
-                                    color: optedIn ? "#10b981" : "var(--color-text-muted)",
-                                    transition: "all 0.2s"
-                                }}>
-                                    <Mail size={18} />
-                                </div>
-                                <div>
-                                    <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
-                                        E-mail Meldingen
-                                    </div>
-                                    <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", marginTop: "2px" }}>
-                                        {optedIn
-                                            ? "Je ontvangt een e-mail bij elk nieuw incident."
-                                            : "Je ontvangt momenteel geen meldingen voor dit project."
-                                        }
-                                    </div>
-                                </div>
-                            </div>
-                            <button
-                                onClick={handleToggleOptIn}
-                                disabled={togglingOptIn}
-                                style={{
-                                    display: "flex", alignItems: "center", gap: "8px",
-                                    padding: "10px 20px", borderRadius: "8px",
-                                    background: optedIn ? "rgba(16, 185, 129, 0.1)" : "var(--color-surface-hover)",
-                                    border: `1px solid ${optedIn ? "rgba(16, 185, 129, 0.3)" : "var(--color-border)"}`,
-                                    color: optedIn ? "#10b981" : "var(--color-text-muted)",
-                                    fontSize: "0.85rem", fontWeight: 600,
-                                    cursor: togglingOptIn ? "not-allowed" : "pointer",
-                                    opacity: togglingOptIn ? 0.6 : 1,
-                                    transition: "all 0.2s"
-                                }}
-                            >
-                                {optedIn ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
-                                {togglingOptIn ? "..." : optedIn ? "Ingeschakeld" : "Uitgeschakeld"}
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Slack Settings — admin only */}
-                    {isAdmin && (
-                        <div style={{
-                            background: "var(--color-surface-elevated)",
-                            borderRadius: "10px",
-                            border: "1px solid var(--color-border)",
-                            padding: "32px"
-                        }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "24px" }}>
-                                <MessageSquare size={24} color="var(--color-text-secondary)" />
-                                <div>
-                                    <h2 style={{ fontSize: "1.2rem", fontWeight: 600, margin: 0, color: "var(--color-text-primary)" }}>
-                                        Slack Integratie
-                                    </h2>
-                                    <p style={{ fontSize: "0.85rem", color: "var(--color-text-muted)", margin: "4px 0 0 0" }}>
-                                        Koppel een Slack Webhook URL om meldingen in een kanaal te ontvangen.
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div style={{ paddingLeft: "56px" }}>
-                                {slackEnabled ? (
-                                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                                        <div style={{
-                                            flex: 1, maxWidth: "400px", padding: "8px 12px", borderRadius: "6px",
-                                            background: "rgba(16, 185, 129, 0.05)", border: "1px solid rgba(16, 185, 129, 0.2)",
-                                            color: "var(--color-text-primary)", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "8px"
-                                        }}>
-                                            <ShieldCheck size={16} color="#10b981" />
-                                            <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                                Verbonden met Slack Webhook
-                                            </span>
-                                        </div>
-                                        <button
-                                            onClick={async () => {
-                                                const confirmed = await confirm({
-                                                    title: "Slack ontkoppelen",
-                                                    message: "Weet je zeker dat je Slack wilt ontkoppelen?",
-                                                    confirmLabel: "Ja, ontkoppelen",
-                                                    type: "danger"
-                                                });
-                                                if (confirmed) {
-                                                    setSlackUrl("");
-                                                }
-                                            }}
-                                            style={{
-                                                padding: "8px 12px", borderRadius: "6px", background: "rgba(239, 68, 68, 0.1)",
-                                                border: "1px solid rgba(239, 68, 68, 0.2)", color: "#ef4444",
-                                                fontSize: "0.8rem", fontWeight: 600, cursor: "pointer", transition: "all 0.15s"
-                                            }}
-                                            className="hover-opacity"
-                                        >
-                                            Ontkoppelen
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <div>
-                                        <button
-                                            onClick={() => {
-                                                router.push(`/api/auth/slack/link?projectId=${projectId}`);
-                                            }}
-                                            style={{
-                                                display: "inline-flex", alignItems: "center", gap: "8px",
-                                                padding: "8px 16px", borderRadius: "6px", background: "var(--color-surface-hover)",
-                                                border: "1px solid var(--color-border)", color: "var(--color-text-primary)",
-                                                fontSize: "0.85rem", fontWeight: 600, cursor: "pointer", transition: "all 0.15s"
-                                            }}
-                                            className="hover-bg-int"
-                                        >
-                                            Slack Koppelen
-                                        </button>
-                                        {slackError && (
-                                            <div style={{ marginTop: "8px", fontSize: "0.75rem", color: "#ef4444", fontWeight: 500 }}>
-                                                Kan Slack niet koppelen. Waarschuwing: {slackError.replace(/_/g, " ")}.
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
-                </div>
             )}
 
             <style jsx>{`
