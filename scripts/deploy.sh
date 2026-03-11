@@ -2,6 +2,9 @@
 # ═══════════════════════════════════════════════════════════════════
 # Evalco Dashboard — Deploy Script
 #
+# Server:  178.104.15.143 (Hetzner)
+# SSH:     ssh deploy@178.104.15.143
+#
 # Rebuilds and restarts all services.
 # Usage: bash scripts/deploy.sh
 # ═══════════════════════════════════════════════════════════════════
