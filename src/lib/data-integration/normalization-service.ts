@@ -250,15 +250,13 @@ export class NormalizationService {
                         const safeHashes = staleHashes.filter(h => /^[a-f0-9]+$/i.test(h));
                         if (safeHashes.length > 0) {
                             const hashList = safeHashes.map(h => `'${h}'`).join(',');
-                            const safeDsId = config.dataSourceId.replace(/'/g, '');
-                            const safeLevel = config.level.replace(/'/g, '');
                             await command(`
                                 ALTER TABLE metrics_data DELETE
-                                WHERE data_source_id = '${safeDsId}'
-                                  AND date = '${dateStr}'
-                                  AND level = '${safeLevel}'
+                                WHERE data_source_id = {dsId:String}
+                                  AND date = {syncDate:String}
+                                  AND level = {lvl:String}
                                   AND canonical_hash IN (${hashList})
-                            `);
+                            `, { dsId: config.dataSourceId, syncDate: dateStr, lvl: config.level });
                             await this.waitForMutations();
                         }
                         deletedRows = safeHashes.length;

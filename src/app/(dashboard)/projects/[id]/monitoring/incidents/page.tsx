@@ -13,7 +13,7 @@ export default async function IncidentsPage({
     if (!session) redirect("/login");
 
     const { id: projectId } = await params;
-    const isAdmin = session.user.role === "ADMIN";
+    const isAdmin = session.user.role === "ADMIN" || session.user.role === "SUPER_ADMIN";
 
     const client = await (prisma as any).project.findUnique({
         where: { id: projectId },

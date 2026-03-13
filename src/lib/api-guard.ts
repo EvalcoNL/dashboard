@@ -35,11 +35,11 @@ export async function requireProjectAccess(projectId: string): Promise<[AuthSess
     const [session, authError] = await requireAuth();
     if (authError) return [null, authError];
 
-    // Admins can access everything
-    if (session.user.role === 'ADMIN') return [session, null];
+    // Super admins and admins can access everything
+    if (session.user.role === 'SUPER_ADMIN' || session.user.role === 'ADMIN') return [session, null];
 
-    // Check if user has access to this project
-    const project = await prisma.project.findFirst({
+    // Check if user has direct access to this project
+    const directAccess = await prisma.project.findFirst({
         where: {
             id: projectId,
             users: { some: { id: session.user.id } },
@@ -47,14 +47,25 @@ export async function requireProjectAccess(projectId: string): Promise<[AuthSess
         select: { id: true },
     });
 
-    if (!project) {
-        return [null, NextResponse.json(
-            { success: false, error: 'Access denied' },
-            { status: 403 }
-        )];
-    }
+    if (directAccess) return [session, null];
 
-    return [session, null];
+    // Check if user has access via an account group
+    const groupAccess = await prisma.project.findFirst({
+        where: {
+            id: projectId,
+            accountGroup: {
+                members: { some: { userId: session.user.id } },
+            },
+        },
+        select: { id: true },
+    });
+
+    if (groupAccess) return [session, null];
+
+    return [null, NextResponse.json(
+        { success: false, error: 'Access denied' },
+        { status: 403 }
+    )];
 }
 
 /**
@@ -77,16 +88,19 @@ export async function requireDashboardAccess(dashboardId: string): Promise<[Auth
         )];
     }
 
-    // Admins can access everything
-    if (session.user.role === 'ADMIN') {
+    // Super admins and admins can access everything
+    if (session.user.role === 'SUPER_ADMIN' || session.user.role === 'ADMIN') {
         return [{ ...session, dashboardProjectId: dashboard.projectId } as AuthSession & { dashboardProjectId: string }, null];
     }
 
-    // Check if user has access to this project
+    // Check if user has access to this project (direct or via account group)
     const project = await prisma.project.findFirst({
         where: {
             id: dashboard.projectId,
-            users: { some: { id: session.user.id } },
+            OR: [
+                { users: { some: { id: session.user.id } } },
+                { accountGroup: { members: { some: { userId: session.user.id } } } },
+            ],
         },
         select: { id: true },
     });
@@ -121,16 +135,19 @@ export async function requireDataSourceAccess(dataSourceId: string): Promise<[Au
         )];
     }
 
-    // Admins can access everything
-    if (session.user.role === 'ADMIN') {
+    // Super admins and admins can access everything
+    if (session.user.role === 'SUPER_ADMIN' || session.user.role === 'ADMIN') {
         return [{ ...session, dataSource } as AuthSession & { dataSource: { id: string; projectId: string } }, null];
     }
 
-    // Check if user has access to this project
+    // Check if user has access to this project (direct or via account group)
     const project = await prisma.project.findFirst({
         where: {
             id: dataSource.projectId,
-            users: { some: { id: session.user.id } },
+            OR: [
+                { users: { some: { id: session.user.id } } },
+                { accountGroup: { members: { some: { userId: session.user.id } } } },
+            ],
         },
         select: { id: true },
     });
@@ -152,7 +169,7 @@ export async function requireAdmin(): Promise<[AuthSession, null] | [null, NextR
     const [session, authError] = await requireAuth();
     if (authError) return [null, authError];
 
-    if (session.user.role !== 'ADMIN') {
+    if (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN') {
         return [null, NextResponse.json(
             { success: false, error: 'Admin access required' },
             { status: 403 }

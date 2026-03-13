@@ -33,7 +33,7 @@ async function main() {
             name: "Erwin van Lieshout",
             email: "e.v.lieshout@evalco.nl",
             passwordHash: adminPassword,
-            role: "ADMIN",
+            role: "SUPER_ADMIN",
         },
     });
 

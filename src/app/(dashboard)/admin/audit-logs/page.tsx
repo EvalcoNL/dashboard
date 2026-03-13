@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AuditLogPage() {
     const session = await auth();
-    if (!session || (session.user as any)?.email !== "e.v.lieshout@evalco.nl") {
+    if (!session || (session.user as any)?.role !== "SUPER_ADMIN") {
         redirect("/");
     }
 

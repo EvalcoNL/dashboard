@@ -9,13 +9,14 @@ export default async function ClientsPage() {
     const session = await auth();
     if (!session) redirect("/login");
 
-    const isAdmin = session.user.role === "ADMIN";
+    const isAdmin = session.user.role === "ADMIN" || session.user.role === "SUPER_ADMIN";
 
     const clients = await prisma.project.findMany({
         where: isAdmin ? undefined : {
-            users: {
-                some: { id: session.user.id }
-            }
+            OR: [
+                { users: { some: { id: session.user.id } } },
+                { accountGroup: { members: { some: { userId: session.user.id } } } },
+            ],
         },
         include: {
             dataSources: {

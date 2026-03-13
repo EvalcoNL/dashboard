@@ -84,12 +84,12 @@ export default async function SettingsPage() {
                                     <span style={{
                                         padding: "2px 8px",
                                         borderRadius: "6px",
-                                        background: session.user.role === "ADMIN" ? "rgba(99, 102, 241, 0.1)" : "rgba(16, 185, 129, 0.1)",
-                                        color: session.user.role === "ADMIN" ? "var(--color-brand)" : "#10b981",
+                                        background: (session.user.role === "ADMIN" || session.user.role === "SUPER_ADMIN") ? "rgba(99, 102, 241, 0.1)" : "rgba(16, 185, 129, 0.1)",
+                                        color: (session.user.role === "ADMIN" || session.user.role === "SUPER_ADMIN") ? "var(--color-brand)" : "#10b981",
                                         fontSize: "0.8rem",
                                         fontWeight: 600
                                     }}>
-                                        {session.user.role === "ADMIN" ? "Administrator" : session.user.role === "STRATEGIST" ? "Strateeg" : session.user.role}
+                                        {session.user.role === "SUPER_ADMIN" ? "Super Admin" : session.user.role === "ADMIN" ? "Administrator" : session.user.role === "STRATEGIST" ? "Strateeg" : session.user.role === "MEMBER" ? "Lid" : session.user.role}
                                     </span>
                                 </p>
                             </div>
@@ -97,7 +97,7 @@ export default async function SettingsPage() {
                     </div>
 
                     {/* Roles info (admin only) */}
-                    {session.user.role === "ADMIN" && (
+                    {(session.user.role === "ADMIN" || session.user.role === "SUPER_ADMIN") && (
                         <div className="glass-card" style={{ padding: "24px" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
                                 <div

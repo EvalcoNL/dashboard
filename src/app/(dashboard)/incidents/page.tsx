@@ -9,16 +9,27 @@ export default async function GlobalIncidentsPage() {
     const session = await auth();
     if (!session) redirect("/login");
 
-    const isAdmin = session.user.role === "ADMIN";
+    const isAdmin = session.user.role === "ADMIN" || session.user.role === "SUPER_ADMIN";
 
     // For non-admin users, only show data for their linked clients
     let clientFilter: any = {};
     if (!isAdmin) {
         const userWithClients = await prisma.user.findUnique({
             where: { id: session.user.id },
-            select: { projects: { select: { id: true } } }
+            select: {
+                projects: { select: { id: true } },
+                accountGroupMemberships: {
+                    select: {
+                        accountGroup: {
+                            select: { projects: { select: { id: true } } }
+                        }
+                    }
+                }
+            }
         });
-        const accessibleClientIds = userWithClients?.projects.map((c: any) => c.id) || [];
+        const directIds = userWithClients?.projects.map((c: any) => c.id) || [];
+        const groupIds = userWithClients?.accountGroupMemberships.flatMap((m: any) => m.accountGroup.projects.map((p: any) => p.id)) || [];
+        const accessibleClientIds = [...new Set([...directIds, ...groupIds])];
         clientFilter = { projectId: { in: accessibleClientIds } };
     }
 
@@ -56,7 +67,12 @@ export default async function GlobalIncidentsPage() {
 
     // Get clients with their notification mode (filtered for non-admin)
     const clients = await (prisma as any).project.findMany({
-        where: !isAdmin ? { users: { some: { id: session.user.id } } } : {},
+        where: !isAdmin ? {
+            OR: [
+                { users: { some: { id: session.user.id } } },
+                { accountGroup: { members: { some: { userId: session.user.id } } } },
+            ],
+        } : {},
         select: {
             id: true,
             name: true,

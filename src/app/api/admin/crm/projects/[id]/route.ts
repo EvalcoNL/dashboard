@@ -8,7 +8,7 @@ export async function PUT(
     { params }: { params: Promise<{ id: string }> }
 ) {
     const session = await auth();
-    if (!session || session.user?.email !== "e.v.lieshout@evalco.nl") {
+    if (!session || session.user?.role !== "SUPER_ADMIN") {
         return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 

@@ -117,12 +117,11 @@ export class EcomNormalizationService {
                     const safeHashes = staleHashes.filter(h => /^[a-f0-9]+$/i.test(h));
                     if (safeHashes.length > 0) {
                         const hashList = safeHashes.map(h => `'${h}'`).join(',');
-                        const safeDsId = config.dataSourceId.replace(/'/g, '');
                         await command(`
                             ALTER TABLE order_data DELETE
-                            WHERE data_source_id = '${safeDsId}'
+                            WHERE data_source_id = {dsId:String}
                               AND order_hash IN (${hashList})
-                        `);
+                        `, { dsId: config.dataSourceId });
                     }
                 }
 

@@ -11,7 +11,7 @@ model User {
   name                String
   email               String          @unique
   passwordHash        String          @map("password_hash")
-  role                String          @default("STRATEGIST")
+  role                String          @default("MEMBER")
   emailVerified       Boolean         @default(false) @map("email_verified")
   twoFactorEnabled    Boolean         @default(false) @map("two_factor_enabled")
   twoFactorSecret     String?         @map("two_factor_secret")
@@ -24,6 +24,7 @@ model User {
   notificationProjects Project[]      @relation("NotificationUsers")
   notificationPreferences UserNotificationPreference[]
   onboardingProgress OnboardingProgress[]
+  accountGroupMemberships AccountGroupMember[]
 
   @@map("users")
 }
@@ -89,7 +90,10 @@ model Project {
   contractEnd          DateTime?              @map("contract_end")
   monthlyFee           Float?                 @map("monthly_fee")
   crmNotes             String?                @map("crm_notes")
+  accountGroupId       String?                @map("account_group_id")
+  accountGroup         AccountGroup?          @relation("AccountGroupProjects", fields: [accountGroupId], references: [id])
 
+  @@index([accountGroupId])
   @@map("projects")
 }
 
@@ -284,6 +288,36 @@ model UserRole {
   createdAt   DateTime @default(now()) @map("created_at")
 
   @@map("user_roles")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ACCOUNT GROUPS (MCC-style grouping)
+// ═══════════════════════════════════════════════════════════════════
+
+model AccountGroup {
+  id        String               @id @default(cuid())
+  name      String               // "Bureau MediaMax", "Evalco Intern"
+  slug      String               @unique
+  createdAt DateTime             @default(now()) @map("created_at")
+  updatedAt DateTime             @updatedAt @map("updated_at")
+  members   AccountGroupMember[]
+  projects  Project[]            @relation("AccountGroupProjects")
+
+  @@map("account_groups")
+}
+
+model AccountGroupMember {
+  id             String       @id @default(cuid())
+  accountGroupId String       @map("account_group_id")
+  userId         String       @map("user_id")
+  role           String       @default("MEMBER") // ADMIN, MEMBER, VIEWER
+  createdAt      DateTime     @default(now()) @map("created_at")
+  accountGroup   AccountGroup @relation(fields: [accountGroupId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([accountGroupId, userId])
+  @@index([userId])
+  @@map("account_group_members")
 }
 
 model Notification {

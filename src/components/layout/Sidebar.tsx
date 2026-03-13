@@ -45,7 +45,7 @@ export default function Sidebar({ onSubmenuChange }: { onSubmenuChange?: (open: 
     }, [pathname]);
 
     // Filter admin nav items based on super admin status
-    const isSuperAdmin = session?.user?.email === "e.v.lieshout@evalco.nl";
+    const isSuperAdmin = session?.user?.role === "SUPER_ADMIN";
 
     // Extract project ID from URL
     const clientMatch = pathname.match(/\/projects\/([^\/]+)/);
@@ -77,6 +77,7 @@ export default function Sidebar({ onSubmenuChange }: { onSubmenuChange?: (open: 
                 icon: ShieldCheck,
                 submenu: [
                     { href: "/admin/users", label: t("admin", "users") },
+                    { href: "/admin/account-groups", label: "Accountgroepen" },
                     { href: "/admin/crm", label: t("admin", "crm") },
                     { href: "/admin/audit-logs", label: t("admin", "auditLog") },
                 ],

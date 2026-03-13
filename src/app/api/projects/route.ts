@@ -7,7 +7,7 @@ import { auth } from "@/lib/auth";
 export async function POST(req: NextRequest) {
     const session = await auth();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if (session.user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (session.user.role !== "ADMIN" && session.user.role !== "SUPER_ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     try {
         const body = await req.json();
@@ -74,13 +74,14 @@ export async function GET() {
     const session = await auth();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const isAdmin = session.user.role === "ADMIN";
+    const isAdmin = session.user.role === "ADMIN" || session.user.role === "SUPER_ADMIN";
 
     const clients = await prisma.project.findMany({
         where: isAdmin ? undefined : {
-            users: {
-                some: { id: session.user.id }
-            }
+            OR: [
+                { users: { some: { id: session.user.id } } },
+                { accountGroup: { members: { some: { userId: session.user.id } } } },
+            ],
         },
         include: {
             dataSources: { where: { active: true } },

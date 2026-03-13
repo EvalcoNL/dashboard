@@ -9,8 +9,8 @@ export const dynamic = "force-dynamic";
 export default async function AdminUsersPage() {
     const session = await auth();
 
-    // Security check: Only e.v.lieshout@evalco.nl can access this page
-    if (!session || (session.user as any)?.email !== "e.v.lieshout@evalco.nl") {
+    // Security check: Only SUPER_ADMIN can access this page
+    if (!session || (session.user as any)?.role !== "SUPER_ADMIN") {
         redirect("/");
     }
 
