@@ -7,15 +7,15 @@ async function main() {
         url: process.env.DATABASE_URL!,
     });
 
-    console.log("Disabling 2FA for admin@evalco.nl...");
+    console.log("Disabling 2FA for e.v.lieshout@evalco.nl...");
 
     await client.execute(
-        "UPDATE users SET two_factor_enabled = 0, two_factor_secret = NULL WHERE email = 'admin@evalco.nl'"
+        "UPDATE users SET two_factor_enabled = 0, two_factor_secret = NULL WHERE email = 'e.v.lieshout@evalco.nl'"
     );
 
     // Verify
     const result = await client.execute(
-        "SELECT email, two_factor_enabled, two_factor_secret FROM users WHERE email = 'admin@evalco.nl'"
+        "SELECT email, two_factor_enabled, two_factor_secret FROM users WHERE email = 'e.v.lieshout@evalco.nl'"
     );
 
     for (const row of result.rows) {

@@ -5,7 +5,7 @@ import CrmDashboard from "@/components/admin/CrmDashboard";
 
 export default async function CrmPage() {
     const session = await auth();
-    if (!session || session.user?.email !== "admin@evalco.nl") {
+    if (!session || session.user?.email !== "e.v.lieshout@evalco.nl") {
         redirect("/");
     }
 

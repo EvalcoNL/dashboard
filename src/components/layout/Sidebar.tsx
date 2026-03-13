@@ -45,7 +45,7 @@ export default function Sidebar({ onSubmenuChange }: { onSubmenuChange?: (open: 
     }, [pathname]);
 
     // Filter admin nav items based on super admin status
-    const isSuperAdmin = session?.user?.email === "admin@evalco.nl";
+    const isSuperAdmin = session?.user?.email === "e.v.lieshout@evalco.nl";
 
     // Extract project ID from URL
     const clientMatch = pathname.match(/\/projects\/([^\/]+)/);

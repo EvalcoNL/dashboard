@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 // GET /api/admin/crm/overview — CRM dashboard stats
 export async function GET(req: NextRequest) {
     const session = await auth();
-    if (!session || session.user?.email !== "admin@evalco.nl") {
+    if (!session || session.user?.email !== "e.v.lieshout@evalco.nl") {
         return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 

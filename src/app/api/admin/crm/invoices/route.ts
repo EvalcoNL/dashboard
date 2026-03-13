@@ -6,7 +6,7 @@ import { auth } from "@/lib/auth";
 // POST — create invoice
 export async function GET(req: NextRequest) {
     const session = await auth();
-    if (!session || session.user?.email !== "admin@evalco.nl") {
+    if (!session || session.user?.email !== "e.v.lieshout@evalco.nl") {
         return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
     const session = await auth();
-    if (!session || session.user?.email !== "admin@evalco.nl") {
+    if (!session || session.user?.email !== "e.v.lieshout@evalco.nl") {
         return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
