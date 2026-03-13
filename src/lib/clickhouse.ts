@@ -133,9 +133,9 @@ export async function insert(
 /**
  * Execute a command (CREATE, ALTER, DROP, etc.) that doesn't return data.
  */
-export async function command(sql: string): Promise<void> {
+export async function command(sql: string, params?: Record<string, unknown>): Promise<void> {
     const client = getClient();
-    await client.command({ query: sql });
+    await client.command({ query: sql, query_params: params });
 }
 
 // ─── Health Check ───
